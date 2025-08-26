@@ -67,18 +67,21 @@ def create_expense(receipt: ReceiptData):
             raise HTTPException(status_code=400, detail="No expense accounts found")
         account_id = accounts[0]['Id']
         
-        # 3. Create bill
-        bill_result = qb_client.create_bill(
+        # 3. Create expense
+        expense_result = qb_client.create_expense(
             vendor_id=vendor_id,
+            vendor_name=receipt.vendor_name,
             amount=receipt.amount,
             date=receipt.date,
-            account_id=account_id
+            account_id=account_id,
+            account_name=accounts[0].get('Name', 'Office Supplies'),
+            tax_amount=getattr(receipt, 'tax_amount', 0.0)
         )
         
         return {
             "status": "success",
             "vendor_id": vendor_id,
-            "bill": bill_result,
+            "expense": expense_result,
             "message": f"Expense created for {receipt.vendor_name} - ${receipt.amount}"
         }
         
