@@ -7,7 +7,85 @@ qb_client = QuickBooksClient()
 
 @app.get("/")
 def root():
-    return {"message": "Receipt Scanner API - Ready for QuickBooks testing!"}
+    return {"message": "Receipt Scanner API - Ready for QuickBooks testing!", "help": "Visit /help for curl commands"}
+
+@app.get("/help")
+def help_commands():
+    """Display all curl commands for terminal usage"""
+    return {
+        "title": "QuickBooks Receipt Scanner - Terminal Commands",
+        "description": "Copy and paste these curl commands to interact with the API",
+        "commands": {
+            "1. Test Connection": {
+                "description": "Verify QuickBooks API connection",
+                "command": "curl http://localhost:8000/test-connection"
+            },
+            "2. Search Vendor": {
+                "description": "Search for a vendor by name",
+                "command": "curl http://localhost:8000/vendors/Starbucks"
+            },
+            "3. Create Vendor": {
+                "description": "Create a new vendor",
+                "command": "curl -X POST http://localhost:8000/vendors?vendor_name=Coffee%20Shop"
+            },
+            "4. Get Expense Accounts": {
+                "description": "List all expense accounts",
+                "command": "curl http://localhost:8000/accounts/expense"
+            },
+            "5. Create Expense from Receipt": {
+                "description": "Convert receipt data to QuickBooks expense",
+                "command": """curl -X POST http://localhost:8000/expenses \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "vendor_name": "Office Depot",
+    "amount": 45.99,
+    "date": "2024-01-15",
+    "currency": "USD",
+    "category": "Office Supplies",
+    "tax_amount": 3.42
+  }'"""
+            }
+        },
+        "examples": {
+            "Simple Receipt": {
+                "description": "Basic expense without tax",
+                "command": """curl -X POST http://localhost:8000/expenses \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "vendor_name": "Starbucks",
+    "amount": 12.50,
+    "date": "2024-01-15",
+    "currency": "USD",
+    "category": "Meals"
+  }'"""
+            },
+            "Receipt with Tax": {
+                "description": "Expense with separate tax amount",
+                "command": """curl -X POST http://localhost:8000/expenses \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "vendor_name": "Best Buy",
+    "amount": 129.99,
+    "date": "2024-01-15",
+    "currency": "USD",
+    "category": "Equipment",
+    "tax_amount": 10.40
+  }'"""
+            }
+        },
+        "workflow": [
+            "1. Test connection to ensure QuickBooks is accessible",
+            "2. Create expense using receipt data",
+            "3. API will automatically handle vendor creation if needed",
+            "4. Expense will be created in QuickBooks with proper categorization"
+        ],
+        "notes": [
+            "Replace localhost:8000 with your actual server URL",
+            "Ensure your .env file contains valid QuickBooks tokens",
+            "Access tokens expire every hour - re-run oauth_setup.py if needed",
+            "All amounts should be in decimal format (e.g., 12.50)"
+        ]
+    }
 
 @app.get("/test-connection")
 def test_quickbooks_connection():

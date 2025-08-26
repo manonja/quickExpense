@@ -69,6 +69,8 @@ python main.py
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/` | GET | Root endpoint with basic info |
+| `/help` | GET | **Display all curl commands** |
 | `/test-connection` | GET | Verify QB connection |
 | `/vendors/{name}` | GET | Search vendor by name |
 | `/vendors` | POST | Create new vendor |
@@ -77,12 +79,17 @@ python main.py
 
 ## 📝 Receipt Expense Flow - Complete Examples
 
-### Step 1: Test Connection
+### Step 1: Get Help (All Commands)
+```bash
+curl http://localhost:8000/help
+```
+
+### Step 2: Test Connection
 ```bash
 curl http://localhost:8000/test-connection
 ```
 
-### Step 2: Create Expense from Receipt
+### Step 3: Create Expense from Receipt
 ```bash
 curl -X POST http://localhost:8000/expenses \
   -H "Content-Type: application/json" \
