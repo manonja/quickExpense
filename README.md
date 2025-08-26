@@ -48,9 +48,9 @@ python main.py
 2. **FastAPI App** → Search for vendor in QuickBooks
 3. **If vendor not found** → Create new vendor
 4. **FastAPI App** → Get expense accounts from QuickBooks
-5. **FastAPI App** → Create bill in QuickBooks
-6. **QuickBooks** → Return bill ID and confirmation
-7. **User** → Receive success response with bill details
+5. **FastAPI App** → Create purchase expense in QuickBooks
+6. **QuickBooks** → Return purchase ID and confirmation
+7. **User** → Receive success response with expense details
 
 ## 🏗 Architecture
 
@@ -63,7 +63,7 @@ python main.py
 **Data Processing:**
 - Vendor Search/Create
 - Expense Account Lookup  
-- Bill Generation
+- Purchase Expense Creation
 
 ## 📡 API Endpoints
 
@@ -129,26 +129,59 @@ curl -X GET "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_I
   -H "Accept: application/json"
 ```
 
-#### Create Bill (Final Step)
+#### Create Expense (Final Step)
 ```bash
-curl -X POST "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/bill" \
+curl -X POST "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/purchase" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -d '{
-    "Bill": {
-      "VendorRef": {"value": "VENDOR_ID"},
-      "TxnDate": "2024-01-15",
-      "DueDate": "2024-01-15",
-      "TotalAmt": 45.99,
-      "Line": [{
-        "Amount": 45.99,
-        "DetailType": "AccountBasedExpenseLineDetail",
-        "Description": "Office supplies from receipt",
-        "AccountBasedExpenseLineDetail": {
-          "AccountRef": {"value": "EXPENSE_ACCOUNT_ID"}
+    "Purchase": {
+      "AccountRef": {
+        "value": "EXPENSE_ACCOUNT_ID",
+        "name": "Office Supplies"
+      },
+      "PaymentType": "Cash",
+      "EntityRef": {
+        "value": "VENDOR_ID",
+        "name": "Office Depot"
+      },
+      "TotalAmt": 45.67,
+      "PurchaseEx": {
+        "any": [
+          {
+            "name": "{http://schema.intuit.com/finance/v3}NameValue",
+            "declaredType": "com.intuit.schema.finance.v3.NameValue",
+            "scope": "javax.xml.bind.JAXBElement$GlobalScope",
+            "value": {
+              "Name": "TxnDate",
+              "Value": "2023-12-01"
+            }
+          }
+        ]
+      },
+      "Line": [
+        {
+          "Amount": 42.25,
+          "DetailType": "AccountBasedExpenseLineDetail",
+          "AccountBasedExpenseLineDetail": {
+            "AccountRef": {
+              "value": "EXPENSE_ACCOUNT_ID",
+              "name": "Office Supplies"
+            }
+          }
+        },
+        {
+          "Amount": 3.42,
+          "DetailType": "AccountBasedExpenseLineDetail", 
+          "AccountBasedExpenseLineDetail": {
+            "AccountRef": {
+              "value": "TAX_ACCOUNT_ID",
+              "name": "Sales Tax"
+            }
+          }
         }
-      }]
+      ]
     }
   }'
 ```
@@ -173,8 +206,8 @@ Access tokens expire every hour. Re-run `python oauth_setup.py` to get fresh tok
    - **YES** → Use existing vendor ID
    - **NO** → Create new vendor → Get new vendor ID
 3. **Get Expense Account** → Fetch available expense accounts
-4. **Create Bill** → Generate QuickBooks bill with vendor + account
-5. **Return Result** → Bill ID and success confirmation
+4. **Create Purchase** → Generate QuickBooks expense with vendor + account + tax
+5. **Return Result** → Purchase ID and success confirmation
 
 ## 🛠 Troubleshooting
 
