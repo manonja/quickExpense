@@ -42,38 +42,28 @@ python main.py
 
 ## 🔄 System Flow
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant API as FastAPI App
-    participant QB as QuickBooks API
-    
-    U->>API: POST /expenses (receipt data)
-    API->>QB: Search for vendor
-    alt Vendor not found
-        API->>QB: Create new vendor
-    end
-    API->>QB: Get expense accounts
-    API->>QB: Create bill
-    QB-->>API: Bill created response
-    API-->>U: Success with bill ID
-```
+**Receipt to QuickBooks Expense Process:**
+
+1. **User** → Submit receipt data (vendor, amount, date)
+2. **FastAPI App** → Search for vendor in QuickBooks
+3. **If vendor not found** → Create new vendor
+4. **FastAPI App** → Get expense accounts from QuickBooks
+5. **FastAPI App** → Create bill in QuickBooks
+6. **QuickBooks** → Return bill ID and confirmation
+7. **User** → Receive success response with bill details
 
 ## 🏗 Architecture
 
-```mermaid
-graph TD
-    A[Receipt Data] --> B[FastAPI App]
-    B --> C[QuickBooks Client]
-    C --> D[QB REST API v3]
-    
-    B --> E[Vendor Search/Create]
-    B --> F[Expense Account Lookup]
-    B --> G[Bill Creation]
-    
-    H[OAuth Setup] --> I[Bearer Token]
-    I --> C
-```
+**System Components:**
+- **Receipt Input** → FastAPI Application
+- **FastAPI App** → QuickBooks Client (API Wrapper)
+- **QuickBooks Client** → QuickBooks REST API v3
+- **OAuth Setup** → Bearer Token → QuickBooks Authentication
+
+**Data Processing:**
+- Vendor Search/Create
+- Expense Account Lookup  
+- Bill Generation
 
 ## 📡 API Endpoints
 
@@ -85,19 +75,81 @@ graph TD
 | `/accounts/expense` | GET | Get expense accounts |
 | `/expenses` | POST | Create expense from receipt |
 
-## 📝 Usage Example
+## 📝 Receipt Expense Flow - Complete Examples
 
+### Step 1: Test Connection
 ```bash
-# Test connection
 curl http://localhost:8000/test-connection
+```
 
-# Create expense from receipt
+### Step 2: Create Expense from Receipt
+```bash
 curl -X POST http://localhost:8000/expenses \
   -H "Content-Type: application/json" \
   -d '{
-    "vendor_name": "Starbucks",
-    "amount": 12.50,
+    "vendor_name": "Office Depot",
+    "amount": 45.99,
     "date": "2024-01-15"
+  }'
+```
+
+### Direct QuickBooks API Examples (What Happens Behind the Scenes)
+
+#### Query for Existing Vendor
+```bash
+curl -X GET "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/query?query=SELECT * FROM Vendor WHERE Name = 'Office Depot'" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Accept: application/json"
+```
+
+#### Create New Vendor (if not found)
+```bash
+curl -X POST "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/vendor" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Vendor": {
+      "Name": "Office Depot",
+      "CompanyName": "Office Depot Inc.",
+      "BillAddr": {
+        "Line1": "123 Business St",
+        "City": "Business City",
+        "Country": "USA",
+        "PostalCode": "12345"
+      }
+    }
+  }'
+```
+
+#### Get Expense Accounts
+```bash
+curl -X GET "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/query?query=SELECT * FROM Account WHERE AccountType = 'Expense'" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Accept: application/json"
+```
+
+#### Create Bill (Final Step)
+```bash
+curl -X POST "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/bill" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Bill": {
+      "VendorRef": {"value": "VENDOR_ID"},
+      "TxnDate": "2024-01-15",
+      "DueDate": "2024-01-15",
+      "TotalAmt": 45.99,
+      "Line": [{
+        "Amount": 45.99,
+        "DetailType": "AccountBasedExpenseLineDetail",
+        "Description": "Office supplies from receipt",
+        "AccountBasedExpenseLineDetail": {
+          "AccountRef": {"value": "EXPENSE_ACCOUNT_ID"}
+        }
+      }]
+    }
   }'
 ```
 
@@ -112,18 +164,17 @@ Environment variables in `.env`:
 
 Access tokens expire every hour. Re-run `python oauth_setup.py` to get fresh tokens.
 
-## 📊 Data Flow
+## 📊 Data Processing Logic
 
-```mermaid
-flowchart LR
-    A[Receipt Input] --> B{Vendor Exists?}
-    B -->|No| C[Create Vendor]
-    B -->|Yes| D[Use Existing]
-    C --> E[Get Expense Account]
-    D --> E
-    E --> F[Create QB Bill]
-    F --> G[Return Bill ID]
-```
+**Receipt Processing Decision Tree:**
+
+1. **Receipt Input** → Extract vendor_name, amount, date
+2. **Check Vendor** → Does vendor exist in QuickBooks?
+   - **YES** → Use existing vendor ID
+   - **NO** → Create new vendor → Get new vendor ID
+3. **Get Expense Account** → Fetch available expense accounts
+4. **Create Bill** → Generate QuickBooks bill with vendor + account
+5. **Return Result** → Bill ID and success confirmation
 
 ## 🛠 Troubleshooting
 
