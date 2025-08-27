@@ -1,0 +1,41 @@
+{
+  "include": ["src", "tests"],
+  "exclude": ["**/__pycache__", ".venv", "venv", "build", "dist"],
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "All",
+  "reportMissingTypeStubs": false,
+  "reportUnknownParameterType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownLambdaType": false,
+  "reportGeneralTypeIssues": true,
+  "reportPropertyTypeMismatch": true,
+  "reportMissingImports": true,
+  "reportMissingModuleSource": false,
+  "reportOptionalMemberAccess": true,
+  "reportOptionalCall": true,
+  "reportOptionalIterable": true,
+  "reportOptionalContextManager": true,
+  "reportOptionalOperand": true,
+  "reportTypedDictNotRequiredAccess": true,
+  "reportUntypedFunctionDecorator": false,
+  "reportUntypedClassDecorator": false,
+  "reportUntypedBaseClass": false,
+  "reportImplicitStringConcatenation": true,
+  "reportUnnecessaryTypeIgnoreComment": true,
+  "reportMatchNotExhaustive": true,
+  "useLibraryCodeForTypes": true,
+  "executionEnvironments": [
+    {
+      "root": "src",
+      "pythonVersion": "3.12"
+    },
+    {
+      "root": "tests",
+      "pythonVersion": "3.12",
+      "extraPaths": ["src"]
+    }
+  ]
+}

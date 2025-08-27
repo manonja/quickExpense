@@ -59,7 +59,7 @@ curl -X POST http://localhost:8000/expenses \
 
 ## 🔑 Your Bearer Token
 
-After OAuth setup, your bearer token will be in `.env` as `QB_ACCESS_TOKEN`. 
+After OAuth setup, your bearer token will be in `.env` as `QB_ACCESS_TOKEN`.
 
 For manual API testing:
 ```bash

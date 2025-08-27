@@ -1,0 +1,52 @@
+# Ruff configuration with strictest settings
+target-version = "py312"
+line-length = 88
+
+[lint]
+select = ["ALL"]
+ignore = [
+    "D",      # pydocstyle - we'll handle docstrings separately
+    "ANN101", # missing type annotation for self
+    "ANN102", # missing type annotation for cls
+    "COM812", # trailing comma - conflicts with formatter
+    "ISC001", # implicit string concatenation - conflicts with formatter
+]
+
+[lint.per-file-ignores]
+"tests/*" = [
+    "S101",    # use of assert
+    "PLR2004", # magic values in tests
+    "PLR0913", # too many arguments
+]
+"src/quickexpense/main.py" = [
+    "INP001",  # implicit namespace package
+]
+
+[lint.isort]
+known-first-party = ["quickexpense"]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pep8-naming]
+classmethod-decorators = [
+    "classmethod",
+    "pydantic.field_validator",
+    "pydantic.model_validator",
+]
+
+[lint.pylint]
+max-args = 5
+max-branches = 12
+max-returns = 6
+max-statements = 50
+
+[lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"

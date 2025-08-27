@@ -1,234 +1,259 @@
-# QuickBooks Receipt Scanner
+# QuickExpense
 
-FastAPI application that converts receipt data into QuickBooks expenses automatically.
+A modern FastAPI application for processing and submitting expenses directly into QuickBooks Online using Python 3.12 with full type safety and modern development practices.
 
-## 🎯 What It Does
+## 🚀 Features
 
-Transforms receipt information (vendor, amount, date) into QuickBooks bills through REST API endpoints.
+- **Modern Python**: Built with Python 3.12 using type hints throughout
+- **FastAPI**: High-performance async API with automatic documentation
+- **Pydantic v2**: Robust data validation and serialization
+- **Type Safety**: Enforced with pyright and mypy in strict mode
+- **Code Quality**: Ruff with strictest settings for linting and formatting
+- **Dependency Management**: Using uv for fast, reliable package management
+- **Testing**: Comprehensive test suite with pytest
+- **QuickBooks Integration**: Full OAuth2 flow and expense creation
 
 ## 📋 Prerequisites
 
 - Python 3.12+
+- uv (install with `pip install uv`)
 - QuickBooks Developer Account
 - QuickBooks Sandbox Company
 
-## 🚀 Quick Setup
+## 🛠 Installation
 
-### 1. Install Dependencies
+### 1. Clone and Install Dependencies
+
 ```bash
-pip install -r requirements.txt
+# Clone the repository
+git clone <repository-url>
+cd quickExpense
+
+# Install dependencies using uv
+uv sync
 ```
 
-### 2. Get QuickBooks Credentials
-1. Go to [QuickBooks Developer Dashboard](https://developer.intuit.com/app/developer/dashboard)
-2. Create/select your app
-3. Copy Client ID and Client Secret
-4. Add redirect URI: `http://localhost:8000/api/quickbooks/callback`
+### 2. Set Up Environment Variables
 
-### 3. Configure OAuth
-```bash
-# Update oauth_setup.py with your credentials
-CLIENT_ID = "your_client_id_here"
-CLIENT_SECRET = "your_client_secret_here"
+Create a `.env` file in the project root:
 
-# Run OAuth setup
-python oauth_setup.py
+```env
+QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
+QB_CLIENT_ID=your_client_id_here
+QB_CLIENT_SECRET=your_client_secret_here
+QB_REDIRECT_URI=http://localhost:8000/callback
+QB_COMPANY_ID=your_company_id
+QB_ACCESS_TOKEN=your_access_token
+QB_REFRESH_TOKEN=your_refresh_token
 ```
 
-### 4. Start Application
+### 3. Set Up Pre-commit Hooks
+
 ```bash
-python main.py
+# Install pre-commit hooks
+uv run pre-commit install
 ```
 
-## 🔄 System Flow
+## 🏃‍♂️ Running the Application
 
-**Receipt to QuickBooks Expense Process:**
+### Development Mode (with auto-reload)
 
-1. **User** → Submit receipt data (vendor, amount, date)
-2. **FastAPI App** → Search for vendor in QuickBooks
-3. **If vendor not found** → Create new vendor
-4. **FastAPI App** → Get expense accounts from QuickBooks
-5. **FastAPI App** → Create purchase expense in QuickBooks
-6. **QuickBooks** → Return purchase ID and confirmation
-7. **User** → Receive success response with expense details
+```bash
+uv run fastapi dev src/quickexpense/main.py
+```
 
-## 🏗 Architecture
+### Production Mode
 
-**System Components:**
-- **Receipt Input** → FastAPI Application
-- **FastAPI App** → QuickBooks Client (API Wrapper)
-- **QuickBooks Client** → QuickBooks REST API v3
-- **OAuth Setup** → Bearer Token → QuickBooks Authentication
+```bash
+uv run uvicorn src.quickexpense.main:app --host 0.0.0.0 --port 8000
+```
 
-**Data Processing:**
-- Vendor Search/Create
-- Expense Account Lookup  
-- Purchase Expense Creation
+## 🧪 Testing
+
+### Run All Tests
+
+```bash
+uv run pytest
+```
+
+### Run with Coverage
+
+```bash
+uv run pytest --cov
+```
+
+### Run Specific Tests
+
+```bash
+uv run pytest tests/unit/test_models.py
+```
 
 ## 📡 API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Root endpoint with basic info |
-| `/help` | GET | **Display all curl commands** |
-| `/test-connection` | GET | Verify QB connection |
-| `/vendors/{name}` | GET | Search vendor by name |
-| `/vendors` | POST | Create new vendor |
-| `/accounts/expense` | GET | Get expense accounts |
-| `/expenses` | POST | Create expense from receipt |
+### Health Check
 
-## 📝 Receipt Expense Flow - Complete Examples
-
-### Step 1: Get Help (All Commands)
 ```bash
-curl http://localhost:8000/help
+# Check service health
+curl http://localhost:8000/health
+
+# Check service readiness
+curl http://localhost:8000/ready
 ```
 
-### Step 2: Test Connection
-```bash
-curl http://localhost:8000/test-connection
-```
+### Expense Management
 
-### Step 3: Create Expense from Receipt
 ```bash
-curl -X POST http://localhost:8000/expenses \
+# Create an expense
+curl -X POST http://localhost:8000/api/v1/expenses \
   -H "Content-Type: application/json" \
   -d '{
     "vendor_name": "Office Depot",
     "amount": 45.99,
-    "date": "2024-01-15"
+    "date": "2024-01-15",
+    "currency": "USD",
+    "category": "Office Supplies",
+    "tax_amount": 3.42
   }'
+
+# Search for a vendor
+curl http://localhost:8000/api/v1/vendors/Office%20Depot
+
+# Create a vendor
+curl -X POST "http://localhost:8000/api/v1/vendors?vendor_name=New%20Vendor"
+
+# Get expense accounts
+curl http://localhost:8000/api/v1/accounts/expense
+
+# Test QuickBooks connection
+curl http://localhost:8000/api/v1/test-connection
 ```
 
-### Direct QuickBooks API Examples (What Happens Behind the Scenes)
+## 🏗 Project Structure
 
-#### Query for Existing Vendor
+```
+quickexpense/
+├── pyproject.toml          # Project metadata and dependencies
+├── uv.lock                 # Locked dependencies
+├── .ruff.toml             # Ruff configuration
+├── .pre-commit-config.yaml # Pre-commit hooks
+├── pyrightconfig.json     # Type checking configuration
+├── src/
+│   └── quickexpense/
+│       ├── __init__.py
+│       ├── main.py        # FastAPI application entry point
+│       ├── api/
+│       │   ├── __init__.py
+│       │   ├── health.py  # Health check endpoints
+│       │   └── routes.py  # Main API routes
+│       ├── core/
+│       │   ├── __init__.py
+│       │   ├── config.py      # Settings management
+│       │   └── dependencies.py # Dependency injection
+│       ├── models/
+│       │   ├── __init__.py
+│       │   └── expense.py # Pydantic models
+│       └── services/
+│           ├── __init__.py
+│           └── quickbooks.py # QuickBooks service layer
+└── tests/
+    ├── __init__.py
+    ├── conftest.py        # Pytest fixtures
+    ├── unit/
+    │   ├── __init__.py
+    │   ├── test_models.py
+    │   └── test_health.py
+    └── integration/
+        └── __init__.py
+```
+
+## 🔧 Development
+
+### Adding Dependencies
+
 ```bash
-curl -X GET "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/query?query=SELECT * FROM Vendor WHERE Name = 'Office Depot'" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Accept: application/json"
+# Add a runtime dependency
+uv add package-name
+
+# Add a development dependency
+uv add --dev package-name
 ```
 
-#### Create New Vendor (if not found)
+### Code Quality
+
 ```bash
-curl -X POST "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/vendor" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Accept: application/json" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "Vendor": {
-      "Name": "Office Depot",
-      "CompanyName": "Office Depot Inc.",
-      "BillAddr": {
-        "Line1": "123 Business St",
-        "City": "Business City",
-        "Country": "USA",
-        "PostalCode": "12345"
-      }
-    }
-  }'
+# Run linting
+uv run ruff check src tests
+
+# Run formatting
+uv run ruff format src tests
+
+# Run type checking
+uv run pyright
 ```
 
-#### Get Expense Accounts
+### Pre-commit Hooks
+
+The project uses pre-commit hooks to ensure code quality:
+
+- **Ruff**: Linting and formatting
+- **Pyright**: Type checking
+- **Mypy**: Additional type checking
+- **Conventional Commits**: Commit message format
+
+### Commit Convention
+
+Follow conventional commits specification:
+
 ```bash
-curl -X GET "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/query?query=SELECT * FROM Account WHERE AccountType = 'Expense'" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Accept: application/json"
+feat: add new expense category support
+fix: correct tax calculation logic
+docs: update API documentation
+test: add unit tests for expense model
+chore: update dependencies
 ```
 
-#### Create Expense (Final Step)
-```bash
-curl -X POST "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/purchase" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Accept: application/json" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "Purchase": {
-      "AccountRef": {
-        "value": "EXPENSE_ACCOUNT_ID",
-        "name": "Office Supplies"
-      },
-      "PaymentType": "Cash",
-      "EntityRef": {
-        "value": "VENDOR_ID",
-        "name": "Office Depot"
-      },
-      "TotalAmt": 45.67,
-      "PurchaseEx": {
-        "any": [
-          {
-            "name": "{http://schema.intuit.com/finance/v3}NameValue",
-            "declaredType": "com.intuit.schema.finance.v3.NameValue",
-            "scope": "javax.xml.bind.JAXBElement$GlobalScope",
-            "value": {
-              "Name": "TxnDate",
-              "Value": "2023-12-01"
-            }
-          }
-        ]
-      },
-      "Line": [
-        {
-          "Amount": 42.25,
-          "DetailType": "AccountBasedExpenseLineDetail",
-          "AccountBasedExpenseLineDetail": {
-            "AccountRef": {
-              "value": "EXPENSE_ACCOUNT_ID",
-              "name": "Office Supplies"
-            }
-          }
-        },
-        {
-          "Amount": 3.42,
-          "DetailType": "AccountBasedExpenseLineDetail", 
-          "AccountBasedExpenseLineDetail": {
-            "AccountRef": {
-              "value": "TAX_ACCOUNT_ID",
-              "name": "Sales Tax"
-            }
-          }
-        }
-      ]
-    }
-  }'
+## 🐳 Docker Support (Optional)
+
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install uv
+RUN pip install uv
+
+# Copy project files
+COPY pyproject.toml uv.lock ./
+COPY src ./src
+
+# Install dependencies
+RUN uv sync --no-dev
+
+# Run the application
+CMD ["uv", "run", "uvicorn", "src.quickexpense.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-## 🔧 Configuration
+## 🔒 Security
 
-Environment variables in `.env`:
-- `QB_ACCESS_TOKEN` - OAuth bearer token (1 hour expiry)
-- `QB_COMPANY_ID` - QuickBooks company identifier
-- `QB_BASE_URL` - Sandbox: `https://sandbox-quickbooks.api.intuit.com`
+- All QuickBooks credentials are stored in environment variables
+- OAuth2 tokens should be refreshed regularly
+- Never commit `.env` files or credentials to version control
 
-## 🔄 Token Refresh
+## 📚 API Documentation
 
-Access tokens expire every hour. Re-run `python oauth_setup.py` to get fresh tokens.
+Once the application is running, you can access:
 
-## 📊 Data Processing Logic
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
-**Receipt Processing Decision Tree:**
+## 🤝 Contributing
 
-1. **Receipt Input** → Extract vendor_name, amount, date
-2. **Check Vendor** → Does vendor exist in QuickBooks?
-   - **YES** → Use existing vendor ID
-   - **NO** → Create new vendor → Get new vendor ID
-3. **Get Expense Account** → Fetch available expense accounts
-4. **Create Purchase** → Generate QuickBooks expense with vendor + account + tax
-5. **Return Result** → Purchase ID and success confirmation
+1. Create a feature branch
+2. Make your changes
+3. Ensure all tests pass
+4. Run pre-commit hooks
+5. Submit a pull request
 
-## 🛠 Troubleshooting
+## 📝 License
 
-- **"ModuleNotFoundError"**: Run `pip install -r requirements.txt`
-- **"401 Unauthorized"**: Token expired, re-run OAuth setup
-- **"Connection failed"**: Check QB credentials in `.env`
-
-## 📁 Project Structure
-
-```
-├── main.py              # FastAPI application
-├── quickbooks_client.py # QB API wrapper
-├── models.py           # Data models
-├── config.py           # Configuration
-├── oauth_setup.py      # OAuth helper
-└── requirements.txt    # Dependencies
-```
+MIT License - see LICENSE file for details
