@@ -73,7 +73,8 @@ class QuickBooksClient:
                 params=params,
             )
             response.raise_for_status()
-            return response.json()
+            result: dict[str, Any] = response.json()
+            return result
         except httpx.HTTPStatusError as e:
             logger.error("QuickBooks API error: %s", e.response.text)
             raise QuickBooksError(f"API request failed: {e}") from e

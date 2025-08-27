@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 from fastapi import FastAPI, HTTPException
 
 from models import ReceiptData
@@ -8,7 +10,7 @@ qb_client = QuickBooksClient()
 
 
 @app.get("/")
-def root():
+def root() -> Dict[str, str]:
     return {
         "message": "Receipt Scanner API - Ready for QuickBooks testing!",
         "help": "Visit /help for curl commands",
@@ -16,7 +18,7 @@ def root():
 
 
 @app.get("/help")
-def help_commands():
+def help_commands() -> Dict[str, Any]:
     """Display all curl commands for terminal usage"""
     return {
         "title": "QuickBooks Receipt Scanner - Terminal Commands",
@@ -95,47 +97,44 @@ def help_commands():
 
 
 @app.get("/test-connection")
-def test_quickbooks_connection():
+def test_quickbooks_connection() -> Dict[str, Any]:
     """Test QuickBooks API connection"""
     try:
         result = qb_client.test_connection()
         return {"status": "connected", "company": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Connection failed: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Connection failed: {e!s}") from e
 
 
 @app.get("/vendors/{vendor_name}")
-def search_vendor(vendor_name: str):
+def search_vendor(vendor_name: str) -> Dict[str, Any]:
     """Search for a vendor by name"""
     try:
-        result = qb_client.search_vendor(vendor_name)
-        return result
+        return qb_client.search_vendor(vendor_name)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/vendors")
-def create_vendor(vendor_name: str):
+def create_vendor(vendor_name: str) -> Dict[str, Any]:
     """Create a new vendor"""
     try:
-        result = qb_client.create_vendor(vendor_name)
-        return result
+        return qb_client.create_vendor(vendor_name)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/accounts/expense")
-def get_expense_accounts():
+def get_expense_accounts() -> Dict[str, Any]:
     """Get all expense accounts"""
     try:
-        result = qb_client.get_expense_accounts()
-        return result
+        return qb_client.get_expense_accounts()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/expenses")
-def create_expense(receipt: ReceiptData):
+def create_expense(receipt: ReceiptData) -> Dict[str, Any]:
     """Create expense from receipt data"""
     try:
         # 1. Check if vendor exists
@@ -175,10 +174,10 @@ def create_expense(receipt: ReceiptData):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)  # noqa: S104

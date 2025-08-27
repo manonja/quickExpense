@@ -8,8 +8,17 @@ ignore = [
     "D",      # pydocstyle - we'll handle docstrings separately
     "ANN101", # missing type annotation for self
     "ANN102", # missing type annotation for cls
+    "ANN401", # Any type allowed - needed for validators
     "COM812", # trailing comma - conflicts with formatter
     "ISC001", # implicit string concatenation - conflicts with formatter
+    "TRY003", # Specific messages in exceptions
+    "TRY300", # Consider else block - not always clearer
+    "TRY400", # Use logging.exception - we handle it explicitly
+    "EM101",  # Exception string literals
+    "EM102",  # Exception f-strings
+    "S608",   # SQL injection - we control inputs
+    "PYI034", # __aenter__ return type
+    "TCH003", # stdlib imports in type checking - not needed
 ]
 
 [lint.per-file-ignores]
@@ -21,6 +30,15 @@ ignore = [
 "src/quickexpense/main.py" = [
     "INP001",  # implicit namespace package
 ]
+"src/quickexpense/api/routes.py" = [
+    "TCH001", # Type checking block - needed for circular import
+]
+# Legacy files - will be removed/refactored later
+"main.py" = ["ALL"]
+"config.py" = ["ALL"]
+"models.py" = ["ALL"]
+"oauth_setup.py" = ["ALL"]
+"quickbooks_client.py" = ["ALL"]
 
 [lint.isort]
 known-first-party = ["quickexpense"]

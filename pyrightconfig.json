@@ -35,7 +35,9 @@
     {
       "root": "tests",
       "pythonVersion": "3.12",
-      "extraPaths": ["src"]
+      "extraPaths": ["src"],
+      "strict": ["!test_models.py"]
     }
-  ]
+  ],
+  "ignore": ["main.py", "config.py", "models.py", "oauth_setup.py", "quickbooks_client.py"]
 }

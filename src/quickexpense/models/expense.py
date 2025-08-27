@@ -25,7 +25,7 @@ class LineItem(BaseModel):
         """Convert float to Decimal for precision."""
         if isinstance(v, float):
             return Decimal(str(v))
-        return v
+        return Decimal(v) if not isinstance(v, Decimal) else v
 
 
 class Expense(BaseModel):
@@ -45,7 +45,7 @@ class Expense(BaseModel):
         """Convert float to Decimal for precision."""
         if isinstance(v, float):
             return Decimal(str(v))
-        return v
+        return Decimal(v) if not isinstance(v, Decimal) else v
 
     @field_validator("tax_amount")
     @classmethod

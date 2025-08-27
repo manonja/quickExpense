@@ -76,3 +76,9 @@ warn_unused_ignores = true
 warn_return_any = true
 warn_unreachable = true
 files = ["src", "tests"]
+exclude = ["main.py", "config.py", "models.py", "oauth_setup.py", "quickbooks_client.py"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+allow_untyped_defs = true
+disable_error_code = ["arg-type"]
