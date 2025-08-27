@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from quickexpense.core.config import Settings, get_settings
@@ -17,6 +16,8 @@ from quickexpense.services.quickbooks import QuickBooksClient
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from fastapi import FastAPI
+
 
 @pytest.fixture
 def test_settings() -> Settings:
@@ -24,11 +25,11 @@ def test_settings() -> Settings:
     return Settings(
         qb_base_url="https://sandbox-quickbooks.api.intuit.com",
         qb_client_id="test_client_id",
-        qb_client_secret="test_client_secret",
+        qb_client_secret="test_client_secret",  # noqa: S106
         qb_redirect_uri="http://localhost:8000/callback",
         qb_company_id="test_company_id",
-        qb_access_token="test_access_token",
-        qb_refresh_token="test_refresh_token",
+        qb_access_token="test_access_token",  # noqa: S106
+        qb_refresh_token="test_refresh_token",  # noqa: S106
         debug=True,
     )
 

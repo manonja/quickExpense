@@ -82,13 +82,21 @@ class QuickBooksClient:
             logger.error("Request error: %s", e)
             raise QuickBooksError(f"Request failed: {e}") from e
 
-    async def get(self, endpoint: str, **kwargs: Any) -> dict[str, Any]:
+    async def get(
+        self, endpoint: str, *, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Make a GET request."""
-        return await self._request("GET", endpoint, **kwargs)
+        return await self._request("GET", endpoint, params=params)
 
-    async def post(self, endpoint: str, **kwargs: Any) -> dict[str, Any]:
+    async def post(
+        self,
+        endpoint: str,
+        *,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Make a POST request."""
-        return await self._request("POST", endpoint, **kwargs)
+        return await self._request("POST", endpoint, json=json, params=params)
 
     async def test_connection(self) -> dict[str, Any]:
         """Test the connection to QuickBooks API."""

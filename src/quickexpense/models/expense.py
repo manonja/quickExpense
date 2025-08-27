@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
-
-if TYPE_CHECKING:
-    from typing import Any
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 
 class LineItem(BaseModel):
@@ -21,7 +18,7 @@ class LineItem(BaseModel):
 
     @field_validator("amount", mode="before")
     @classmethod
-    def validate_amount(cls, v: Any) -> Decimal:
+    def validate_amount(cls, v: Any) -> Decimal:  # noqa: ANN401
         """Convert float to Decimal for precision."""
         if isinstance(v, float):
             return Decimal(str(v))
@@ -41,7 +38,7 @@ class Expense(BaseModel):
 
     @field_validator("amount", "tax_amount", mode="before")
     @classmethod
-    def validate_decimal_fields(cls, v: Any) -> Decimal:
+    def validate_decimal_fields(cls, v: Any) -> Decimal:  # noqa: ANN401
         """Convert float to Decimal for precision."""
         if isinstance(v, float):
             return Decimal(str(v))
@@ -49,7 +46,7 @@ class Expense(BaseModel):
 
     @field_validator("tax_amount")
     @classmethod
-    def validate_tax_amount(cls, v: Decimal, info: Any) -> Decimal:
+    def validate_tax_amount(cls, v: Decimal, info: ValidationInfo) -> Decimal:
         """Ensure tax amount doesn't exceed total amount."""
         if info.data and "amount" in info.data and v > info.data["amount"]:
             msg = "Tax amount cannot exceed total amount"

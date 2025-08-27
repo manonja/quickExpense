@@ -8,7 +8,6 @@ ignore = [
     "D",      # pydocstyle - we'll handle docstrings separately
     "ANN101", # missing type annotation for self
     "ANN102", # missing type annotation for cls
-    "ANN401", # Any type allowed - needed for validators
     "COM812", # trailing comma - conflicts with formatter
     "ISC001", # implicit string concatenation - conflicts with formatter
     "TRY003", # Specific messages in exceptions
@@ -26,6 +25,7 @@ ignore = [
     "S101",    # use of assert
     "PLR2004", # magic values in tests
     "PLR0913", # too many arguments
+    "DTZ011",  # date.today() in tests is fine
 ]
 "src/quickexpense/main.py" = [
     "INP001",  # implicit namespace package
