@@ -1,189 +1,249 @@
-# claude.md
+# CLAUDE.md
 
 # QuickExpense
 
-A modern FastAPI application for processing and submitting expenses directly into **QuickBooks Online** using a command-line workflow.
-The design emphasizes stateless request handling, strict typing, modern Python (3.12), and clean service-oriented architecture.
+A modern FastAPI application for processing and submitting expenses directly into **QuickBooks Online** using Python 3.12 with full type safety and modern development practices.
 
+## Current Implementation Status
+
+The application has been successfully restructured with:
+- Modern Python 3.12 with full type hints
+- FastAPI with async/await support
+- Pydantic v2 for data validation
+- Service-oriented architecture
+- Dependency injection pattern
+- Comprehensive test structure
+- All pre-commit hooks passing
 
 ## Design Principles
 
-- **Modern Python**: Python 3.12 with full [PEP 484/561 type hints](https://peps.python.org/pep-0484/), validated by [Pyright].
+- **Modern Python**: Python 3.12 with full [PEP 484/561 type hints](https://peps.python.org/pep-0484/), validated by [Pyright] and [mypy].
 - **Explicit Contracts**: [Pydantic v2] models govern request and response schemas.
 - **Service‑oriented**: Business logic resides in `services/`, API layer remains thin.
 - **Stateless**: No database. Each session/expense is defined by request scope.
 - **Developer Discipline**:
   - Dependencies managed via [uv].
-  - Code correctness via [Ruff] (strictest rules).
-  - Pre-commit gates for type-checking, linting, commit style.
+  - Code correctness via [Ruff] with strictest settings.
+  - Pre-commit gates for type-checking, linting, formatting, and commit style.
+  - [Black] formatter for consistent code style.
   - [Conventional Commits] specification for history clarity.
-
 
 ## Project Layout
 
 ```
 quickexpense/
-├── pyproject.toml        # Project metadata, dependencies
-├── uv.lock               # uv lockfile for reproducible builds
-├── .pre-commit-config.yaml
-├── .ruff.toml
+├── pyproject.toml          # Project metadata, dependencies (uv)
+├── uv.lock                 # Locked dependencies
+├── .ruff.toml             # Linting configuration (strictest)
+├── .pre-commit-config.yaml # Pre-commit hooks
+├── pyrightconfig.json     # Type checking configuration
 ├── src/
 │   └── quickexpense/
 │       ├── __init__.py
-│       ├── main.py          # FastAPI entrypoint
+│       ├── main.py        # FastAPI app with lifespan events
 │       ├── api/
 │       │   ├── __init__.py
-│       │   └── routes.py    # API endpoint definitions
+│       │   ├── health.py  # Health check endpoints
+│       │   └── routes.py  # API endpoint definitions
+│       ├── core/
+│       │   ├── __init__.py
+│       │   ├── config.py      # Pydantic settings
+│       │   └── dependencies.py # Dependency injection
 │       ├── models/
 │       │   ├── __init__.py
-│       │   └── expense.py   # Pydantic models for expenses
-│       ├── services/
-│       │   ├── __init__.py
-│       │   └── quickbooks.py  # Service for QuickBooks Online submission
-│       └── cli/
+│       │   └── expense.py # Pydantic v2 models
+│       └── services/
 │           ├── __init__.py
-│           └── submit.py    # CLI interaction with FastAPI service
-
+│           └── quickbooks.py # QuickBooks client & service
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py        # Pytest fixtures
+│   ├── unit/
+│   │   ├── test_models.py
+│   │   └── test_health.py
+│   └── integration/
+└── (legacy files - to be removed)
+    ├── main.py
+    ├── models.py
+    ├── quickbooks_client.py
+    └── oauth_setup.py
 ```
 
+## Key Implementation Details
 
-## Code Sketch
+### Application Bootstrap
 
-### `src/quickexpense/models/expense.py`
+The QuickBooks client is initialized on app startup using FastAPI's lifespan events:
 
-```
-from pydantic import BaseModel, Field
-from datetime import date
-from decimal import Decimal
-
-class Expense(BaseModel):
-    description: str = Field(..., min_length=1)
-    amount: Decimal = Field(..., gt=0)
-    currency: str = Field(..., min_length=3, max_length=3)
-    date: date
-    category: str
-    vendor: str
-```
-
-### `src/quickexpense/services/quickbooks.py`
-
-```
-from . import exceptions
-from ..models.expense import Expense
-
-class QuickBooksService:
-    def __init__(self, client):
-        self.client = client  # Placeholder for QuickBooks SDK / HTTP client
-
-    async def submit_expense(self, expense: Expense) -> dict:
-        # Transform model → QuickBooks payload
-        payload = {
-            "Line": [
-                {
-                    "DetailType": "AccountBasedExpenseLineDetail",
-                    "Amount": float(expense.amount),
-                    "Description": expense.description,
-                }
-            ],
-            "VendorRef": {"name": expense.vendor},
-            "CurrencyRef": {"value": expense.currency},
-            "TxnDate": expense.date.isoformat(),
-        }
-
-        try:
-            return await self.client.post("/v3/company/expenses", json=payload)
-        except Exception as e:
-            raise exceptions.QuickBooksSubmissionError(str(e))
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPIType) -> AsyncGenerator[None, None]:
+    settings = get_settings()
+    qb_client = QuickBooksClient(
+        base_url=settings.qb_base_url,
+        company_id=settings.qb_company_id,
+        access_token=settings.qb_access_token,
+    )
+    set_quickbooks_client(qb_client)
+    yield
+    await qb_client.close()
 ```
 
-### `src/quickexpense/api/routes.py`
+### Dependency Injection
 
-```
-from fastapi import APIRouter
-from ..models.expense import Expense
-from ..services.quickbooks import QuickBooksService
+Services are accessed via dependency injection:
 
-router = APIRouter()
-
+```python
 @router.post("/expenses")
-async def submit_expense(expense: Expense) -> dict:
-    service = QuickBooksService(client=None)  # Replace with real client
-    return await service.submit_expense(expense)
+async def create_expense(
+    expense: Expense,
+    service: QuickBooksServiceDep,  # Injected dependency
+) -> dict[str, Any]:
+    result = await service.create_expense(expense)
+    return {"status": "success", "data": result}
 ```
 
-### `src/quickexpense/main.py`
+### Models with Validation
 
-```
-from fastapi import FastAPI
-from .api import routes
+Pydantic v2 models with proper Decimal handling:
 
-app = FastAPI(title="QuickExpense")
-app.include_router(routes.router)
-```
+```python
+class Expense(BaseModel):
+    vendor_name: str = Field(..., min_length=1)
+    amount: Decimal = Field(..., gt=0, decimal_places=2)
+    date: date
+    currency: str = Field(default="USD", pattern="^[A-Z]{3}$")
+    tax_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
 
-
-## Tooling
-
-### Dependency Management
-
-- [uv]: Fast, modern dependency and environment manager.
-  ```
-  uv init --src src quickexpense
-  uv add fastapi pydantic[dotenv] typer httpx
-  uv add --dev ruff pyright pre-commit
-  ```
-
-### Ruff Configuration (`.ruff.toml`)
-
-```
-[tool.ruff]
-select = ["ALL"]
-ignore = ["D"]  # optionally ignore docstring warnings
-line-length = 88
-target-version = "py312"
+    @field_validator("amount", mode="before")
+    @classmethod
+    def validate_amount(cls, v: Any) -> Decimal:  # noqa: ANN401
+        """Convert to Decimal for precision."""
+        if isinstance(v, float):
+            return Decimal(str(v))
+        return Decimal(v) if not isinstance(v, Decimal) else v
 ```
 
-### Pre-commit Hooks (`.pre-commit-config.yaml`)
+## Development Workflow
 
-```
-repos:
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.7.1
-    hooks:
-      - id: mypy
-  - repo: https://github.com/pre-commit/mirrors-pyright
-    rev: v1.1.362
-    hooks:
-      - id: pyright
-  - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v3.1.0
-    hooks:
-      - id: conventional-pre-commit
-```
-
-
-## Development
-
-```
-# Install dependencies
+### Initial Setup
+```bash
+# Clone and install dependencies
+git clone <repo>
+cd quickExpense
 uv sync
 
-# Run API locally
-uv run fastapi dev src/quickexpense/main.py
-
-# Run lint + type-check
-uv run ruff check src
-uv run pyright
-
-# Run hooks manually
-pre-commit run --all-files
+# Set up pre-commit hooks
+uv run pre-commit install
+uv run pre-commit install --hook-type commit-msg
 ```
 
+### Environment Configuration
+Create `.env` file with QuickBooks credentials:
+```env
+QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
+QB_CLIENT_ID=your_client_id
+QB_CLIENT_SECRET=your_client_secret
+QB_COMPANY_ID=your_company_id
+QB_ACCESS_TOKEN=your_access_token
+QB_REFRESH_TOKEN=your_refresh_token
+```
+
+### Running the Application
+```bash
+# Development mode (with auto-reload)
+uv run fastapi dev src/quickexpense/main.py
+
+# Production mode
+uv run uvicorn src.quickexpense.main:app --host 0.0.0.0 --port 8000
+```
+
+### Testing
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov
+
+# Run specific test file
+uv run pytest tests/unit/test_models.py
+```
+
+### Code Quality
+```bash
+# Run all pre-commit hooks
+uv run pre-commit run --all-files
+
+# Run specific checks
+uv run ruff check src tests
+uv run black src tests
+uv run pyright
+uv run mypy src tests
+```
+
+## API Endpoints
+
+### Health Checks
+- `GET /health` - Basic health check
+- `GET /ready` - Readiness check with dependencies
+
+### Expense Management
+- `GET /api/v1/` - API information
+- `POST /api/v1/expenses` - Create expense in QuickBooks
+- `GET /api/v1/vendors/{vendor_name}` - Search for vendor
+- `POST /api/v1/vendors?vendor_name=...` - Create vendor
+- `GET /api/v1/accounts/expense` - List expense accounts
+- `GET /api/v1/test-connection` - Test QuickBooks connection
+
+### Example Usage
+```bash
+# Create an expense
+curl -X POST http://localhost:8000/api/v1/expenses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vendor_name": "Office Depot",
+    "amount": 45.99,
+    "date": "2024-01-15",
+    "currency": "USD",
+    "category": "Office Supplies",
+    "tax_amount": 3.42
+  }'
+```
+
+## Code Quality Standards
+
+### Pre-commit Hooks
+All code must pass:
+- **Black** - Code formatting
+- **Ruff** - Linting with ALL rules enabled (except explicitly ignored)
+- **Pyright** - Strict type checking
+- **mypy** - Additional type checking
+- **Conventional Commits** - Commit message format
+
+### Type Safety
+- Full type annotations required (enforced by ANN rules)
+- `Any` type only allowed where necessary (Pydantic validators)
+- Strict pyright and mypy configurations
+
+### Ignored Rules
+Minimal, justified ignores:
+- `D` - Docstrings (handled separately)
+- `ANN101/102` - Type annotations for self/cls
+- `TRY300` - Consider else block (not always clearer)
+- `EM101/102` - Exception string literals
+- `S608` - SQL injection (we control inputs)
+
+## Next Steps
+
+1. **Remove Legacy Files**: Delete old files in root directory
+2. **Add OAuth Flow**: Implement proper OAuth2 flow for token refresh
+3. **Add Logging**: Structured logging with appropriate levels
+4. **Add More Tests**: Increase coverage to >90%
+5. **API Documentation**: Enhance OpenAPI/Swagger docs
+6. **Error Handling**: Implement comprehensive error responses
+7. **Rate Limiting**: Add rate limiting for API endpoints
+8. **Monitoring**: Add OpenTelemetry instrumentation
 
 ## Commit Discipline
 
@@ -193,9 +253,10 @@ Use [Conventional Commits]:
 - `chore: update ruff config`
 
 
-
 [uv]: https://github.com/astral-sh/uv
 [Ruff]: https://docs.astral.sh/ruff/
+[Black]: https://github.com/psf/black
 [Pyright]: https://github.com/microsoft/pyright
+[mypy]: https://mypy-lang.org/
 [Pydantic v2]: https://docs.pydantic.dev/latest/
 [Conventional Commits]: https://www.conventionalcommits.org/
