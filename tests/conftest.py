@@ -30,6 +30,7 @@ def test_settings() -> Settings:
         qb_company_id="test_company_id",
         qb_access_token="test_access_token",  # noqa: S106
         qb_refresh_token="test_refresh_token",  # noqa: S106
+        gemini_api_key="test_gemini_api_key",
         debug=True,
     )
 
