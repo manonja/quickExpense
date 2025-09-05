@@ -22,9 +22,11 @@ class Settings(BaseSettings):
         default="http://localhost:8000/callback",
         description="OAuth2 redirect URI",
     )
-    qb_company_id: str = Field(..., description="QuickBooks company ID")
-    qb_access_token: str = Field(..., description="QuickBooks access token")
-    qb_refresh_token: str = Field(..., description="QuickBooks refresh token")
+    # Company ID is now optional - will be loaded from tokens.json if available
+    qb_company_id: str = Field(
+        default="",
+        description="QuickBooks company ID (optional - loaded from tokens.json)",
+    )
 
     # OAuth configuration
     qb_oauth_environment: str = Field(

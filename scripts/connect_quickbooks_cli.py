@@ -121,7 +121,7 @@ class SimpleOAuthHandler(http.server.BaseHTTPRequestHandler):
         try:
             tokens = self.exchange_code_for_tokens(auth_code)
             self.show_success_page(tokens, company_id)
-            self.create_env_file(tokens, company_id)
+            self.save_tokens_json(tokens, company_id)
         except Exception as e:
             print(f"❌ Token exchange failed: {e}")
             self.show_error_page(f"Token exchange failed: {e}")
@@ -169,7 +169,7 @@ class SimpleOAuthHandler(http.server.BaseHTTPRequestHandler):
             <h2>🎉 Success! You're connected to QuickBooks</h2>
 
             <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                <strong>✅ .env file has been created/updated with your tokens!</strong>
+                <strong>✅ Tokens have been saved to data/tokens.json!</strong>
             </div>
 
             <h3>📊 Token Information:</h3>
@@ -212,7 +212,7 @@ class SimpleOAuthHandler(http.server.BaseHTTPRequestHandler):
         print(f"Access token expires in: {expires_in} seconds")
         print(f"Refresh token expires in: {refresh_expires_in} seconds")
         print("=" * 60)
-        print("✅ .env file updated - your app now has:")
+        print("✅ Tokens saved to data/tokens.json - your app now has:")
         print("  - Automatic token refresh before expiry")
         print("  - Retry logic for failed requests")
         print("  - Background token management")
@@ -238,86 +238,43 @@ class SimpleOAuthHandler(http.server.BaseHTTPRequestHandler):
         """
         self.wfile.write(html.encode())
 
-    def create_env_file(self, tokens, company_id):
-        """Create or update .env file with OAuth tokens"""
-        env_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
+    def save_tokens_json(self, tokens, company_id):
+        """Save OAuth tokens to JSON file"""
+        from datetime import UTC, datetime
+
+        # Path to tokens.json
+        tokens_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "data",
+            "tokens.json",
         )
 
-        # Read existing .env if it exists
-        existing_env = {}
-        if os.path.exists(env_path):
-            try:
-                with open(env_path) as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#") and "=" in line:
-                            key, value = line.split("=", 1)
-                            existing_env[key] = value
-            except Exception as e:
-                print(f"⚠️ Warning: Could not read existing .env: {e}")
+        # Ensure data directory exists
+        os.makedirs(os.path.dirname(tokens_path), exist_ok=True)
 
-        # Update with new tokens
-        existing_env.update(
-            {
-                "QB_BASE_URL": existing_env.get(
-                    "QB_BASE_URL", "https://sandbox-quickbooks.api.intuit.com"
-                ),
-                "QB_CLIENT_ID": CLIENT_ID,
-                "QB_CLIENT_SECRET": CLIENT_SECRET,
-                "QB_REDIRECT_URI": REDIRECT_URI,
-                "QB_COMPANY_ID": company_id,
-                "QB_ACCESS_TOKEN": tokens.get("access_token", ""),
-                "QB_REFRESH_TOKEN": tokens.get("refresh_token", ""),
-            }
-        )
-
-        # Preserve Gemini settings if they exist
-        env_content = """# QuickBooks API Configuration
-# Generated/Updated by connect_quickbooks_cli.py
-
-# QuickBooks OAuth Configuration
-"""
-
-        # Write QuickBooks settings
-        for key in [
-            "QB_BASE_URL",
-            "QB_CLIENT_ID",
-            "QB_CLIENT_SECRET",
-            "QB_REDIRECT_URI",
-            "QB_COMPANY_ID",
-            "QB_ACCESS_TOKEN",
-            "QB_REFRESH_TOKEN",
-        ]:
-            if key in existing_env:
-                env_content += f"{key}={existing_env[key]}\n"
-
-        # Add token expiry info
-        env_content += f"""\n# Token Information
-# Access token expires in: {tokens.get('expires_in', 'unknown')} seconds from generation
-# Refresh token expires in: {tokens.get('x_refresh_token_expires_in', 'unknown')} seconds from generation
-# Generated at: {json.dumps(tokens).get('timestamp', 'now')}
-"""
-
-        # Preserve other settings (like Gemini)
-        other_settings = [
-            (k, v) for k, v in existing_env.items() if not k.startswith("QB_")
-        ]
-        if other_settings:
-            env_content += "\n# Other Configuration\n"
-            for key, value in other_settings:
-                env_content += f"{key}={value}\n"
+        # Prepare token data
+        token_data = {
+            "access_token": tokens.get("access_token", ""),
+            "refresh_token": tokens.get("refresh_token", ""),
+            "expires_in": tokens.get("expires_in", 3600),
+            "x_refresh_token_expires_in": tokens.get(
+                "x_refresh_token_expires_in", 8640000
+            ),
+            "token_type": tokens.get("token_type", "bearer"),
+            "company_id": company_id,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
 
         try:
-            with open(env_path, "w") as f:
-                f.write(env_content)
-            print(f"✅ .env file updated at: {env_path}")
+            with open(tokens_path, "w") as f:
+                json.dump(token_data, f, indent=2, sort_keys=True)
+            print(f"✅ Tokens saved to: {tokens_path}")
+            return True
         except Exception as e:
-            print(f"❌ Could not update .env file: {e}")
-            print("\nPlease manually add these to your .env file:")
-            print(f"QB_COMPANY_ID={company_id}")
-            print(f"QB_ACCESS_TOKEN={tokens.get('access_token', '')}")
-            print(f"QB_REFRESH_TOKEN={tokens.get('refresh_token', '')}")
+            print(f"❌ Could not save tokens: {e}")
+            print("\nPlease manually save these tokens:")
+            print(json.dumps(token_data, indent=2))
+            return False
 
     def log_message(self, format, *args):
         # Suppress default HTTP request logging
@@ -356,7 +313,7 @@ def main():
     print("2. Click 'Connect to QuickBooks'")
     print("3. Log in and select a company (sandbox for testing)")
     print("4. Authorize the application")
-    print("5. Tokens will be saved to .env automatically")
+    print("5. Tokens will be saved to data/tokens.json automatically")
     print("\n🔄 Starting OAuth server...\n")
 
     try:
@@ -366,10 +323,10 @@ def main():
             httpd.serve_forever()
     except KeyboardInterrupt:
         print("\n\n👋 OAuth server stopped")
-        print("\nIf successful, your .env file has been updated with:")
-        print("  - QB_ACCESS_TOKEN (expires in ~1 hour)")
-        print("  - QB_REFRESH_TOKEN (expires in ~100 days)")
-        print("  - QB_COMPANY_ID")
+        print("\nIf successful, your tokens have been saved to data/tokens.json with:")
+        print("  - access_token (expires in ~1 hour)")
+        print("  - refresh_token (expires in ~100 days)")
+        print("  - company_id (your QuickBooks company ID)")
         print("\nThe QuickExpense app will automatically manage token refresh!")
 
 

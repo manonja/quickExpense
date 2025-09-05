@@ -31,8 +31,13 @@ ignore = [
     "S106",    # hardcoded password arguments in tests
     "SLF001",  # private member access - tests need this
     "ARG001",  # unused function arguments in mocks
+    "ARG002",  # unused function arguments in fixtures
+    "ANN001",  # missing type annotations in tests
+    "ANN201",  # missing return type annotations in tests
+    "ANN202",  # missing return type annotations for private functions
     "ANN401",  # typing.Any in test mocks
     "PLC0415", # imports in function - ok for test mocking
+    "PTH123",  # use pathlib - not critical in tests
 ]
 "src/quickexpense/main.py" = [
     "INP001",  # implicit namespace package
@@ -45,6 +50,10 @@ ignore = [
 ]
 "src/quickexpense/services/quickbooks_oauth.py" = [
     "PLC0415", # imports inside functions - for URL encoding
+]
+"src/quickexpense/services/token_store.py" = [
+    "BLE001", # broad exception handling for file operations
+    "ANN401", # Any type in kwargs
 ]
 # CLI script with different rules
 "scripts/*" = [

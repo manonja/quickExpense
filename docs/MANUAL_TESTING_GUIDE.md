@@ -4,9 +4,10 @@ This guide walks through manual testing of the QuickExpense application to verif
 
 ## Prerequisites
 
-1. Ensure you have a `.env` file configured (copy from `.env.example`)
+1. Ensure you have a `.env` file configured with static settings (copy from `.env.example`)
 2. QuickBooks Developer account with sandbox credentials
 3. (Optional) Google Gemini API key for receipt extraction
+4. Note: OAuth tokens are stored in `data/tokens.json` (not in .env)
 
 ## 1. Initial Setup
 
@@ -28,7 +29,7 @@ uv run python scripts/connect_quickbooks_cli.py
 This will:
 - Open a browser for QuickBooks authorization
 - Capture the OAuth tokens
-- Save them to `.env`
+- Save them to `data/tokens.json`
 
 ### Step 1.3: Start the Application
 ```bash
@@ -137,6 +138,10 @@ Expected: Extracted receipt data (if Gemini API key configured)
 
 ### Test 7.1: Check Token Status
 ```bash
+# View tokens directly
+cat data/tokens.json | jq .
+
+# Or use the test script
 uv run python scripts/test_oauth_refresh.py
 ```
 This shows current token status and expiry times.
@@ -150,9 +155,10 @@ Leave running to observe automatic token refresh behavior.
 
 ### Test 7.3: Force Token Expiry
 To test 401 handling and retry:
-1. Manually edit `.env` and change `QB_ACCESS_TOKEN` to an invalid value
+1. Manually edit `data/tokens.json` and change `access_token` to an invalid value
 2. Try creating an expense
 3. The system should handle the 401 and refresh the token automatically
+4. Check that `data/tokens.json` has been updated with new tokens
 
 ## 8. Run Integration Test Suite
 
@@ -201,11 +207,13 @@ Expected: Validation error with details
 
 1. **"401 Unauthorized"**
    - Run `uv run python scripts/connect_quickbooks_cli.py` to refresh tokens
-   - Check `.env` has valid tokens
+   - Check `data/tokens.json` exists and has valid tokens
+   - Ensure the application has read/write access to `data/` directory
 
 2. **"Company ID not found"**
-   - Ensure `QB_COMPANY_ID` is set in `.env`
+   - Check `data/tokens.json` has `company_id` field
    - Should be set automatically by OAuth script
+   - If missing, run OAuth setup again
 
 3. **"Connection refused"**
    - Ensure the server is running

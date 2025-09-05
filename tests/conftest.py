@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -18,6 +19,7 @@ from quickexpense.models.quickbooks_oauth import (
 )
 from quickexpense.services.quickbooks import QuickBooksClient
 from quickexpense.services.quickbooks_oauth import QuickBooksOAuthManager
+from quickexpense.services.token_store import TokenStore
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -34,8 +36,6 @@ def test_settings() -> Settings:
         qb_client_secret="test_client_secret",
         qb_redirect_uri="http://localhost:8000/callback",
         qb_company_id="test_company_id",
-        qb_access_token="test_access_token",
-        qb_refresh_token="test_refresh_token",
         gemini_api_key="test_gemini_api_key",
         debug=True,
     )
@@ -113,3 +113,24 @@ def client(app: FastAPI) -> Generator[TestClient, None, None]:
     """Create test client."""
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def mock_token_store(tmp_path: Path) -> TokenStore:
+    """Create a mock token store with temporary file."""
+    token_path = tmp_path / "test_tokens.json"
+    return TokenStore(str(token_path))
+
+
+@pytest.fixture
+def sample_token_data() -> dict[str, Any]:
+    """Sample token data for testing."""
+    return {
+        "access_token": "test_access_token",
+        "refresh_token": "test_refresh_token",
+        "expires_in": 3600,
+        "x_refresh_token_expires_in": 8640000,
+        "token_type": "bearer",
+        "company_id": "test_company_123",
+        "created_at": datetime.now(UTC).isoformat() + "Z",
+    }

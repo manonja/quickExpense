@@ -36,3 +36,11 @@ dist/
 .coverage.*
 coverage.xml
 htmlcov/
+
+# Token storage
+data/tokens.json
+data/*.json
+
+# Logs
+*.log
+server.log
