@@ -48,10 +48,9 @@ def get_oauth_manager() -> QuickBooksOAuthManager:
     return _oauth_manager
 
 
-def get_quickbooks_service(
-    client: Annotated[QuickBooksClient, Depends(get_quickbooks_client)],
-) -> QuickBooksService:
+def get_quickbooks_service() -> QuickBooksService:
     """Get QuickBooks service instance."""
+    client = get_quickbooks_client()
     return QuickBooksService(client)
 
 
