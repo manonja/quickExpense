@@ -25,7 +25,7 @@ class LineItem(BaseModel):
     """Individual line item from a receipt."""
 
     description: str = Field(..., min_length=1, description="Item description")
-    quantity: Decimal = Field(default=Decimal("1"), gt=0, description="Item quantity")
+    quantity: Decimal = Field(default=Decimal(1), gt=0, description="Item quantity")
     unit_price: Decimal = Field(..., gt=0, description="Price per unit")
     total_price: Decimal = Field(..., gt=0, description="Total price for this line")
 
@@ -67,8 +67,8 @@ class ExtractedReceipt(BaseModel):
 
     # Totals
     subtotal: Decimal = Field(..., ge=0, description="Subtotal before tax")
-    tax_amount: Decimal = Field(default=Decimal("0"), ge=0, description="Tax amount")
-    tip_amount: Decimal = Field(default=Decimal("0"), ge=0, description="Tip amount")
+    tax_amount: Decimal = Field(default=Decimal(0), ge=0, description="Tax amount")
+    tip_amount: Decimal = Field(default=Decimal(0), ge=0, description="Tip amount")
     total_amount: Decimal = Field(..., gt=0, description="Total amount paid")
 
     # Additional metadata

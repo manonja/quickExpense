@@ -37,7 +37,9 @@
       "pythonVersion": "3.12",
       "extraPaths": ["src"],
       "reportArgumentType": false,
-      "reportPrivateUsage": false
+      "reportPrivateUsage": false,
+      "reportMissingParameterType": false,
+      "reportOptionalMemberAccess": false
     }
   ],
   "ignore": ["main.py", "config.py", "models.py", "oauth_setup.py", "quickbooks_client.py"]

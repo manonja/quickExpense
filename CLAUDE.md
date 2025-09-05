@@ -139,21 +139,37 @@ uv run pre-commit install --hook-type commit-msg
 ```
 
 ### Environment Configuration
-Create `.env` file with QuickBooks and Gemini credentials:
+
+Create `.env` file with static configuration only:
 ```env
-# QuickBooks OAuth Configuration
+# QuickBooks OAuth Configuration (Static Settings)
 QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
 QB_CLIENT_ID=your_client_id
 QB_CLIENT_SECRET=your_client_secret
-QB_COMPANY_ID=your_company_id
-QB_ACCESS_TOKEN=your_access_token
-QB_REFRESH_TOKEN=your_refresh_token
+QB_REDIRECT_URI=http://localhost:8000/callback
 
 # Gemini AI Configuration
 GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-2.0-flash-exp
 GEMINI_TIMEOUT=30
 ```
+
+**Note:** OAuth tokens (access_token, refresh_token) and company_id are now stored in `data/tokens.json` after running the OAuth flow.
+
+### OAuth Setup (Required First Time)
+```bash
+# Set OAuth credentials as environment variables
+export QB_CLIENT_ID="your_client_id"
+export QB_CLIENT_SECRET="your_client_secret"
+
+# Run OAuth connection script
+uv run python scripts/connect_quickbooks_cli.py
+```
+
+This will:
+1. Open a browser for QuickBooks authorization
+2. Capture OAuth tokens after authorization
+3. Save tokens to `data/tokens.json`
 
 ### Running the Application
 ```bash
@@ -163,6 +179,11 @@ uv run fastapi dev src/quickexpense/main.py
 # Production mode
 uv run uvicorn src.quickexpense.main:app --host 0.0.0.0 --port 8000
 ```
+
+The application will:
+- Load tokens from `data/tokens.json` on startup
+- Automatically refresh tokens before they expire
+- Save updated tokens back to `data/tokens.json`
 
 ### Testing
 ```bash
@@ -202,8 +223,7 @@ uv run mypy src tests
 - `GET /api/v1/accounts/expense` - List expense accounts
 - `GET /api/v1/test-connection` - Test QuickBooks connection
 
-### Receipt Processing (NEW)
-- `POST /api/v1/receipts/extract` - Extract expense data from receipt image using Gemini AI
+
 
 ### Example Usage
 ```bash
@@ -284,10 +304,38 @@ curl -X POST http://localhost:8000/api/v1/receipts/extract \
 
 **Supported**: JPEG, PNG, GIF, BMP, WEBP (not PDF yet)
 
+## Token Storage Architecture
+
+### Single-User Prototype Design
+For simplicity in prototyping, tokens are stored in a local JSON file:
+
+- **Static Config** (`.env`): CLIENT_ID, CLIENT_SECRET, API URLs
+- **Dynamic Tokens** (`data/tokens.json`): access_token, refresh_token, company_id
+
+#### Token File Structure
+```json
+{
+  "access_token": "...",
+  "refresh_token": "...",
+  "expires_in": 3600,
+  "x_refresh_token_expires_in": 8640000,
+  "token_type": "bearer",
+  "company_id": "...",
+  "created_at": "2024-01-15T10:00:00Z",
+  "saved_at": "2024-01-15T10:00:00Z"
+}
+```
+
+### Token Flow
+1. **Initial Setup**: Run `connect_quickbooks_cli.py` → saves to `data/tokens.json`
+2. **App Startup**: Loads tokens from JSON file
+3. **Token Refresh**: OAuth manager refreshes → callback saves to JSON
+4. **Manual Update**: Use `scripts/update_tokens.py` if needed
+
 ## Next Steps
 
-1. **Remove Legacy Files**: Delete old files in root directory
-2. **Add OAuth Flow**: Implement proper OAuth2 flow for token refresh
+1. ~~**Remove Legacy Files**: Delete old files in root directory~~ ✓
+2. ~~**Add OAuth Flow**: Implement proper OAuth2 flow for token refresh~~ ✓
 3. **Add Logging**: Structured logging with appropriate levels
 4. **Add More Tests**: Increase coverage to >90%
 5. **API Documentation**: Enhance OpenAPI/Swagger docs
