@@ -139,14 +139,20 @@ uv run pre-commit install --hook-type commit-msg
 ```
 
 ### Environment Configuration
-Create `.env` file with QuickBooks credentials:
+Create `.env` file with QuickBooks and Gemini credentials:
 ```env
+# QuickBooks OAuth Configuration
 QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
 QB_CLIENT_ID=your_client_id
 QB_CLIENT_SECRET=your_client_secret
 QB_COMPANY_ID=your_company_id
 QB_ACCESS_TOKEN=your_access_token
 QB_REFRESH_TOKEN=your_refresh_token
+
+# Gemini AI Configuration
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash-exp
+GEMINI_TIMEOUT=30
 ```
 
 ### Running the Application
@@ -196,6 +202,9 @@ uv run mypy src tests
 - `GET /api/v1/accounts/expense` - List expense accounts
 - `GET /api/v1/test-connection` - Test QuickBooks connection
 
+### Receipt Processing (NEW)
+- `POST /api/v1/receipts/extract` - Extract expense data from receipt image using Gemini AI
+
 ### Example Usage
 ```bash
 # Create an expense
@@ -208,6 +217,15 @@ curl -X POST http://localhost:8000/api/v1/expenses \
     "currency": "USD",
     "category": "Office Supplies",
     "tax_amount": 3.42
+  }'
+
+# Extract receipt data using Gemini AI
+curl -X POST http://localhost:8000/api/v1/receipts/extract \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_base64": "<base64_encoded_image_data>",
+    "category": "Travel",
+    "additional_context": "Business trip to NYC"
   }'
 ```
 
@@ -234,6 +252,101 @@ Minimal, justified ignores:
 - `EM101/102` - Exception string literals
 - `S608` - SQL injection (we control inputs)
 
+## Gemini AI Integration Testing Guide
+
+### Setting up Gemini API Key
+
+1. **Get a Gemini API Key**:
+   - Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
+   - Sign in with your Google account
+   - Click "Get API Key" and create a new key
+   - Copy the API key
+
+2. **Configure the API Key**:
+   - Add to your `.env` file:
+   ```
+   GEMINI_API_KEY=your_actual_gemini_api_key_here
+   ```
+
+3. **Test the Integration**:
+   ```bash
+   # Start the server
+   uv run fastapi dev src/quickexpense/main.py
+
+   # In another terminal, test with a sample image
+   # First, convert an image to base64
+   base64 -i receipt.jpg -o receipt_base64.txt
+
+   # Then use the API
+   curl -X POST http://localhost:8000/api/v1/receipts/extract \
+     -H "Content-Type: application/json" \
+     -d @- << EOF
+   {
+     "image_base64": "$(cat receipt_base64.txt)",
+     "category": "Meals & Entertainment",
+     "additional_context": "Business lunch with client"
+   }
+   EOF
+   ```
+
+### Testing with Python Script
+
+```python
+import base64
+import requests
+
+# Convert image to base64
+with open("receipt.jpg", "rb") as image_file:
+    encoded_image = base64.b64encode(image_file.read()).decode()
+
+# Make request
+response = requests.post(
+    "http://localhost:8000/api/v1/receipts/extract",
+    json={
+        "image_base64": encoded_image,
+        "category": "Office Supplies",
+        "additional_context": "Monthly office supply purchase"
+    }
+)
+
+print(response.json())
+```
+
+### Response Format
+
+The API returns:
+```json
+{
+  "receipt": {
+    "vendor_name": "Office Depot",
+    "transaction_date": "2024-01-15",
+    "total_amount": "156.78",
+    "line_items": [...],
+    "confidence_score": 0.95
+  },
+  "expense_data": {
+    "vendor_name": "Office Depot",
+    "amount": "156.78",
+    "category": "Office Supplies",
+    ...
+  },
+  "processing_time": 2.34
+}
+```
+
+### Supported Image Formats
+- JPEG/JPG
+- PNG
+- GIF
+- BMP
+- WEBP
+
+### Best Practices
+1. Use clear, well-lit receipt images
+2. Ensure text is readable in the image
+3. Include the entire receipt in the image
+4. Provide additional context when ambiguous
+
 ## Next Steps
 
 1. **Remove Legacy Files**: Delete old files in root directory
@@ -244,6 +357,8 @@ Minimal, justified ignores:
 6. **Error Handling**: Implement comprehensive error responses
 7. **Rate Limiting**: Add rate limiting for API endpoints
 8. **Monitoring**: Add OpenTelemetry instrumentation
+9. **Batch Processing**: Add support for multiple receipt uploads
+10. **Webhook Support**: Add webhook notifications for processed receipts
 
 ## Commit Discipline
 
