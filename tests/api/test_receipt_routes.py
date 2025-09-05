@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import status
+from fastapi import FastAPI, status
 
 from quickexpense.models.receipt import ExtractedReceipt, LineItem, PaymentMethod
 
@@ -60,18 +60,18 @@ def sample_extracted_receipt() -> ExtractedReceipt:
 @pytest.mark.asyncio
 async def test_extract_receipt_success(
     client: TestClient,
-    mock_quickbooks_client: MagicMock,
+    app: FastAPI,
     mock_gemini_service: MagicMock,
     sample_extracted_receipt: ExtractedReceipt,
 ) -> None:
     """Test successful receipt extraction."""
     # Mock dependencies
-    mock_quickbooks_client.search_vendor = AsyncMock(return_value=[{"Id": "1"}])
-    mock_gemini_service.extract_receipt_data.return_value = sample_extracted_receipt
+    mock_gemini_service.extract_receipt_data = AsyncMock(
+        return_value=sample_extracted_receipt
+    )
 
     # Override dependencies
     from quickexpense.core.dependencies import get_gemini_service
-    from quickexpense.main import app
 
     app.dependency_overrides[get_gemini_service] = lambda: mock_gemini_service
 
@@ -96,7 +96,7 @@ async def test_extract_receipt_success(
         assert "expense_data" in data
         assert "processing_time" in data
         assert data["receipt"]["vendor_name"] == "Test Restaurant"
-        assert data["receipt"]["total_amount"] == "24.6"
+        assert data["receipt"]["total_amount"] == "24.60"
         assert data["expense_data"]["category"] == "Meals & Entertainment"
 
         # Verify all fields in expense_data match receipt
@@ -115,23 +115,20 @@ async def test_extract_receipt_success(
 
 
 @pytest.mark.asyncio
-async def test_extract_receipt_vendor_not_found(
+async def test_extract_receipt_no_context(
     client: TestClient,
-    mock_quickbooks_client: MagicMock,
+    app: FastAPI,
     mock_gemini_service: MagicMock,
     sample_extracted_receipt: ExtractedReceipt,
 ) -> None:
-    """Test receipt extraction when vendor doesn't exist."""
-    # Mock dependencies - vendor not found
-    mock_quickbooks_client.search_vendor = AsyncMock(return_value=[])
-    mock_quickbooks_client.create_vendor = AsyncMock(
-        return_value={"Id": "2", "DisplayName": "Test Restaurant"}
+    """Test receipt extraction without additional context."""
+    # Mock dependencies
+    mock_gemini_service.extract_receipt_data = AsyncMock(
+        return_value=sample_extracted_receipt
     )
-    mock_gemini_service.extract_receipt_data.return_value = sample_extracted_receipt
 
     # Override dependencies
     from quickexpense.core.dependencies import get_gemini_service
-    from quickexpense.main import app
 
     app.dependency_overrides[get_gemini_service] = lambda: mock_gemini_service
 
@@ -147,8 +144,10 @@ async def test_extract_receipt_vendor_not_found(
         response = client.post("/api/v1/receipts/extract", json=request_data)
 
         assert response.status_code == status.HTTP_200_OK
-        # Verify vendor was created
-        mock_quickbooks_client.create_vendor.assert_called_once_with("Test Restaurant")
+        # Verify no context was passed
+        mock_gemini_service.extract_receipt_data.assert_called_with(
+            request_data["image_base64"], None
+        )
 
     finally:
         app.dependency_overrides.clear()
@@ -157,7 +156,7 @@ async def test_extract_receipt_vendor_not_found(
 @pytest.mark.asyncio
 async def test_extract_receipt_gemini_error(
     client: TestClient,
-    mock_quickbooks_client: MagicMock,  # noqa: ARG001
+    app: FastAPI,
     mock_gemini_service: MagicMock,
 ) -> None:
     """Test handling of Gemini extraction errors."""
@@ -167,7 +166,6 @@ async def test_extract_receipt_gemini_error(
     )
 
     from quickexpense.core.dependencies import get_gemini_service
-    from quickexpense.main import app
 
     app.dependency_overrides[get_gemini_service] = lambda: mock_gemini_service
 
@@ -187,23 +185,19 @@ async def test_extract_receipt_gemini_error(
 
 
 @pytest.mark.asyncio
-async def test_extract_receipt_quickbooks_error(
+async def test_extract_receipt_validation_error(
     client: TestClient,
-    mock_quickbooks_client: MagicMock,
+    app: FastAPI,
     mock_gemini_service: MagicMock,
-    sample_extracted_receipt: ExtractedReceipt,
 ) -> None:
-    """Test handling of QuickBooks errors during vendor lookup."""
-    from quickexpense.services.quickbooks import QuickBooksError
+    """Test handling of validation errors from Gemini."""
 
-    # Mock QuickBooks error
-    mock_quickbooks_client.search_vendor.side_effect = QuickBooksError(
-        "API rate limit exceeded"
+    # Mock validation error
+    mock_gemini_service.extract_receipt_data.side_effect = ValueError(
+        "Invalid receipt data: missing required fields"
     )
-    mock_gemini_service.extract_receipt_data.return_value = sample_extracted_receipt
 
     from quickexpense.core.dependencies import get_gemini_service
-    from quickexpense.main import app
 
     app.dependency_overrides[get_gemini_service] = lambda: mock_gemini_service
 
@@ -218,8 +212,8 @@ async def test_extract_receipt_quickbooks_error(
 
         response = client.post("/api/v1/receipts/extract", json=request_data)
 
-        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-        assert "QuickBooks error" in response.json()["detail"]
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Failed to extract receipt data" in response.json()["detail"]
 
     finally:
         app.dependency_overrides.clear()
@@ -251,16 +245,16 @@ async def test_extract_receipt_missing_fields(client: TestClient) -> None:
 @pytest.mark.asyncio
 async def test_extract_receipt_response_structure(
     client: TestClient,
-    mock_quickbooks_client: MagicMock,
+    app: FastAPI,
     mock_gemini_service: MagicMock,
     sample_extracted_receipt: ExtractedReceipt,
 ) -> None:
     """Test that response structure is complete and correct."""
-    mock_quickbooks_client.search_vendor = AsyncMock(return_value=[{"Id": "1"}])
-    mock_gemini_service.extract_receipt_data.return_value = sample_extracted_receipt
+    mock_gemini_service.extract_receipt_data = AsyncMock(
+        return_value=sample_extracted_receipt
+    )
 
     from quickexpense.core.dependencies import get_gemini_service
-    from quickexpense.main import app
 
     app.dependency_overrides[get_gemini_service] = lambda: mock_gemini_service
 
@@ -311,17 +305,16 @@ async def test_extract_receipt_response_structure(
 @pytest.mark.asyncio
 async def test_extract_receipt_with_empty_context(
     client: TestClient,
-    mock_quickbooks_client: MagicMock,
+    app: FastAPI,
     mock_gemini_service: MagicMock,
     sample_extracted_receipt: ExtractedReceipt,
 ) -> None:
     """Test receipt extraction with empty additional context."""
-    mock_quickbooks_client.search_vendor = AsyncMock(return_value=[])
-    mock_quickbooks_client.create_vendor = AsyncMock(return_value={"Id": "2"})
-    mock_gemini_service.extract_receipt_data.return_value = sample_extracted_receipt
+    mock_gemini_service.extract_receipt_data = AsyncMock(
+        return_value=sample_extracted_receipt
+    )
 
     from quickexpense.core.dependencies import get_gemini_service
-    from quickexpense.main import app
 
     app.dependency_overrides[get_gemini_service] = lambda: mock_gemini_service
 

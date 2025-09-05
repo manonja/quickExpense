@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 
-from quickexpense.core.dependencies import QuickBooksServiceDep, get_gemini_service
+from quickexpense.core.dependencies import GeminiServiceDep, QuickBooksServiceDep
 from quickexpense.models import (
     Expense,
     ReceiptExtractionRequest,
@@ -17,7 +17,6 @@ from quickexpense.models import (
 from quickexpense.services.quickbooks import QuickBooksError
 
 if TYPE_CHECKING:
-    from quickexpense.services.gemini import GeminiService
     from quickexpense.services.quickbooks import AccountInfo, VendorSearchResult
 
 logger = logging.getLogger(__name__)
@@ -116,14 +115,12 @@ async def test_connection(
 @router.post("/receipts/extract", response_model=ReceiptExtractionResponse)
 async def extract_receipt(
     request: ReceiptExtractionRequest,
-    quickbooks_service: QuickBooksServiceDep,
-    gemini_service: Annotated[GeminiService, Depends(get_gemini_service)],
+    gemini_service: GeminiServiceDep,
 ) -> ReceiptExtractionResponse:
     """Extract expense data from a receipt image using Gemini AI.
 
     Args:
         request: Contains base64 encoded image and optional context
-        quickbooks_service: QuickBooks service for vendor lookup
         gemini_service: Gemini AI service for receipt processing
 
     Returns:
@@ -138,12 +135,6 @@ async def extract_receipt(
             request.image_base64,
             request.additional_context,
         )
-
-        # Check if vendor exists in QuickBooks
-        vendors = await quickbooks_service.search_vendor(receipt.vendor_name)
-        if not vendors:
-            # Create vendor if not found
-            await quickbooks_service.create_vendor(receipt.vendor_name)
 
         # Convert to expense format
         expense_data = receipt.to_expense(request.category)
@@ -161,11 +152,6 @@ async def extract_receipt(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to extract receipt data: {e}",
-        ) from e
-    except QuickBooksError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"QuickBooks error: {e}",
         ) from e
     except Exception as e:
         logger.exception("Unexpected error during receipt extraction")
