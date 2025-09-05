@@ -14,3 +14,4 @@ class LineItem(BaseModel):
     description: str
     amount: float
     quantity: int = 1
+

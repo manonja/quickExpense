@@ -12,6 +12,7 @@ ignore = [
     "ISC001", # implicit string concatenation - conflicts with formatter
     "TRY003", # Specific messages in exceptions
     "TRY300", # Consider else block - not always clearer
+    "TRY301", # Abstract raise to inner function - not always clearer
     "TRY400", # Use logging.exception - we handle it explicitly
     "EM101",  # Exception string literals
     "EM102",  # Exception f-strings
