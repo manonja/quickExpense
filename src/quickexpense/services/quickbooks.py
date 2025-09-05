@@ -304,7 +304,7 @@ class QuickBooksService:
         ]
 
         # Add tax line if applicable
-        if expense.tax_amount > Decimal("0"):
+        if expense.tax_amount > Decimal(0):
             line_items.append(
                 {
                     "Amount": float(expense.tax_amount),

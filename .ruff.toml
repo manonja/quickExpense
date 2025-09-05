@@ -27,6 +27,12 @@ ignore = [
     "PLR2004", # magic values in tests
     "PLR0913", # too many arguments
     "DTZ011",  # date.today() in tests is fine
+    "S105",    # hardcoded password in tests
+    "S106",    # hardcoded password arguments in tests
+    "SLF001",  # private member access - tests need this
+    "ARG001",  # unused function arguments in mocks
+    "ANN401",  # typing.Any in test mocks
+    "PLC0415", # imports in function - ok for test mocking
 ]
 "src/quickexpense/main.py" = [
     "INP001",  # implicit namespace package
@@ -36,6 +42,9 @@ ignore = [
 ]
 "src/quickexpense/services/quickbooks.py" = [
     "PLR2004", # Magic value 401 - HTTP status code
+]
+"src/quickexpense/services/quickbooks_oauth.py" = [
+    "PLC0415", # imports inside functions - for URL encoding
 ]
 # CLI script with different rules
 "scripts/*" = [
@@ -51,6 +60,11 @@ ignore = [
     "PLW2901", # loop variable reassignment OK
     "F841",    # unused variables in HTML generation
     "A002",    # format arg name from BaseHTTPRequestHandler
+    "PLR2004", # magic values in CLI scripts
+    "DTZ005",  # datetime without timezone in scripts
+    "RUF001",  # ambiguous characters in output
+    "PLR1722", # exit() vs sys.exit() - exit() is fine in scripts
+    "EXE001",  # shebang in non-executable - ok for scripts
 ]
 # Legacy files - will be removed/refactored later
 "main.py" = ["ALL"]

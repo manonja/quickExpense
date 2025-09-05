@@ -297,7 +297,7 @@ async def test_extract_receipt_data_large_amounts(
 
 def test_build_extraction_prompt(gemini_service: GeminiService) -> None:
     """Test prompt building without context."""
-    prompt = gemini_service._build_extraction_prompt(None)  # noqa: SLF001
+    prompt = gemini_service._build_extraction_prompt(None)
 
     assert "Extract all information from this receipt image" in prompt
     assert "vendor_name" in prompt
@@ -310,7 +310,7 @@ def test_build_extraction_prompt_with_context(
 ) -> None:
     """Test prompt building with additional context."""
     context = "This is a business lunch expense"
-    prompt = gemini_service._build_extraction_prompt(context)  # noqa: SLF001
+    prompt = gemini_service._build_extraction_prompt(context)
 
     assert "Additional context: This is a business lunch expense" in prompt
 
