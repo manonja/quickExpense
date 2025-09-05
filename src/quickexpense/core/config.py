@@ -26,6 +26,24 @@ class Settings(BaseSettings):
     qb_access_token: str = Field(..., description="QuickBooks access token")
     qb_refresh_token: str = Field(..., description="QuickBooks refresh token")
 
+    # OAuth configuration
+    qb_oauth_environment: str = Field(
+        default="sandbox",
+        description="QuickBooks environment (sandbox/production)",
+    )
+    qb_token_refresh_buffer: int = Field(
+        default=300,
+        description="Seconds before token expiry to trigger refresh (5 min default)",
+    )
+    qb_max_refresh_attempts: int = Field(
+        default=3,
+        description="Maximum attempts to refresh token on failure",
+    )
+    qb_enable_background_refresh: bool = Field(
+        default=True,
+        description="Enable automatic background token refresh",
+    )
+
     # Application settings
     app_name: str = Field(default="quickexpense", description="Application name")
     app_version: str = Field(default="0.1.0", description="Application version")

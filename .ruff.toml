@@ -34,6 +34,24 @@ ignore = [
 "src/quickexpense/api/routes.py" = [
     "TCH001", # Type checking block - needed for circular import
 ]
+"src/quickexpense/services/quickbooks.py" = [
+    "PLR2004", # Magic value 401 - HTTP status code
+]
+# CLI script with different rules
+"scripts/*" = [
+    "T201",    # print statements are OK in CLI tools
+    "S105",    # hardcoded password - these are OAuth URLs
+    "S310",    # urlopen is fine for OAuth URLs
+    "N802",    # do_GET is required by BaseHTTPRequestHandler
+    "ANN",     # type annotations not critical for CLI script
+    "E501",    # line length for HTML content
+    "D",       # docstrings not critical for CLI script
+    "BLE001",  # broad exception handling OK for CLI
+    "PTH",     # path operations are fine with os.path
+    "PLW2901", # loop variable reassignment OK
+    "F841",    # unused variables in HTML generation
+    "A002",    # format arg name from BaseHTTPRequestHandler
+]
 # Legacy files - will be removed/refactored later
 "main.py" = ["ALL"]
 "config.py" = ["ALL"]

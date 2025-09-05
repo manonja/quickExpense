@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from quickexpense.models import Expense
+    from quickexpense.services.quickbooks_oauth import QuickBooksOAuthManager
 
 logger = logging.getLogger(__name__)
 
@@ -20,19 +21,38 @@ class QuickBooksError(Exception):
 
 
 class QuickBooksClient:
-    """HTTP client for QuickBooks API."""
+    """HTTP client for QuickBooks API with OAuth support."""
 
     def __init__(
         self,
         base_url: str,
         company_id: str,
-        access_token: str,
+        access_token: str | None = None,
         timeout: float = 30.0,
+        *,
+        oauth_manager: QuickBooksOAuthManager | None = None,
     ) -> None:
-        """Initialize QuickBooks client."""
+        """Initialize QuickBooks client.
+
+        Args:
+            base_url: QuickBooks API base URL
+            company_id: QuickBooks company ID
+            access_token: Initial access token (if no oauth_manager)
+            timeout: Request timeout in seconds
+            oauth_manager: OAuth token manager for automatic refresh
+        """
         self.base_url = base_url
         self.company_id = company_id
         self.timeout = timeout
+        self.oauth_manager = oauth_manager
+
+        # Set initial token
+        if oauth_manager and oauth_manager.tokens:
+            access_token = oauth_manager.tokens.access_token
+        elif not access_token:
+            msg = "Either access_token or oauth_manager with tokens required"
+            raise ValueError(msg)
+
         self.headers = {
             "Authorization": f"Bearer {access_token}",
             "Accept": "application/json",
@@ -43,6 +63,10 @@ class QuickBooksClient:
             headers=self.headers,
             timeout=timeout,
         )
+
+        # Register callback to update token
+        if oauth_manager:
+            oauth_manager.add_token_update_callback(self._update_access_token)
 
     async def __aenter__(self) -> QuickBooksClient:
         """Async context manager entry."""
@@ -56,6 +80,15 @@ class QuickBooksClient:
         """Close the HTTP client."""
         await self._client.aclose()
 
+    def _update_access_token(self, token_info: Any) -> None:  # noqa: ANN401
+        """Update the access token in headers.
+
+        Args:
+            token_info: QuickBooksTokenInfo instance
+        """
+        self.headers["Authorization"] = f"Bearer {token_info.access_token}"
+        self._client.headers["Authorization"] = f"Bearer {token_info.access_token}"
+
     async def _request(
         self,
         method: str,
@@ -63,8 +96,33 @@ class QuickBooksClient:
         *,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
+        retry_on_401: bool = True,
     ) -> dict[str, Any]:
-        """Make an HTTP request to QuickBooks API."""
+        """Make an HTTP request to QuickBooks API.
+
+        Args:
+            method: HTTP method
+            endpoint: API endpoint
+            json: JSON body data
+            params: Query parameters
+            retry_on_401: Whether to retry with refreshed token on 401
+
+        Returns:
+            Response data
+
+        Raises:
+            QuickBooksError: If request fails
+        """
+        # Ensure we have a valid token before making request
+        if self.oauth_manager:
+            try:
+                access_token = await self.oauth_manager.get_valid_access_token()
+                self.headers["Authorization"] = f"Bearer {access_token}"
+                self._client.headers["Authorization"] = f"Bearer {access_token}"
+            except Exception as e:
+                logger.error("Failed to get valid access token: %s", e)
+                raise QuickBooksError(f"OAuth error: {e}") from e
+
         try:
             response = await self._client.request(
                 method=method,
@@ -76,6 +134,24 @@ class QuickBooksClient:
             result: dict[str, Any] = response.json()
             return result
         except httpx.HTTPStatusError as e:
+            # Handle 401 Unauthorized - token might have just expired
+            if e.response.status_code == 401 and retry_on_401 and self.oauth_manager:
+                logger.info("Got 401, attempting token refresh and retry")
+                try:
+                    # Force token refresh
+                    await self.oauth_manager.refresh_access_token()
+                    # Retry the request once
+                    return await self._request(
+                        method,
+                        endpoint,
+                        json=json,
+                        params=params,
+                        retry_on_401=False,  # Don't retry again
+                    )
+                except Exception:
+                    logger.exception("Token refresh failed on 401 retry")
+                    # Fall through to original error
+
             logger.error("QuickBooks API error: %s", e.response.text)
             raise QuickBooksError(f"API request failed: {e}") from e
         except httpx.RequestError as e:
