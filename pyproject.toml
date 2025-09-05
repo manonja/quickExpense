@@ -84,4 +84,4 @@ exclude = ["main.py", "config.py", "models.py", "oauth_setup.py", "quickbooks_cl
 [[tool.mypy.overrides]]
 module = "tests.*"
 allow_untyped_defs = true
-disable_error_code = ["arg-type"]
+disable_error_code = ["arg-type", "method-assign"]
