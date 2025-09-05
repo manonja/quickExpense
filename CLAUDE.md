@@ -139,14 +139,21 @@ uv run pre-commit install --hook-type commit-msg
 ```
 
 ### Environment Configuration
-Create `.env` file with QuickBooks credentials:
+
+Create `.env` file with QuickBooks and Gemini credentials:
 ```env
+# QuickBooks OAuth Configuration
 QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
 QB_CLIENT_ID=your_client_id
 QB_CLIENT_SECRET=your_client_secret
 QB_COMPANY_ID=your_company_id
 QB_ACCESS_TOKEN=your_access_token
 QB_REFRESH_TOKEN=your_refresh_token
+
+# Gemini AI Configuration
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash-exp
+GEMINI_TIMEOUT=30
 ```
 
 ### Running the Application
@@ -196,6 +203,8 @@ uv run mypy src tests
 - `GET /api/v1/accounts/expense` - List expense accounts
 - `GET /api/v1/test-connection` - Test QuickBooks connection
 
+
+
 ### Example Usage
 ```bash
 # Create an expense
@@ -208,6 +217,15 @@ curl -X POST http://localhost:8000/api/v1/expenses \
     "currency": "USD",
     "category": "Office Supplies",
     "tax_amount": 3.42
+  }'
+
+# Extract receipt data using Gemini AI
+curl -X POST http://localhost:8000/api/v1/receipts/extract \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_base64": "<base64_encoded_image_data>",
+    "category": "Travel",
+    "additional_context": "Business trip to NYC"
   }'
 ```
 
@@ -234,6 +252,38 @@ Minimal, justified ignores:
 - `EM101/102` - Exception string literals
 - `S608` - SQL injection (we control inputs)
 
+## Gemini AI Receipt Processing
+
+### Quick Setup
+
+1. Get API Key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Add to `.env`: `GEMINI_API_KEY=your_actual_key`
+3. Test with curl:
+
+```bash
+# Convert image to base64
+base64 -i receipt.jpg > receipt.b64
+
+# Send to API
+curl -X POST http://localhost:8000/api/v1/receipts/extract \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"image_base64\": \"$(cat receipt.b64)\",
+    \"category\": \"Travel\"
+  }"
+```
+
+### Response
+```json
+{
+  "receipt": { "vendor_name": "...", "total_amount": "..." },
+  "expense_data": { "ready for QuickBooks" },
+  "processing_time": 2.34
+}
+```
+
+**Supported**: JPEG, PNG, GIF, BMP, WEBP (not PDF yet)
+
 ## Next Steps
 
 1. **Remove Legacy Files**: Delete old files in root directory
@@ -244,6 +294,8 @@ Minimal, justified ignores:
 6. **Error Handling**: Implement comprehensive error responses
 7. **Rate Limiting**: Add rate limiting for API endpoints
 8. **Monitoring**: Add OpenTelemetry instrumentation
+9. **Batch Processing**: Add support for multiple receipt uploads
+10. **Webhook Support**: Add webhook notifications for processed receipts
 
 ## Commit Discipline
 

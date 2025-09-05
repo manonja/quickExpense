@@ -39,6 +39,17 @@ class Settings(BaseSettings):
         description="Allowed CORS origins",
     )
 
+    # Gemini AI configuration
+    gemini_api_key: str = Field(..., description="Google Gemini API key")
+    gemini_model: str = Field(
+        default="gemini-2.0-flash-exp",
+        description="Gemini model to use",
+    )
+    gemini_timeout: int = Field(
+        default=30,
+        description="Timeout for Gemini API calls in seconds",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import Depends
 
 from quickexpense.core.config import Settings, get_settings
+from quickexpense.services.gemini import GeminiService
 from quickexpense.services.quickbooks import QuickBooksService
 
 if TYPE_CHECKING:
@@ -38,6 +39,14 @@ def get_quickbooks_service(
     return QuickBooksService(client)
 
 
+def get_gemini_service(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> GeminiService:
+    """Get Gemini service instance."""
+    return GeminiService(settings)
+
+
 # Type aliases for dependency injection
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 QuickBooksServiceDep = Annotated[QuickBooksService, Depends(get_quickbooks_service)]
+GeminiServiceDep = Annotated[GeminiService, Depends(get_gemini_service)]

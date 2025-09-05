@@ -15,6 +15,9 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
+    "google-generativeai>=0.8.0",
+    "pillow>=10.0.0",
+    "python-multipart>=0.0.6",
 ]
 
 [tool.uv]
@@ -81,4 +84,4 @@ exclude = ["main.py", "config.py", "models.py", "oauth_setup.py", "quickbooks_cl
 [[tool.mypy.overrides]]
 module = "tests.*"
 allow_untyped_defs = true
-disable_error_code = ["arg-type"]
+disable_error_code = ["arg-type", "method-assign"]

@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, status
 
-from quickexpense.core.dependencies import QuickBooksServiceDep
-from quickexpense.models import Expense
+from quickexpense.core.dependencies import GeminiServiceDep, QuickBooksServiceDep
+from quickexpense.models import (
+    Expense,
+    ReceiptExtractionRequest,
+    ReceiptExtractionResponse,
+)
 from quickexpense.services.quickbooks import QuickBooksError
 
 if TYPE_CHECKING:
     from quickexpense.services.quickbooks import AccountInfo, VendorSearchResult
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["expenses"])
 
 
@@ -102,4 +109,53 @@ async def test_connection(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"QuickBooks connection failed: {e}",
+        ) from e
+
+
+@router.post("/receipts/extract", response_model=ReceiptExtractionResponse)
+async def extract_receipt(
+    request: ReceiptExtractionRequest,
+    gemini_service: GeminiServiceDep,
+) -> ReceiptExtractionResponse:
+    """Extract expense data from a receipt image using Gemini AI.
+
+    Args:
+        request: Contains base64 encoded image and optional context
+        gemini_service: Gemini AI service for receipt processing
+
+    Returns:
+        ReceiptExtractionResponse with extracted receipt and expense data
+    """
+    try:
+        # Start timing
+        start_time = time.time()
+
+        # Extract receipt data
+        receipt = await gemini_service.extract_receipt_data(
+            request.image_base64,
+            request.additional_context,
+        )
+
+        # Convert to expense format
+        expense_data = receipt.to_expense(request.category)
+
+        # Calculate processing time
+        processing_time = time.time() - start_time
+
+        return ReceiptExtractionResponse(
+            receipt=receipt,
+            expense_data=expense_data,
+            processing_time=processing_time,
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to extract receipt data: {e}",
+        ) from e
+    except Exception as e:
+        logger.exception("Unexpected error during receipt extraction")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred",
         ) from e
