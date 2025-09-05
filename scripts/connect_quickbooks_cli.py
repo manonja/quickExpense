@@ -2,7 +2,7 @@
 """QuickBooks OAuth 2.0 CLI Setup Tool.
 
 Connects QuickBooks accounts and obtains OAuth tokens for API access.
-Uses environment variables for security - no hardcoded credentials.
+Reads credentials from .env file for security - no hardcoded credentials.
 """
 
 import base64
@@ -13,16 +13,40 @@ import secrets
 import socketserver
 import sys
 import webbrowser
+from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
-# 🔧 CONFIGURATION - Load from environment variables for security
-CLIENT_ID = os.getenv("QB_CLIENT_ID", "")
-CLIENT_SECRET = os.getenv("QB_CLIENT_SECRET", "")
-REDIRECT_URI = os.getenv(
+
+# Load configuration from .env file
+def load_env_config():
+    """Load configuration from .env file."""
+    env_path = Path(__file__).parent.parent / ".env"
+    config = {}
+
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    # Remove quotes if present
+                    value = value.strip().strip('"').strip("'")
+                    config[key] = value
+
+    return config
+
+
+# Load config from .env
+env_config = load_env_config()
+
+# 🔧 CONFIGURATION - Load from .env file or environment variables
+CLIENT_ID = os.getenv("QB_CLIENT_ID", env_config.get("QB_CLIENT_ID", ""))
+CLIENT_SECRET = os.getenv("QB_CLIENT_SECRET", env_config.get("QB_CLIENT_SECRET", ""))
+REDIRECT_URI = env_config.get(
     "QB_REDIRECT_URI", "http://localhost:8000/api/quickbooks/callback"
 )
-PORT = int(os.getenv("QB_OAUTH_PORT", "8000"))
+PORT = int(env_config.get("QB_OAUTH_PORT", "8000"))
 
 # QuickBooks OAuth 2.0 endpoints
 AUTH_URL = "https://appcenter.intuit.com/connect/oauth2"
@@ -292,17 +316,14 @@ def main():
     # Validate configuration
     if not CLIENT_ID or not CLIENT_SECRET:
         print("\n❌ CONFIGURATION REQUIRED:")
-        print("\nPlease set the following environment variables:")
-        print("  QB_CLIENT_ID     - Your QuickBooks OAuth Client ID")
-        print("  QB_CLIENT_SECRET - Your QuickBooks OAuth Client Secret")
+        print("\nPlease configure QuickBooks OAuth credentials in your .env file:")
+        print("  QB_CLIENT_ID=your_client_id_here")
+        print("  QB_CLIENT_SECRET=your_client_secret_here")
         print("\nOptional:")
-        print(
-            "  QB_REDIRECT_URI  - OAuth redirect URI (default: http://localhost:8000/api/quickbooks/callback)"
-        )
-        print("  QB_OAUTH_PORT    - Local server port (default: 8000)")
-        print("\nExample:")
-        print("  export QB_CLIENT_ID='your_client_id_here'")
-        print("  export QB_CLIENT_SECRET='your_client_secret_here'")
+        print("  QB_REDIRECT_URI=http://localhost:8000/api/quickbooks/callback")
+        print("  QB_OAUTH_PORT=8000")
+        print("\n💡 The script automatically reads from .env file in the project root.")
+        print("   You can also override with environment variables if needed.")
         print(f"  python {sys.argv[0]}")
         print("\nGet your credentials from:")
         print("  https://developer.intuit.com/app/developer/dashboard")
