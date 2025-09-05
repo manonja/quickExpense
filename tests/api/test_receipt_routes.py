@@ -99,6 +99,16 @@ async def test_extract_receipt_success(
         assert data["receipt"]["total_amount"] == "24.6"
         assert data["expense_data"]["category"] == "Meals & Entertainment"
 
+        # Verify all fields in expense_data match receipt
+        assert data["expense_data"]["vendor_name"] == data["receipt"]["vendor_name"]
+        assert data["expense_data"]["amount"] == data["receipt"]["total_amount"]
+        assert data["expense_data"]["currency"] == data["receipt"]["currency"]
+        assert data["expense_data"]["payment_account"] == "credit_card"
+        assert "description" in data["expense_data"]
+
+        # Verify processing time is reasonable
+        assert 0 < data["processing_time"] < 10  # Should complete within 10 seconds
+
     finally:
         # Clean up
         app.dependency_overrides.clear()
@@ -236,3 +246,103 @@ async def test_extract_receipt_missing_fields(client: TestClient) -> None:
 
     response = client.post("/api/v1/receipts/extract", json=request_data)
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_extract_receipt_response_structure(
+    client: TestClient,
+    mock_quickbooks_client: MagicMock,
+    mock_gemini_service: MagicMock,
+    sample_extracted_receipt: ExtractedReceipt,
+) -> None:
+    """Test that response structure is complete and correct."""
+    mock_quickbooks_client.search_vendor = AsyncMock(return_value=[{"Id": "1"}])
+    mock_gemini_service.extract_receipt_data.return_value = sample_extracted_receipt
+
+    from quickexpense.core.dependencies import get_gemini_service
+    from quickexpense.main import app
+
+    app.dependency_overrides[get_gemini_service] = lambda: mock_gemini_service
+
+    try:
+        request_data = {
+            "image_base64": (
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA"
+                "60e6kgAAAABJRU5ErkJggg=="
+            ),
+            "category": "Office Supplies",
+        }
+
+        response = client.post("/api/v1/receipts/extract", json=request_data)
+        data = response.json()
+
+        # Verify receipt structure
+        receipt = data["receipt"]
+        assert "vendor_name" in receipt
+        assert "vendor_address" in receipt
+        assert "vendor_phone" in receipt
+        assert "transaction_date" in receipt
+        assert "receipt_number" in receipt
+        assert "payment_method" in receipt
+        assert "line_items" in receipt
+        assert isinstance(receipt["line_items"], list)
+        assert "subtotal" in receipt
+        assert "tax_amount" in receipt
+        assert "tip_amount" in receipt
+        assert "total_amount" in receipt
+        assert "currency" in receipt
+        assert "confidence_score" in receipt
+
+        # Verify expense_data structure
+        expense = data["expense_data"]
+        assert "vendor_name" in expense
+        assert "transaction_date" in expense
+        assert "amount" in expense
+        assert "currency" in expense
+        assert "category" in expense
+        assert expense["category"] == "Office Supplies"  # Should match request
+        assert "payment_account" in expense
+        assert "description" in expense
+
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_extract_receipt_with_empty_context(
+    client: TestClient,
+    mock_quickbooks_client: MagicMock,
+    mock_gemini_service: MagicMock,
+    sample_extracted_receipt: ExtractedReceipt,
+) -> None:
+    """Test receipt extraction with empty additional context."""
+    mock_quickbooks_client.search_vendor = AsyncMock(return_value=[])
+    mock_quickbooks_client.create_vendor = AsyncMock(return_value={"Id": "2"})
+    mock_gemini_service.extract_receipt_data.return_value = sample_extracted_receipt
+
+    from quickexpense.core.dependencies import get_gemini_service
+    from quickexpense.main import app
+
+    app.dependency_overrides[get_gemini_service] = lambda: mock_gemini_service
+
+    try:
+        request_data = {
+            "image_base64": (
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA"
+                "60e6kgAAAABJRU5ErkJggg=="
+            ),
+            "category": "Travel",
+            "additional_context": "",  # Empty context
+        }
+
+        response = client.post("/api/v1/receipts/extract", json=request_data)
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify empty context was handled properly
+        mock_gemini_service.extract_receipt_data.assert_called_once_with(
+            request_data["image_base64"],
+            "",  # Empty string should be passed
+        )
+
+    finally:
+        app.dependency_overrides.clear()

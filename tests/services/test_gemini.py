@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from quickexpense.models.receipt import ExtractedReceipt, PaymentMethod
 from quickexpense.services.gemini import GeminiService
@@ -169,6 +170,131 @@ async def test_extract_receipt_data_invalid_image(
         await gemini_service.extract_receipt_data(invalid_image)
 
 
+@pytest.mark.asyncio
+async def test_extract_receipt_data_malformed_base64(
+    gemini_service: GeminiService,
+) -> None:
+    """Test handling of malformed base64 with padding issues."""
+    malformed_image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"  # Missing padding
+
+    with pytest.raises(ValueError, match="Failed to decode or process image"):
+        await gemini_service.extract_receipt_data(malformed_image)
+
+
+@pytest.mark.asyncio
+async def test_extract_receipt_data_edge_cases(
+    gemini_service: GeminiService,
+) -> None:
+    """Test extraction with edge case data."""
+    edge_case_response = {
+        "vendor_name": "",  # Empty vendor
+        "transaction_date": "2025-12-31",  # Future date
+        "total_amount": -50.00,  # Negative amount
+        "line_items": [],
+        "subtotal": -50.00,
+        "tax_amount": 0,
+        "tip_amount": 0,
+        "currency": "USD",
+        "confidence_score": 0.1,
+    }
+
+    mock_response = MagicMock()
+    mock_response.text = str(edge_case_response).replace("'", '"')
+    gemini_service.model.generate_content = MagicMock(return_value=mock_response)
+
+    test_image = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA"
+        "60e6kgAAAABJRU5ErkJggg=="
+    )
+
+    # Should raise validation error for empty vendor name
+    with pytest.raises(ValidationError):
+        await gemini_service.extract_receipt_data(test_image)
+
+
+@pytest.mark.asyncio
+async def test_extract_receipt_data_special_characters(
+    gemini_service: GeminiService,
+) -> None:
+    """Test extraction with special characters in JSON."""
+    special_char_response = {
+        "vendor_name": 'Store "Name" & Co.',
+        "vendor_address": "123 O'Connor St",
+        "transaction_date": "2024-01-15",
+        "receipt_number": "REC\\001",
+        "payment_method": "cash",
+        "line_items": [
+            {
+                "description": 'Item with "quotes"',
+                "quantity": 1,
+                "unit_price": 10.00,
+                "total_price": 10.00,
+            }
+        ],
+        "subtotal": 10.00,
+        "tax_amount": 0.80,
+        "tip_amount": 0,
+        "total_amount": 10.80,
+        "currency": "USD",
+        "confidence_score": 0.95,
+    }
+
+    mock_response = MagicMock()
+    # Use json.dumps for proper escaping
+    import json
+
+    mock_response.text = json.dumps(special_char_response)
+    gemini_service.model.generate_content = MagicMock(return_value=mock_response)
+
+    test_image = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA"
+        "60e6kgAAAABJRU5ErkJggg=="
+    )
+
+    result = await gemini_service.extract_receipt_data(test_image)
+    assert result.vendor_name == 'Store "Name" & Co.'
+    assert result.vendor_address == "123 O'Connor St"
+    assert result.receipt_number == "REC\\001"
+
+
+@pytest.mark.asyncio
+async def test_extract_receipt_data_large_amounts(
+    gemini_service: GeminiService,
+) -> None:
+    """Test extraction with very large monetary amounts."""
+    large_amount_response = {
+        "vendor_name": "Expensive Store",
+        "transaction_date": "2024-01-15",
+        "total_amount": 999999.99,
+        "line_items": [
+            {
+                "description": "Luxury item",
+                "quantity": 1,
+                "unit_price": 999999.99,
+                "total_price": 999999.99,
+            }
+        ],
+        "subtotal": 999999.99,
+        "tax_amount": 0,
+        "tip_amount": 0,
+        "currency": "USD",
+        "confidence_score": 0.99,
+    }
+
+    mock_response = MagicMock()
+    mock_response.text = str(large_amount_response).replace("'", '"')
+    gemini_service.model.generate_content = MagicMock(return_value=mock_response)
+
+    test_image = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA"
+        "60e6kgAAAABJRU5ErkJggg=="
+    )
+
+    result = await gemini_service.extract_receipt_data(test_image)
+    assert result.total_amount == Decimal("999999.99")
+    assert len(str(result.total_amount)) == 9  # Verify precision
+
+
 def test_build_extraction_prompt(gemini_service: GeminiService) -> None:
     """Test prompt building without context."""
     prompt = gemini_service._build_extraction_prompt(None)  # noqa: SLF001
@@ -203,3 +329,25 @@ def test_receipt_to_expense_conversion(
     assert expense_data["payment_account"] == "credit_card"
     assert "Cappuccino, Croissant" in expense_data["description"]
     assert expense_data["notes"] == "Business meeting"
+
+
+@pytest.mark.asyncio
+async def test_extract_receipt_data_different_image_formats(
+    gemini_service: GeminiService,
+    sample_receipt_response: dict[str, Any],
+) -> None:
+    """Test that different image format base64 strings are accepted."""
+    # Small valid JPEG base64
+    jpeg_base64 = (
+        "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAALCAABAAEBAREA/8QAFAAB"
+        "AAAAAAAAAAAAAAAAAAAACv/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AH//Z"
+    )
+
+    mock_response = MagicMock()
+    mock_response.text = str(sample_receipt_response).replace("'", '"')
+    gemini_service.model.generate_content = MagicMock(return_value=mock_response)
+
+    # Should not raise any errors
+    result = await gemini_service.extract_receipt_data(jpeg_base64)
+    assert isinstance(result, ExtractedReceipt)

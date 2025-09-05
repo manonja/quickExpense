@@ -252,100 +252,37 @@ Minimal, justified ignores:
 - `EM101/102` - Exception string literals
 - `S608` - SQL injection (we control inputs)
 
-## Gemini AI Integration Testing Guide
+## Gemini AI Receipt Processing
 
-### Setting up Gemini API Key
+### Quick Setup
 
-1. **Get a Gemini API Key**:
-   - Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
-   - Sign in with your Google account
-   - Click "Get API Key" and create a new key
-   - Copy the API key
+1. Get API Key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Add to `.env`: `GEMINI_API_KEY=your_actual_key`
+3. Test with curl:
 
-2. **Configure the API Key**:
-   - Add to your `.env` file:
-   ```
-   GEMINI_API_KEY=your_actual_gemini_api_key_here
-   ```
-
-3. **Test the Integration**:
-   ```bash
-   # Start the server
-   uv run fastapi dev src/quickexpense/main.py
-
-   # In another terminal, test with a sample image
-   # First, convert an image to base64
-   base64 -i receipt.jpg -o receipt_base64.txt
-
-   # Then use the API
-   curl -X POST http://localhost:8000/api/v1/receipts/extract \
-     -H "Content-Type: application/json" \
-     -d @- << EOF
-   {
-     "image_base64": "$(cat receipt_base64.txt)",
-     "category": "Meals & Entertainment",
-     "additional_context": "Business lunch with client"
-   }
-   EOF
-   ```
-
-### Testing with Python Script
-
-```python
-import base64
-import requests
-
+```bash
 # Convert image to base64
-with open("receipt.jpg", "rb") as image_file:
-    encoded_image = base64.b64encode(image_file.read()).decode()
+base64 -i receipt.jpg > receipt.b64
 
-# Make request
-response = requests.post(
-    "http://localhost:8000/api/v1/receipts/extract",
-    json={
-        "image_base64": encoded_image,
-        "category": "Office Supplies",
-        "additional_context": "Monthly office supply purchase"
-    }
-)
-
-print(response.json())
+# Send to API
+curl -X POST http://localhost:8000/api/v1/receipts/extract \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"image_base64\": \"$(cat receipt.b64)\",
+    \"category\": \"Travel\"
+  }"
 ```
 
-### Response Format
-
-The API returns:
+### Response
 ```json
 {
-  "receipt": {
-    "vendor_name": "Office Depot",
-    "transaction_date": "2024-01-15",
-    "total_amount": "156.78",
-    "line_items": [...],
-    "confidence_score": 0.95
-  },
-  "expense_data": {
-    "vendor_name": "Office Depot",
-    "amount": "156.78",
-    "category": "Office Supplies",
-    ...
-  },
+  "receipt": { "vendor_name": "...", "total_amount": "..." },
+  "expense_data": { "ready for QuickBooks" },
   "processing_time": 2.34
 }
 ```
 
-### Supported Image Formats
-- JPEG/JPG
-- PNG
-- GIF
-- BMP
-- WEBP
-
-### Best Practices
-1. Use clear, well-lit receipt images
-2. Ensure text is readable in the image
-3. Include the entire receipt in the image
-4. Provide additional context when ambiguous
+**Supported**: JPEG, PNG, GIF, BMP, WEBP (not PDF yet)
 
 ## Next Steps
 
