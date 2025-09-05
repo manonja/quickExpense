@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -14,10 +14,11 @@ from quickexpense.models import (
     ReceiptExtractionRequest,
     ReceiptExtractionResponse,
 )
-from quickexpense.services.quickbooks import QuickBooksError
-
-if TYPE_CHECKING:
-    from quickexpense.services.quickbooks import AccountInfo, VendorSearchResult
+from quickexpense.services.quickbooks import (
+    AccountInfo,
+    QuickBooksError,
+    VendorSearchResult,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["expenses"])

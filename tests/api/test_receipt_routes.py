@@ -36,13 +36,13 @@ def sample_extracted_receipt() -> ExtractedReceipt:
         line_items=[
             LineItem(
                 description="Burger",
-                quantity=Decimal("1"),
+                quantity=Decimal(1),
                 unit_price=Decimal("15.00"),
                 total_price=Decimal("15.00"),
             ),
             LineItem(
                 description="Fries",
-                quantity=Decimal("1"),
+                quantity=Decimal(1),
                 unit_price=Decimal("5.00"),
                 total_price=Decimal("5.00"),
             ),

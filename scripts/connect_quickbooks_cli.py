@@ -1,23 +1,52 @@
 #!/usr/bin/env python3
-"""Simple QuickBooks OAuth 2.0 Setup
-Gets you a bearer token for API testing in 3 steps
+"""QuickBooks OAuth 2.0 CLI Setup Tool.
+
+Connects QuickBooks accounts and obtains OAuth tokens for API access.
+Reads credentials from .env file for security - no hardcoded credentials.
 """
 
 import base64
 import http.server
 import json
+import os
 import secrets
 import socketserver
 import sys
 import webbrowser
+from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
-# 🔧 CONFIGURATION - UPDATE THESE WITH YOUR VALUES FROM QUICKBOOKS DEVELOPER DASHBOARD
-CLIENT_ID = "AB6w8Z4dFYQqSHsICexm0t0SfQfaeYyKxA2DgbFoVrC8cDVput"
-CLIENT_SECRET = "9f0HwGLBCOCvSqkrzPp89nkohUclAjFo130pHbPu"
-REDIRECT_URI = "http://localhost:8000/api/quickbooks/callback"
-PORT = 8000
+
+# Load configuration from .env file
+def load_env_config():
+    """Load configuration from .env file."""
+    env_path = Path(__file__).parent.parent / ".env"
+    config = {}
+
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    # Remove quotes if present
+                    value = value.strip().strip('"').strip("'")
+                    config[key] = value
+
+    return config
+
+
+# Load config from .env
+env_config = load_env_config()
+
+# 🔧 CONFIGURATION - Load from .env file or environment variables
+CLIENT_ID = os.getenv("QB_CLIENT_ID", env_config.get("QB_CLIENT_ID", ""))
+CLIENT_SECRET = os.getenv("QB_CLIENT_SECRET", env_config.get("QB_CLIENT_SECRET", ""))
+REDIRECT_URI = env_config.get(
+    "QB_REDIRECT_URI", "http://localhost:8000/api/quickbooks/callback"
+)
+PORT = int(env_config.get("QB_OAUTH_PORT", "8000"))
 
 # QuickBooks OAuth 2.0 endpoints
 AUTH_URL = "https://appcenter.intuit.com/connect/oauth2"
@@ -116,7 +145,7 @@ class SimpleOAuthHandler(http.server.BaseHTTPRequestHandler):
         try:
             tokens = self.exchange_code_for_tokens(auth_code)
             self.show_success_page(tokens, company_id)
-            self.create_env_file(tokens, company_id)
+            self.save_tokens_json(tokens, company_id)
         except Exception as e:
             print(f"❌ Token exchange failed: {e}")
             self.show_error_page(f"Token exchange failed: {e}")
@@ -155,6 +184,7 @@ class SimpleOAuthHandler(http.server.BaseHTTPRequestHandler):
         access_token = tokens.get("access_token", "")
         refresh_token = tokens.get("refresh_token", "")
         expires_in = tokens.get("expires_in", "unknown")
+        refresh_expires_in = tokens.get("x_refresh_token_expires_in", "unknown")
 
         html = f"""
         <html>
@@ -163,34 +193,33 @@ class SimpleOAuthHandler(http.server.BaseHTTPRequestHandler):
             <h2>🎉 Success! You're connected to QuickBooks</h2>
 
             <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                <strong>✅ .env file has been created with your tokens!</strong>
+                <strong>✅ Tokens have been saved to data/tokens.json!</strong>
             </div>
 
-            <h3>🔑 Your Bearer Token (for testing):</h3>
-            <div style="background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 5px; font-family: monospace; word-break: break-all;">
-                {access_token}
-            </div>
-
-            <h3>📊 Token Info:</h3>
+            <h3>📊 Token Information:</h3>
             <ul>
                 <li><strong>Company ID:</strong> {company_id}</li>
-                <li><strong>Expires in:</strong> {expires_in} seconds (~1 hour)</li>
-                <li><strong>Refresh token:</strong> Available (for automatic renewal)</li>
+                <li><strong>Access Token Expires in:</strong> {expires_in} seconds (~{int(expires_in) // 3600} hour)</li>
+                <li><strong>Refresh Token Expires in:</strong> {refresh_expires_in} seconds (~{int(refresh_expires_in) // 86400} days)</li>
             </ul>
 
             <h3>🧪 Test Your Setup:</h3>
-            <p>Your FastAPI app should now work! Try:</p>
+            <p>Your QuickExpense app should now work with automatic token refresh!</p>
             <code style="background: #f8f9fa; padding: 10px; display: block; border-radius: 5px;">
-                curl http://localhost:8000/test-connection
+                # Start the app
+                uv run fastapi dev src/quickexpense/main.py
+
+                # Test connection
+                curl http://localhost:8000/api/v1/test-connection
             </code>
 
             <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin-top: 20px;">
-                <strong>💡 Next Steps:</strong>
-                <ol>
-                    <li>Start your FastAPI app: <code>python main.py</code></li>
-                    <li>Test the connection endpoint</li>
-                    <li>Try creating expenses with the receipt flow</li>
-                </ol>
+                <strong>💡 Important Notes:</strong>
+                <ul>
+                    <li>The app will automatically refresh your access token before it expires</li>
+                    <li>Refresh tokens rotate - each use generates a new one</li>
+                    <li>Make sure to use the app at least once every 100 days to keep tokens active</li>
+                </ul>
             </div>
 
             <p><em>You can close this window now!</em></p>
@@ -201,13 +230,16 @@ class SimpleOAuthHandler(http.server.BaseHTTPRequestHandler):
 
         # Print to console for easy copying
         print("\n" + "=" * 60)
-        print("🎉 SUCCESS! Your tokens:")
+        print("🎉 SUCCESS! QuickBooks OAuth tokens obtained")
         print("=" * 60)
-        print(f"BEARER TOKEN: {access_token}")
-        print(f"COMPANY_ID: {company_id}")
-        print(f"EXPIRES_IN: {expires_in} seconds")
+        print(f"Company ID: {company_id}")
+        print(f"Access token expires in: {expires_in} seconds")
+        print(f"Refresh token expires in: {refresh_expires_in} seconds")
         print("=" * 60)
-        print("✅ .env file created - your FastAPI app is ready!")
+        print("✅ Tokens saved to data/tokens.json - your app now has:")
+        print("  - Automatic token refresh before expiry")
+        print("  - Retry logic for failed requests")
+        print("  - Background token management")
         print("=" * 60)
 
     def show_error_page(self, error_msg):
@@ -230,32 +262,43 @@ class SimpleOAuthHandler(http.server.BaseHTTPRequestHandler):
         """
         self.wfile.write(html.encode())
 
-    def create_env_file(self, tokens, company_id):
-        """Create .env file with all necessary variables"""
-        env_content = f"""# QuickBooks API Configuration (Generated by OAuth setup)
-# Sandbox Environment - Replace URLs for production
+    def save_tokens_json(self, tokens, company_id):
+        """Save OAuth tokens to JSON file"""
+        from datetime import UTC, datetime
 
-# Base Configuration
-QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
-QB_CLIENT_ID={CLIENT_ID}
-QB_CLIENT_SECRET={CLIENT_SECRET}
-QB_REDIRECT_URI={REDIRECT_URI}
+        # Path to tokens.json
+        tokens_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "data",
+            "tokens.json",
+        )
 
-# Company & Tokens (from OAuth flow)
-QB_COMPANY_ID={company_id}
-QB_ACCESS_TOKEN={tokens.get('access_token', '')}
-QB_REFRESH_TOKEN={tokens.get('refresh_token', '')}
+        # Ensure data directory exists
+        os.makedirs(os.path.dirname(tokens_path), exist_ok=True)
 
-# Token expires in {tokens.get('expires_in', 'unknown')} seconds from now
-# Refresh token expires in {tokens.get('x_refresh_token_expires_in', 'unknown')} seconds from now
-"""
+        # Prepare token data
+        token_data = {
+            "access_token": tokens.get("access_token", ""),
+            "refresh_token": tokens.get("refresh_token", ""),
+            "expires_in": tokens.get("expires_in", 3600),
+            "x_refresh_token_expires_in": tokens.get(
+                "x_refresh_token_expires_in", 8640000
+            ),
+            "token_type": tokens.get("token_type", "bearer"),
+            "company_id": company_id,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
 
         try:
-            with open(".env", "w") as f:
-                f.write(env_content)
-            print("✅ .env file created successfully!")
+            with open(tokens_path, "w") as f:
+                json.dump(token_data, f, indent=2, sort_keys=True)
+            print(f"✅ Tokens saved to: {tokens_path}")
+            return True
         except Exception as e:
-            print(f"⚠️ Could not create .env file: {e}")
+            print(f"❌ Could not save tokens: {e}")
+            print("\nPlease manually save these tokens:")
+            print(json.dumps(token_data, indent=2))
+            return False
 
     def log_message(self, format, *args):
         # Suppress default HTTP request logging
@@ -263,28 +306,36 @@ QB_REFRESH_TOKEN={tokens.get('refresh_token', '')}
 
 
 def main():
-    print("🚀 Simple QuickBooks OAuth Setup")
+    """Main entry point for QuickBooks OAuth CLI setup."""
+    print("🚀 QuickBooks OAuth Connection Tool")
     print("=" * 50)
     print(f"🌐 Server: http://localhost:{PORT}")
     print(f"🔗 Callback: {REDIRECT_URI}")
     print("=" * 50)
 
     # Validate configuration
-    if CLIENT_ID == "YOUR_CLIENT_ID_HERE" or CLIENT_SECRET == "YOUR_CLIENT_SECRET_HERE":
-        print("\n❌ SETUP REQUIRED:")
-        print("   1. Go to: https://developer.intuit.com/app/developer/dashboard")
-        print("   2. Create/select your app")
-        print("   3. Copy Client ID and Client Secret")
-        print("   4. Update CLIENT_ID and CLIENT_SECRET in this file")
-        print(f"   5. Add redirect URI: {REDIRECT_URI}")
+    if not CLIENT_ID or not CLIENT_SECRET:
+        print("\n❌ CONFIGURATION REQUIRED:")
+        print("\nPlease configure QuickBooks OAuth credentials in your .env file:")
+        print("  QB_CLIENT_ID=your_client_id_here")
+        print("  QB_CLIENT_SECRET=your_client_secret_here")
+        print("\nOptional:")
+        print("  QB_REDIRECT_URI=http://localhost:8000/api/quickbooks/callback")
+        print("  QB_OAUTH_PORT=8000")
+        print("\n💡 The script automatically reads from .env file in the project root.")
+        print("   You can also override with environment variables if needed.")
+        print(f"  python {sys.argv[0]}")
+        print("\nGet your credentials from:")
+        print("  https://developer.intuit.com/app/developer/dashboard")
         sys.exit(1)
 
     print("\n📋 Instructions:")
     print("1. Browser will open automatically")
     print("2. Click 'Connect to QuickBooks'")
-    print("3. Select a sandbox company")
-    print("4. Get your bearer token!")
-    print("\n🔄 Starting server...\n")
+    print("3. Log in and select a company (sandbox for testing)")
+    print("4. Authorize the application")
+    print("5. Tokens will be saved to data/tokens.json automatically")
+    print("\n🔄 Starting OAuth server...\n")
 
     try:
         with socketserver.TCPServer(("", PORT), SimpleOAuthHandler) as httpd:
@@ -292,8 +343,12 @@ def main():
             webbrowser.open(f"http://localhost:{PORT}")
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n\n👋 Server stopped!")
-        print("Check your .env file - your tokens should be ready!")
+        print("\n\n👋 OAuth server stopped")
+        print("\nIf successful, your tokens have been saved to data/tokens.json with:")
+        print("  - access_token (expires in ~1 hour)")
+        print("  - refresh_token (expires in ~100 days)")
+        print("  - company_id (your QuickBooks company ID)")
+        print("\nThe QuickExpense app will automatically manage token refresh!")
 
 
 if __name__ == "__main__":

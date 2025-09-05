@@ -1,227 +1,190 @@
-# QuickBooks Receipt Scanner
+# QuickExpense
 
-FastAPI application that converts receipt data into QuickBooks expenses automatically.
+Modern expense management API that automatically creates QuickBooks expenses from receipts using AI-powered extraction and robust OAuth token management.
 
-## 🎯 What It Does
+## Features
 
-Transforms receipt information (vendor, amount, date) into QuickBooks bills through REST API endpoints.
+- 🤖 **AI Receipt Processing** - Extract expense data from receipt images using Google Gemini
+- 🔄 **Automatic Token Management** - Never worry about expired tokens
+- 📊 **Direct QuickBooks Integration** - Create vendors and expenses seamlessly
+- 🚀 **Modern Python Stack** - FastAPI, Pydantic v2, Python 3.12+
 
-## 📋 Prerequisites
+## Prerequisites
 
 - Python 3.12+
+- [uv](https://github.com/astral-sh/uv) package manager
 - QuickBooks Developer Account
-- QuickBooks Sandbox Company
+- Google Gemini API key (for receipt processing)
 
-## 🚀 Quick Setup
+## Quick Start
 
-### 1. Install Dependencies
+### 1. Clone & Install
+
 ```bash
-pip install -r requirements.txt
+git clone <repository>
+cd quickExpense
+uv sync
 ```
 
-### 2. Get QuickBooks Credentials
-1. Go to [QuickBooks Developer Dashboard](https://developer.intuit.com/app/developer/dashboard)
-2. Create/select your app
-3. Copy Client ID and Client Secret
-4. Add redirect URI: `http://localhost:8000/api/quickbooks/callback`
+### 2. Configure QuickBooks OAuth
 
-### 3. Configure OAuth
 ```bash
-# Update oauth_setup.py with your credentials
-CLIENT_ID = "your_client_id_here"
-CLIENT_SECRET = "your_client_secret_here"
+# Set your QuickBooks credentials
+export QB_CLIENT_ID="your_client_id"
+export QB_CLIENT_SECRET="your_client_secret"
 
-# Run OAuth setup
-python oauth_setup.py
+# Run the OAuth connection tool
+uv run python scripts/connect_quickbooks_cli.py
 ```
 
-### 4. Start Application
-```bash
-python main.py
+This opens a browser to connect your QuickBooks account and saves tokens to `.env`.
+
+### 3. Configure Gemini (Optional)
+
+Add to your `.env`:
+```env
+GEMINI_API_KEY=your_gemini_api_key
 ```
 
-## 🔄 System Flow
+### 4. Run the Application
 
-**Receipt to QuickBooks Expense Process:**
-
-1. **User** → Submit receipt data (vendor, amount, date)
-2. **FastAPI App** → Search for vendor in QuickBooks
-3. **If vendor not found** → Create new vendor
-4. **FastAPI App** → Get expense accounts from QuickBooks
-5. **FastAPI App** → Create purchase expense in QuickBooks
-6. **QuickBooks** → Return purchase ID and confirmation
-7. **User** → Receive success response with expense details
-
-## 🏗 Architecture
-
-**System Components:**
-- **Receipt Input** → FastAPI Application
-- **FastAPI App** → QuickBooks Client (API Wrapper)
-- **QuickBooks Client** → QuickBooks REST API v3
-- **OAuth Setup** → Bearer Token → QuickBooks Authentication
-
-**Data Processing:**
-- Vendor Search/Create
-- Expense Account Lookup
-- Purchase Expense Creation
-
-## 📡 API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/test-connection` | GET | Verify QB connection |
-| `/vendors/{name}` | GET | Search vendor by name |
-| `/vendors` | POST | Create new vendor |
-| `/accounts/expense` | GET | Get expense accounts |
-| `/expenses` | POST | Create expense from receipt |
-
-## 📝 Receipt Expense Flow - Complete Examples
-
-### Step 1: Test Connection
 ```bash
-curl http://localhost:8000/test-connection
+# Development mode with auto-reload
+uv run fastapi dev src/quickexpense/main.py
+
+# Production mode
+uv run uvicorn src.quickexpense.main:app --host 0.0.0.0 --port 8000
 ```
 
-### Step 2: Create Expense from Receipt
+## API Usage
+
+### Test Connection
 ```bash
-curl -X POST http://localhost:8000/expenses \
+curl http://localhost:8000/api/v1/test-connection
+```
+
+### Create Expense
+```bash
+curl -X POST http://localhost:8000/api/v1/expenses \
   -H "Content-Type: application/json" \
   -d '{
     "vendor_name": "Office Depot",
     "amount": 45.99,
-    "date": "2024-01-15"
+    "date": "2024-01-15",
+    "category": "Office Supplies",
+    "tax_amount": 3.42
   }'
 ```
 
-### Direct QuickBooks API Examples (What Happens Behind the Scenes)
-
-#### Query for Existing Vendor
+### Extract Receipt (AI-Powered)
 ```bash
-curl -X GET "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/query?query=SELECT * FROM Vendor WHERE Name = 'Office Depot'" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Accept: application/json"
-```
+# Convert image to base64
+base64 -i receipt.jpg > receipt.b64
 
-#### Create New Vendor (if not found)
-```bash
-curl -X POST "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/vendor" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Accept: application/json" \
+# Extract expense data
+curl -X POST http://localhost:8000/api/v1/receipts/extract \
   -H "Content-Type: application/json" \
-  -d '{
-    "Vendor": {
-      "Name": "Office Depot",
-      "CompanyName": "Office Depot Inc.",
-      "BillAddr": {
-        "Line1": "123 Business St",
-        "City": "Business City",
-        "Country": "USA",
-        "PostalCode": "12345"
-      }
-    }
-  }'
+  -d "{
+    \"image_base64\": \"$(cat receipt.b64)\",
+    \"category\": \"Office Supplies\"
+  }"
 ```
 
-#### Get Expense Accounts
+## Project Structure
+
+```
+quickExpense/
+├── src/quickexpense/
+│   ├── api/           # API endpoints
+│   ├── core/          # Configuration & dependencies
+│   ├── models/        # Pydantic models
+│   ├── services/      # Business logic & integrations
+│   └── main.py        # FastAPI app entry point
+├── scripts/
+│   └── connect_quickbooks_cli.py  # OAuth setup tool
+├── tests/             # Test suite
+├── pyproject.toml     # Project dependencies
+└── .env              # Environment variables (created by OAuth tool)
+```
+
+## Key Features Explained
+
+### Automatic Token Refresh
+- Access tokens auto-refresh before expiry (5-min buffer)
+- Background task checks token validity every minute
+- Handles QuickBooks refresh token rotation
+- Zero downtime from token expiration
+
+### Receipt Processing
+- Supports JPEG, PNG, GIF, BMP, WEBP formats
+- Extracts vendor, amount, date, tax information
+- Returns QuickBooks-ready expense data
+
+### Environment Variables
+
+Required:
+```env
+QB_CLIENT_ID=your_client_id
+QB_CLIENT_SECRET=your_client_secret
+QB_COMPANY_ID=your_company_id        # Set by OAuth tool
+QB_ACCESS_TOKEN=your_access_token    # Set by OAuth tool
+QB_REFRESH_TOKEN=your_refresh_token  # Set by OAuth tool
+GEMINI_API_KEY=your_gemini_key       # For receipt extraction
+```
+
+Optional:
+```env
+QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com  # Default
+QB_TOKEN_REFRESH_BUFFER=300  # Seconds before expiry to refresh
+DEBUG=false                  # Enable debug logging
+```
+
+## Development
+
+### Run Tests
 ```bash
-curl -X GET "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/query?query=SELECT * FROM Account WHERE AccountType = 'Expense'" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Accept: application/json"
+uv run pytest
+uv run pytest --cov  # With coverage
 ```
 
-#### Create Expense (Final Step)
+### Code Quality
 ```bash
-curl -X POST "https://sandbox-quickbooks.api.intuit.com/v3/company/YOUR_COMPANY_ID/purchase" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Accept: application/json" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "Purchase": {
-      "AccountRef": {
-        "value": "EXPENSE_ACCOUNT_ID",
-        "name": "Office Supplies"
-      },
-      "PaymentType": "Cash",
-      "EntityRef": {
-        "value": "VENDOR_ID",
-        "name": "Office Depot"
-      },
-      "TotalAmt": 45.67,
-      "PurchaseEx": {
-        "any": [
-          {
-            "name": "{http://schema.intuit.com/finance/v3}NameValue",
-            "declaredType": "com.intuit.schema.finance.v3.NameValue",
-            "scope": "javax.xml.bind.JAXBElement$GlobalScope",
-            "value": {
-              "Name": "TxnDate",
-              "Value": "2023-12-01"
-            }
-          }
-        ]
-      },
-      "Line": [
-        {
-          "Amount": 42.25,
-          "DetailType": "AccountBasedExpenseLineDetail",
-          "AccountBasedExpenseLineDetail": {
-            "AccountRef": {
-              "value": "EXPENSE_ACCOUNT_ID",
-              "name": "Office Supplies"
-            }
-          }
-        },
-        {
-          "Amount": 3.42,
-          "DetailType": "AccountBasedExpenseLineDetail",
-          "AccountBasedExpenseLineDetail": {
-            "AccountRef": {
-              "value": "TAX_ACCOUNT_ID",
-              "name": "Sales Tax"
-            }
-          }
-        }
-      ]
-    }
-  }'
+# All checks
+uv run pre-commit run --all-files
+
+# Individual checks
+uv run ruff check src tests
+uv run mypy src tests
+uv run black src tests
 ```
 
-## 🔧 Configuration
-
-Environment variables in `.env`:
-- `QB_ACCESS_TOKEN` - OAuth bearer token (1 hour expiry)
-- `QB_COMPANY_ID` - QuickBooks company identifier
-- `QB_BASE_URL` - Sandbox: `https://sandbox-quickbooks.api.intuit.com`
-
-## 🔄 Token Refresh
-
-Access tokens expire every hour. Re-run `python oauth_setup.py` to get fresh tokens.
-
-## 📊 Data Processing Logic
-
-**Receipt Processing Decision Tree:**
-
-1. **Receipt Input** → Extract vendor_name, amount, date
-2. **Check Vendor** → Does vendor exist in QuickBooks?
-   - **YES** → Use existing vendor ID
-   - **NO** → Create new vendor → Get new vendor ID
-3. **Get Expense Account** → Fetch available expense accounts
-4. **Create Purchase** → Generate QuickBooks expense with vendor + account + tax
-5. **Return Result** → Purchase ID and success confirmation
-
-## 🛠 Troubleshooting
-
-- **"ModuleNotFoundError"**: Run `pip install -r requirements.txt`
-- **"401 Unauthorized"**: Token expired, re-run OAuth setup
-- **"Connection failed"**: Check QB credentials in `.env`
-
-## 📁 Project Structure
-
+### Pre-commit Hooks
+```bash
+uv run pre-commit install
+uv run pre-commit install --hook-type commit-msg
 ```
-├── main.py              # FastAPI application
-├── quickbooks_client.py # QB API wrapper
-├── models.py           # Data models
-├── config.py           # Configuration
-├── oauth_setup.py      # OAuth helper
-└── requirements.txt    # Dependencies
-```
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "401 Unauthorized" | Tokens expired - run `uv run python scripts/connect_quickbooks_cli.py` |
+| "Module not found" | Run `uv sync` to install dependencies |
+| "Connection failed" | Check QB credentials and company ID in `.env` |
+| Token refresh fails | Ensure refresh token hasn't expired (100 days) |
+
+## API Reference
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/` | GET | API info |
+| `/api/v1/test-connection` | GET | Test QuickBooks connection |
+| `/api/v1/expenses` | POST | Create expense |
+| `/api/v1/vendors/{name}` | GET | Search vendor |
+| `/api/v1/vendors` | POST | Create vendor |
+| `/api/v1/accounts/expense` | GET | List expense accounts |
+| `/api/v1/receipts/extract` | POST | Extract receipt data (AI) |
+
+## License
+
+[Your License]

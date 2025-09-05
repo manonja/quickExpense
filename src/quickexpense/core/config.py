@@ -22,9 +22,29 @@ class Settings(BaseSettings):
         default="http://localhost:8000/callback",
         description="OAuth2 redirect URI",
     )
-    qb_company_id: str = Field(..., description="QuickBooks company ID")
-    qb_access_token: str = Field(..., description="QuickBooks access token")
-    qb_refresh_token: str = Field(..., description="QuickBooks refresh token")
+    # Company ID is now optional - will be loaded from tokens.json if available
+    qb_company_id: str = Field(
+        default="",
+        description="QuickBooks company ID (optional - loaded from tokens.json)",
+    )
+
+    # OAuth configuration
+    qb_oauth_environment: str = Field(
+        default="sandbox",
+        description="QuickBooks environment (sandbox/production)",
+    )
+    qb_token_refresh_buffer: int = Field(
+        default=300,
+        description="Seconds before token expiry to trigger refresh (5 min default)",
+    )
+    qb_max_refresh_attempts: int = Field(
+        default=3,
+        description="Maximum attempts to refresh token on failure",
+    )
+    qb_enable_background_refresh: bool = Field(
+        default=True,
+        description="Enable automatic background token refresh",
+    )
 
     # Application settings
     app_name: str = Field(default="quickexpense", description="Application name")

@@ -3,7 +3,10 @@
     "allow": [
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(uv run pytest:*)"
+      "Bash(uv run pytest:*)",
+      "Bash(git rm:*)",
+      "Bash(uv run ruff check:*)",
+      "Bash(uv run pre-commit run:*)"
     ],
     "deny": []
   }
