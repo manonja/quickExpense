@@ -20,6 +20,9 @@ dependencies = [
     "python-multipart>=0.0.6",
 ]
 
+[project.scripts]
+quickexpense = "quickexpense.cli:main"
+
 [tool.uv]
 dev-dependencies = [
     "pytest>=8.0.0",
