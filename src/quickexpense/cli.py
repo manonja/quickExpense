@@ -72,8 +72,8 @@ class QuickExpenseCLI:
 
             if not token_data:
                 msg = (
-                    "No authentication tokens found. Please run OAuth setup first:\n"
-                    "  uv run python scripts/connect_quickbooks_cli.py"
+                    "No authentication tokens found. Please authenticate first:\n"
+                    "  quickexpense auth"
                 )
                 raise APIError(msg)
 
@@ -114,13 +114,13 @@ class QuickExpenseCLI:
                     raise APIError(
                         "OAuth tokens have completely expired. "
                         "Please re-authenticate:\n"
-                        "  uv run python scripts/connect_quickbooks_cli.py"
+                        "  quickexpense auth --force"
                     )
                 if token_info.refresh_token_expired:
                     raise APIError(
                         "Refresh token has expired. "
                         "Please re-authenticate:\n"
-                        "  uv run python scripts/connect_quickbooks_cli.py"
+                        "  quickexpense auth --force"
                     )
                 if token_info.access_token_expired:
                     logger.info(
@@ -181,7 +181,7 @@ class QuickExpenseCLI:
                 raise APIError(
                     f"Invalid tokens: {e}\n"
                     "Please run OAuth setup again:\n"
-                    "  uv run python scripts/connect_quickbooks_cli.py"
+                    "  quickexpense auth --force"
                 ) from e
             raise APIError(f"Failed to initialize services: {e}") from e
 
@@ -258,9 +258,10 @@ class QuickExpenseCLI:
                 expense = Expense(**expense_dict)
                 qb_response = await self.quickbooks_service.create_expense(expense)
                 result["quickbooks_response"] = qb_response
+                purchase_id = qb_response.get("Purchase", {}).get("Id", "Unknown")
                 msg = (
                     f"Successfully created expense in QuickBooks "
-                    f"(ID: {qb_response.get('Id', 'Unknown')})"
+                    f"(ID: {purchase_id})"
                 )
                 result["message"] = msg
 
@@ -280,7 +281,7 @@ class QuickExpenseCLI:
                 raise APIError(
                     "QuickBooks authentication has expired. "
                     "Please re-authenticate:\n"
-                    "  uv run python scripts/connect_quickbooks_cli.py"
+                    "  quickexpense auth --force"
                 ) from e
             raise APIError(f"QuickBooks API error: {e}") from e
         except httpx.HTTPStatusError as e:
@@ -288,11 +289,14 @@ class QuickExpenseCLI:
             # Check for specific authentication errors
             if e.response.status_code == 401:  # HTTP Unauthorized
                 response_text = str(e.response.text)
-                if "Token expired" in response_text or "AuthenticationFailed" in response_text:
+                if (
+                    "Token expired" in response_text
+                    or "AuthenticationFailed" in response_text
+                ):
                     raise APIError(
                         "QuickBooks authentication has expired. "
                         "Please re-authenticate:\n"
-                        "  uv run python scripts/connect_quickbooks_cli.py"
+                        "  quickexpense auth --force"
                     ) from e
             raise APIError(f"API request failed: {e}") from e
         except Exception as e:
@@ -389,6 +393,118 @@ class QuickExpenseCLI:
         finally:
             await self.cleanup()
 
+    async def auth_command(self, args: argparse.Namespace) -> None:
+        """Handle the authentication command."""
+        try:
+            # Check if tokens already exist
+            token_store = TokenStore()
+            existing_tokens = token_store.load_tokens()
+
+            if existing_tokens and not args.force:
+                print("✅ Authentication tokens already exist!")  # noqa: T201
+                print("   Use --force to re-authenticate")  # noqa: T201
+                print(f"   Company ID: {existing_tokens.get('company_id', 'Unknown')}")  # noqa: T201
+                return
+
+            print("🚀 Starting QuickBooks authentication...")  # noqa: T201
+            print("   This will open your browser for OAuth setup.")  # noqa: T201
+
+            # Import and run the OAuth script functionality
+            import subprocess
+            result = subprocess.run(
+                ["uv", "run", "python", "scripts/connect_quickbooks_cli.py"],
+                capture_output=False,
+                text=True,
+                check=False,
+            )
+
+            if result.returncode == 0:
+                print("\n✅ Authentication successful!")  # noqa: T201
+                print("   You can now upload receipts with: quickexpense upload <receipt>")  # noqa: T201
+            else:
+                print("\n❌ Authentication failed!")  # noqa: T201
+                sys.exit(1)
+
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Authentication cancelled by user")  # noqa: T201
+            sys.exit(130)
+        except Exception as e:
+            print(f"\n❌ Authentication error: {e}")  # noqa: T201
+            sys.exit(1)
+
+    async def status_command(self, args: argparse.Namespace) -> None:
+        """Handle the status command."""
+        try:
+            print("🔍 QuickExpense System Status")  # noqa: T201
+            print("=" * 40)  # noqa: T201
+
+            # Check token existence
+            token_store = TokenStore()
+            token_data = token_store.load_tokens()
+
+            if not token_data:
+                print("❌ Authentication: Not authenticated")  # noqa: T201
+                print("   Run: quickexpense auth")  # noqa: T201
+                return
+
+            print("✅ Authentication: Tokens found")  # noqa: T201
+            print(f"   Company ID: {token_data.get('company_id', 'Unknown')}")  # noqa: T201
+
+            # Check token expiry
+            try:
+                token_response = QuickBooksTokenResponse(
+                    access_token=token_data["access_token"],
+                    refresh_token=token_data["refresh_token"],
+                    expires_in=token_data.get("expires_in", 3600),
+                    x_refresh_token_expires_in=token_data.get(
+                        "x_refresh_token_expires_in", 8640000
+                    ),
+                    token_type=token_data.get("token_type", "bearer"),
+                )
+                token_info = token_response.to_token_info()
+
+                if token_info.refresh_token_expired:
+                    print("❌ Token Status: Refresh token expired")  # noqa: T201
+                    print("   Run: quickexpense auth --force")  # noqa: T201
+                elif token_info.access_token_expired:
+                    print("⚠️  Token Status: Access token expired (will auto-refresh)")  # noqa: T201
+                else:
+                    print("✅ Token Status: Valid")  # noqa: T201
+
+            except Exception as e:
+                print(f"⚠️  Token Status: Cannot validate ({e})")  # noqa: T201
+
+            # Test connection to QuickBooks (if tokens exist)
+            print("\n🔌 Testing QuickBooks connection...")  # noqa: T201
+            try:
+                await self.initialize_services()
+                if self.quickbooks_service:
+                    # Try a simple API call
+                    accounts = await self.quickbooks_service.get_expense_accounts()
+                    print(f"✅ QuickBooks API: Connected ({len(accounts)} expense accounts)")  # noqa: T201
+                else:
+                    print("❌ QuickBooks API: Service not initialized")  # noqa: T201
+            except Exception as e:
+                print(f"❌ QuickBooks API: Connection failed ({e})")  # noqa: T201
+                print("   Try: quickexpense auth --force")  # noqa: T201
+
+            # Check Gemini API
+            print("\n🤖 Testing Gemini AI...")  # noqa: T201
+            try:
+                if self.settings.gemini_api_key:
+                    print("✅ Gemini AI: API key configured")  # noqa: T201
+                else:
+                    print("❌ Gemini AI: No API key found")  # noqa: T201
+                    print("   Set GEMINI_API_KEY environment variable")  # noqa: T201
+            except Exception as e:
+                print(f"⚠️  Gemini AI: Error checking configuration ({e})")  # noqa: T201
+
+        except Exception as e:
+            print(f"\n❌ Status check error: {e}")  # noqa: T201
+            sys.exit(1)
+        finally:
+            await self.cleanup()
+
 
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
@@ -415,6 +531,25 @@ Supported formats: JPEG, PNG, GIF, BMP, WebP
         dest="command",
         help="Available commands",
         required=True,
+    )
+
+    # Auth command
+    auth_parser = subparsers.add_parser(
+        "auth",
+        help="Authenticate with QuickBooks",
+        description="Set up OAuth authentication with QuickBooks",
+    )
+    auth_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-authentication even if tokens exist",
+    )
+
+    # Status command
+    subparsers.add_parser(
+        "status",
+        help="Check system status",
+        description="Check authentication and system status",
     )
 
     # Upload command
@@ -454,6 +589,10 @@ async def async_main() -> None:
 
     if args.command == "upload":
         await cli.upload_command(args)
+    elif args.command == "auth":
+        await cli.auth_command(args)
+    elif args.command == "status":
+        await cli.status_command(args)
     else:
         parser.error(f"Unknown command: {args.command}")
 
