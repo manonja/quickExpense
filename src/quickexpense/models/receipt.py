@@ -108,7 +108,7 @@ class ExtractedReceipt(BaseModel):
         """Convert receipt to expense format for QuickBooks."""
         return {
             "vendor_name": self.vendor_name,
-            "transaction_date": self.transaction_date,
+            "date": self.transaction_date,
             "amount": self.total_amount,
             "currency": self.currency,
             "category": category,
