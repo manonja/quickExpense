@@ -237,6 +237,11 @@ uv run mypy src tests
 - `quickexpense --version` - Show version
 - `quickexpense --help` - Show help
 
+### Expense Verification
+- `python scripts/verify_expense.py <purchase_id>` - Verify specific expense by ID
+- `python scripts/search_vendor_expenses.py <vendor>` - Find expenses by vendor
+- `python scripts/list_recent_expenses.py [days]` - List recent expenses
+
 ## API Endpoints
 
 ### Health Checks
@@ -262,6 +267,16 @@ uv run quickexpense upload /path/to/receipt.jpg
 # Extracting data from receipt: receipt.jpg
 # Creating expense in QuickBooks...
 # Successfully created expense in QuickBooks (ID: 184)
+
+# Verify the expense was created
+uv run python scripts/verify_expense.py 184
+
+# Output:
+# ✅ Found Purchase ID: 184
+#    Date: 2019-12-20
+#    Vendor: Harrods
+#    Total: $153.95
+#    Payment Account: Chequing
 ```
 
 ### Example API Usage

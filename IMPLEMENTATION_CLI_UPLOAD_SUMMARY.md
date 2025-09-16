@@ -97,6 +97,9 @@ uv run quickexpense upload receipt.jpg
 
 # Test without creating expense
 uv run quickexpense upload receipt.jpg --dry-run
+
+# Verify expense was created (replace 123 with actual ID)
+uv run python scripts/verify_expense.py 123
 ```
 
 ## ✅ Acceptance Criteria Met
@@ -111,6 +114,14 @@ All requirements from PRE-106 have been implemented:
 6. ✅ Dry-run mode for testing
 7. ✅ JSON output format option
 8. ✅ Authentication and status commands
+9. ✅ Expense verification tools and scripts
+
+## 🔍 Verification Tools Added
+
+1. **verify_expense.py** - Check specific Purchase ID details
+2. **search_vendor_expenses.py** - Find all expenses for a vendor
+3. **list_recent_expenses.py** - Show recent purchases with totals
+4. **QuickBooks Online Interface** - Direct web access for visual confirmation
 
 ## 🎉 Key Achievements
 
@@ -119,5 +130,6 @@ All requirements from PRE-106 have been implemented:
 - **Robust**: Handles token expiration, API errors, and edge cases
 - **Well-Documented**: Comprehensive documentation and examples
 - **Production-Ready**: All critical issues resolved
+- **Verifiable**: Multiple tools to confirm expenses were created successfully
 
 The QuickExpense CLI is now ready for use, providing a seamless way to convert receipt images into QuickBooks expenses with just one command!

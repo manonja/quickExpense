@@ -104,6 +104,41 @@ Tax: $3.42
 Successfully created expense in QuickBooks (ID: 123)
 ```
 
+### Verifying Expenses Were Created
+
+After uploading a receipt, you can verify the expense was created in QuickBooks:
+
+#### 1. QuickBooks Online Interface
+- Log into [QuickBooks Sandbox](https://sandbox.qbo.intuit.com/)
+- Go to **Expenses** → **Expenses** to see your new expense
+
+#### 2. CLI Verification Tools
+```bash
+# Verify a specific expense by Purchase ID
+uv run python scripts/verify_expense.py 123
+
+# Search expenses by vendor name
+uv run python scripts/search_vendor_expenses.py "Office Depot"
+
+# List recent expenses
+uv run python scripts/list_recent_expenses.py
+```
+
+#### Example Verification Output
+```
+$ uv run python scripts/verify_expense.py 185
+
+✅ Found Purchase ID: 185
+   Date: 2019-12-20
+   Vendor: Harrods
+   Total: $153.95
+   Payment Type: Cash
+   Payment Account: Chequing
+
+   Line Items:
+   - $153.95 → Insurance Expense-General Liability Insurance
+```
+
 ### API Usage (Alternative)
 
 If you prefer the REST API:
@@ -158,6 +193,11 @@ quickExpense/
 - Automatic vendor creation if not found
 - Smart expense account categorization
 - Automatic payment account selection (bank/credit card)
+
+### Expense Verification
+- Built-in verification scripts to confirm expenses in QuickBooks
+- Search by vendor, date, or Purchase ID
+- View expense details including account mappings
 
 ### Environment Variables
 

@@ -71,6 +71,26 @@ This PR implements a fully functional CLI for QuickExpense that allows users to 
    uv run quickexpense upload path/to/receipt.jpg --output json
    ```
 
+### Verifying Expenses Were Created
+1. Verify specific expense by Purchase ID:
+   ```bash
+   uv run python scripts/verify_expense.py 123
+   ```
+
+2. Search expenses by vendor:
+   ```bash
+   uv run python scripts/search_vendor_expenses.py "Office Depot"
+   ```
+
+3. List recent expenses:
+   ```bash
+   uv run python scripts/list_recent_expenses.py
+   ```
+
+4. Check in QuickBooks Online:
+   - Login to [QuickBooks Sandbox](https://sandbox.qbo.intuit.com/)
+   - Navigate to **Expenses** → **Expenses**
+
 ### Supported Image Formats
 - JPEG (.jpg, .jpeg)
 - PNG (.png)
@@ -130,6 +150,7 @@ Successfully created expense in QuickBooks (ID: 184)
 - OAuth tokens refresh automatically when possible
 - Sandbox tokens expire frequently; production tokens last longer
 - All pre-commit hooks pass (with some acceptable linting exceptions)
+- Verification scripts included to confirm expenses were created successfully
 
 ## 📝 Related Issues
 
