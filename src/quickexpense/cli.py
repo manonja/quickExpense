@@ -16,8 +16,17 @@ from pydantic import ValidationError
 
 from quickexpense.core.config import get_settings
 from quickexpense.models import Expense, ReceiptExtractionRequest
+from quickexpense.models.quickbooks_oauth import (
+    QuickBooksOAuthConfig,
+    QuickBooksTokenResponse,
+)
 from quickexpense.services.gemini import GeminiService
-from quickexpense.services.quickbooks import QuickBooksClient, QuickBooksService
+from quickexpense.services.quickbooks import (
+    QuickBooksClient,
+    QuickBooksError,
+    QuickBooksService,
+)
+from quickexpense.services.quickbooks_oauth import QuickBooksOAuthManager
 from quickexpense.services.token_store import TokenStore
 
 # Configure logging
@@ -52,6 +61,7 @@ class QuickExpenseCLI:
         self.gemini_service: GeminiService | None = None
         self.quickbooks_service: QuickBooksService | None = None
         self.quickbooks_client: QuickBooksClient | None = None
+        self.oauth_manager: QuickBooksOAuthManager | None = None
 
     async def initialize_services(self) -> None:
         """Initialize API services with proper authentication."""
@@ -63,7 +73,7 @@ class QuickExpenseCLI:
             if not token_data:
                 msg = (
                     "No authentication tokens found. Please run OAuth setup first:\n"
-                    "  python scripts/connect_quickbooks_cli.py"
+                    "  uv run python scripts/connect_quickbooks_cli.py"
                 )
                 raise APIError(msg)
 
@@ -75,12 +85,87 @@ class QuickExpenseCLI:
             if not company_id:
                 raise APIError("No company_id found in tokens")
 
-            # Initialize QuickBooks client with simple auth
-            self.quickbooks_client = QuickBooksClient(
-                base_url=str(self.settings.qb_base_url),
-                company_id=company_id,
-                access_token=token_data.get("access_token"),
+            # Initialize OAuth manager with proper configuration
+            oauth_config = QuickBooksOAuthConfig(
+                client_id=self.settings.qb_client_id,
+                client_secret=self.settings.qb_client_secret,
+                redirect_uri=self.settings.qb_redirect_uri,
+                token_refresh_buffer=self.settings.qb_token_refresh_buffer,
+                max_refresh_attempts=self.settings.qb_max_refresh_attempts,
             )
+
+            # Create token info from loaded data
+            try:
+                token_response = QuickBooksTokenResponse(
+                    access_token=token_data["access_token"],
+                    refresh_token=token_data["refresh_token"],
+                    expires_in=token_data.get("expires_in", 3600),
+                    x_refresh_token_expires_in=token_data.get(
+                        "x_refresh_token_expires_in", 8640000
+                    ),
+                    token_type=token_data.get("token_type", "bearer"),
+                )
+
+                # Convert to token info for OAuth manager
+                token_info = token_response.to_token_info()
+
+                # Check if tokens are expired before proceeding
+                if token_info.access_token_expired and token_info.refresh_token_expired:
+                    raise APIError(
+                        "OAuth tokens have completely expired. "
+                        "Please re-authenticate:\n"
+                        "  uv run python scripts/connect_quickbooks_cli.py"
+                    )
+                if token_info.refresh_token_expired:
+                    raise APIError(
+                        "Refresh token has expired. "
+                        "Please re-authenticate:\n"
+                        "  uv run python scripts/connect_quickbooks_cli.py"
+                    )
+                if token_info.access_token_expired:
+                    logger.info(
+                        "Access token expired, will attempt refresh during API calls"
+                    )
+
+                # Create OAuth manager with initial tokens
+                self.oauth_manager = QuickBooksOAuthManager(
+                    oauth_config, initial_tokens=token_info
+                )
+
+                # Set up token save callback
+                def save_tokens_callback(tokens: Any) -> None:
+                    """Save updated tokens back to file."""
+                    updated_data = {
+                        "access_token": tokens.access_token,
+                        "refresh_token": tokens.refresh_token,
+                        "expires_in": 3600,  # Default 1 hour
+                        "x_refresh_token_expires_in": 8640000,  # Default 100 days
+                        "token_type": "bearer",
+                        "company_id": company_id,
+                    }
+                    token_store.save_tokens(updated_data)
+
+                self.oauth_manager.add_token_update_callback(save_tokens_callback)
+
+            except (ValueError, TypeError, KeyError) as e:
+                logger.error("Failed to initialize OAuth manager: %s", e)
+                # Fallback to direct token usage for backwards compatibility
+                self.oauth_manager = None
+
+            # Initialize QuickBooks client with OAuth manager (or fallback)
+            if self.oauth_manager:
+                self.quickbooks_client = QuickBooksClient(
+                    base_url=str(self.settings.qb_base_url),
+                    company_id=company_id,
+                    oauth_manager=self.oauth_manager,
+                )
+            else:
+                # Fallback to direct token usage
+                self.quickbooks_client = QuickBooksClient(
+                    base_url=str(self.settings.qb_base_url),
+                    company_id=company_id,
+                    access_token=token_data.get("access_token"),
+                )
 
             # Initialize QuickBooks service
             self.quickbooks_service = QuickBooksService(client=self.quickbooks_client)
@@ -89,12 +174,23 @@ class QuickExpenseCLI:
 
         except Exception as e:
             logger.exception("Failed to initialize services")
+            if "No authentication tokens found" in str(e):
+                # Re-raise token errors with helpful message
+                raise
+            if "company_id" in str(e):
+                raise APIError(
+                    f"Invalid tokens: {e}\n"
+                    "Please run OAuth setup again:\n"
+                    "  uv run python scripts/connect_quickbooks_cli.py"
+                ) from e
             raise APIError(f"Failed to initialize services: {e}") from e
 
     async def cleanup(self) -> None:
         """Clean up resources."""
         if self.quickbooks_client:
             await self.quickbooks_client.close()
+        # Note: OAuth manager cleanup is handled automatically when
+        # it goes out of scope or by its internal HTTP client management
 
     def validate_file(self, file_path: Path) -> None:
         """Validate that the file exists and is a supported format."""
@@ -173,8 +269,31 @@ class QuickExpenseCLI:
         except ValidationError as e:
             logger.error("Validation error: %s", e)
             raise APIError(f"Invalid data format: {e}") from e
+        except QuickBooksError as e:
+            logger.error("QuickBooks error: %s", e)
+            # Check for specific authentication errors
+            if (
+                "401 Unauthorized" in str(e)
+                or "Token expired" in str(e)
+                or "AuthenticationFailed" in str(e)
+            ):
+                raise APIError(
+                    "QuickBooks authentication has expired. "
+                    "Please re-authenticate:\n"
+                    "  uv run python scripts/connect_quickbooks_cli.py"
+                ) from e
+            raise APIError(f"QuickBooks API error: {e}") from e
         except httpx.HTTPStatusError as e:
             logger.error("HTTP error: %s", e)
+            # Check for specific authentication errors
+            if e.response.status_code == 401:  # HTTP Unauthorized
+                response_text = str(e.response.text)
+                if "Token expired" in response_text or "AuthenticationFailed" in response_text:
+                    raise APIError(
+                        "QuickBooks authentication has expired. "
+                        "Please re-authenticate:\n"
+                        "  uv run python scripts/connect_quickbooks_cli.py"
+                    ) from e
             raise APIError(f"API request failed: {e}") from e
         except Exception as e:
             logger.exception("Unexpected error processing receipt")
