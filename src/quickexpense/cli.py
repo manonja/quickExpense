@@ -403,7 +403,7 @@ class QuickExpenseCLI:
             if existing_tokens and not args.force:
                 print("✅ Authentication tokens already exist!")  # noqa: T201
                 print("   Use --force to re-authenticate")  # noqa: T201
-                print(f"   Company ID: {existing_tokens.get('company_id', 'Unknown')}")  # noqa: T201
+                print(f"   Company ID: {existing_tokens.get('company_id', 'Unknown')}")
                 return
 
             print("🚀 Starting QuickBooks authentication...")  # noqa: T201
@@ -411,6 +411,7 @@ class QuickExpenseCLI:
 
             # Import and run the OAuth script functionality
             import subprocess
+
             result = subprocess.run(
                 ["uv", "run", "python", "scripts/connect_quickbooks_cli.py"],
                 capture_output=False,
@@ -420,7 +421,9 @@ class QuickExpenseCLI:
 
             if result.returncode == 0:
                 print("\n✅ Authentication successful!")  # noqa: T201
-                print("   You can now upload receipts with: quickexpense upload <receipt>")  # noqa: T201
+                print(
+                    "   You can now upload receipts with: quickexpense upload <receipt>"
+                )
             else:
                 print("\n❌ Authentication failed!")  # noqa: T201
                 sys.exit(1)
@@ -448,7 +451,7 @@ class QuickExpenseCLI:
                 return
 
             print("✅ Authentication: Tokens found")  # noqa: T201
-            print(f"   Company ID: {token_data.get('company_id', 'Unknown')}")  # noqa: T201
+            print(f"   Company ID: {token_data.get('company_id', 'Unknown')}")
 
             # Check token expiry
             try:
@@ -467,7 +470,7 @@ class QuickExpenseCLI:
                     print("❌ Token Status: Refresh token expired")  # noqa: T201
                     print("   Run: quickexpense auth --force")  # noqa: T201
                 elif token_info.access_token_expired:
-                    print("⚠️  Token Status: Access token expired (will auto-refresh)")  # noqa: T201
+                    print("⚠️  Token Status: Access token expired (will auto-refresh)")
                 else:
                     print("✅ Token Status: Valid")  # noqa: T201
 
@@ -481,7 +484,9 @@ class QuickExpenseCLI:
                 if self.quickbooks_service:
                     # Try a simple API call
                     accounts = await self.quickbooks_service.get_expense_accounts()
-                    print(f"✅ QuickBooks API: Connected ({len(accounts)} expense accounts)")  # noqa: T201
+                    print(
+                        f"✅ QuickBooks API: Connected ({len(accounts)} expense accounts)"
+                    )
                 else:
                     print("❌ QuickBooks API: Service not initialized")  # noqa: T201
             except Exception as e:

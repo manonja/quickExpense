@@ -536,7 +536,7 @@ class TestQuickBooksService:
         service = QuickBooksService(client)
 
         from quickexpense.services.quickbooks import AccountInfo
-        
+
         expense_account = AccountInfo(
             id="account_1",
             name="Office Supplies",
@@ -549,7 +549,7 @@ class TestQuickBooksService:
             account_type="Bank",
             active=True,
         )
-        
+
         data = service._build_purchase_data(
             expense=sample_expense,
             vendor_id="vendor_1",
