@@ -249,6 +249,41 @@ class QuickBooksService:
             for a in accounts
         ]
 
+    async def get_bank_accounts(self) -> list[AccountInfo]:
+        """Get all bank accounts for payment methods."""
+        query = "SELECT * FROM Account WHERE AccountType = 'Bank' AND Active = true"
+        response = await self.client.get("query", params={"query": query})
+
+        accounts = response.get("QueryResponse", {}).get("Account", [])
+        return [
+            AccountInfo(
+                id=a["Id"],
+                name=a["Name"],
+                account_type=a["AccountType"],
+                active=a.get("Active", True),
+            )
+            for a in accounts
+        ]
+
+    async def get_credit_card_accounts(self) -> list[AccountInfo]:
+        """Get all credit card accounts for payment methods."""
+        query = (
+            "SELECT * FROM Account WHERE AccountType = 'Credit Card' "
+            "AND Active = true"
+        )
+        response = await self.client.get("query", params={"query": query})
+
+        accounts = response.get("QueryResponse", {}).get("Account", [])
+        return [
+            AccountInfo(
+                id=a["Id"],
+                name=a["Name"],
+                account_type=a["AccountType"],
+                active=a.get("Active", True),
+            )
+            for a in accounts
+        ]
+
     async def create_expense(self, expense: Expense) -> dict[str, Any]:
         """Create an expense in QuickBooks."""
         # Search or create vendor
@@ -270,16 +305,33 @@ class QuickBooksService:
             accounts[0],
         )
 
+        # Get payment accounts (bank or credit card)
+        payment_account = await self._get_payment_account()
+
         # Build purchase data
         purchase_data = self._build_purchase_data(
             expense=expense,
             vendor_id=vendor_id,
             vendor_name=expense.vendor_name,
-            account_id=account.id,
-            account_name=account.name,
+            expense_account=account,
+            payment_account=payment_account,
         )
 
         return await self.client.post("purchase", json=purchase_data)
+
+    async def _get_payment_account(self) -> AccountInfo:
+        """Get a payment account (prefer bank, fallback to credit card)."""
+        # Try bank accounts first
+        bank_accounts = await self.get_bank_accounts()
+        if bank_accounts:
+            return bank_accounts[0]  # Use first bank account
+
+        # Fallback to credit card accounts
+        credit_accounts = await self.get_credit_card_accounts()
+        if credit_accounts:
+            return credit_accounts[0]  # Use first credit card account
+
+        raise QuickBooksError("No payment accounts (Bank or Credit Card) found")
 
     def _build_purchase_data(
         self,
@@ -287,8 +339,8 @@ class QuickBooksService:
         expense: Expense,
         vendor_id: str,
         vendor_name: str,
-        account_id: str,
-        account_name: str,
+        expense_account: AccountInfo,
+        payment_account: AccountInfo,
     ) -> dict[str, Any]:
         """Build purchase data for QuickBooks API."""
         base_amount = expense.amount - expense.tax_amount
@@ -297,7 +349,10 @@ class QuickBooksService:
                 "Amount": float(base_amount),
                 "DetailType": "AccountBasedExpenseLineDetail",
                 "AccountBasedExpenseLineDetail": {
-                    "AccountRef": {"value": account_id, "name": account_name}
+                    "AccountRef": {
+                        "value": expense_account.id,
+                        "name": expense_account.name,
+                    }
                 },
                 "Description": expense.category,
             }
@@ -310,7 +365,7 @@ class QuickBooksService:
                     "Amount": float(expense.tax_amount),
                     "DetailType": "AccountBasedExpenseLineDetail",
                     "AccountBasedExpenseLineDetail": {
-                        "AccountRef": {"value": account_id, "name": "Sales Tax"}
+                        "AccountRef": {"value": expense_account.id, "name": "Sales Tax"}
                     },
                     "Description": "Tax",
                 }
@@ -318,6 +373,7 @@ class QuickBooksService:
 
         return {
             "PaymentType": "Cash",
+            "AccountRef": {"value": payment_account.id, "name": payment_account.name},
             "EntityRef": {"value": vendor_id, "name": vendor_name},
             "TotalAmt": float(expense.amount),
             "TxnDate": expense.date.isoformat(),

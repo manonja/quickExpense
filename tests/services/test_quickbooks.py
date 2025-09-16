@@ -535,15 +535,31 @@ class TestQuickBooksService:
         client = MagicMock()
         service = QuickBooksService(client)
 
+        from quickexpense.services.quickbooks import AccountInfo
+
+        expense_account = AccountInfo(
+            id="account_1",
+            name="Office Supplies",
+            account_type="Expense",
+            active=True,
+        )
+        payment_account = AccountInfo(
+            id="payment_1",
+            name="Chequing",
+            account_type="Bank",
+            active=True,
+        )
+
         data = service._build_purchase_data(
             expense=sample_expense,
             vendor_id="vendor_1",
             vendor_name="Test Vendor",
-            account_id="account_1",
-            account_name="Office Supplies",
+            expense_account=expense_account,
+            payment_account=payment_account,
         )
 
         assert data["PaymentType"] == "Cash"
+        assert data["AccountRef"]["value"] == "payment_1"
         assert data["EntityRef"]["value"] == "vendor_1"
         assert data["TotalAmt"] == 100.5
         assert data["TxnDate"] == sample_expense.date.isoformat()
