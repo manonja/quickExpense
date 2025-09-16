@@ -1,13 +1,15 @@
 # QuickExpense
 
-Modern expense management API that automatically creates QuickBooks expenses from receipts using AI-powered extraction and robust OAuth token management.
+Modern expense management system with a powerful CLI and API that automatically creates QuickBooks expenses from receipts using AI-powered extraction and robust OAuth token management.
 
 ## Features
 
+- 🖥️ **CLI Interface** - Simple commands for receipt processing and expense management
 - 🤖 **AI Receipt Processing** - Extract expense data from receipt images using Google Gemini
 - 🔄 **Automatic Token Management** - Never worry about expired tokens
 - 📊 **Direct QuickBooks Integration** - Create vendors and expenses seamlessly
 - 🚀 **Modern Python Stack** - FastAPI, Pydantic v2, Python 3.12+
+- 🎯 **Smart Account Mapping** - Automatically selects appropriate payment and expense accounts
 
 ## Prerequisites
 
@@ -26,68 +28,94 @@ cd quickExpense
 uv sync
 ```
 
-### 2. Configure QuickBooks OAuth
+### 2. Configure Environment
 
-```bash
-# Set your QuickBooks credentials
-export QB_CLIENT_ID="your_client_id"
-export QB_CLIENT_SECRET="your_client_secret"
-
-# Run the OAuth connection tool
-uv run python scripts/connect_quickbooks_cli.py
-```
-
-This opens a browser to connect your QuickBooks account and saves tokens to `.env`.
-
-### 3. Configure Gemini (Optional)
-
-Add to your `.env`:
+Create a `.env` file with:
 ```env
+# QuickBooks OAuth
+QB_CLIENT_ID=your_client_id
+QB_CLIENT_SECRET=your_client_secret
+QB_REDIRECT_URI=http://localhost:8000/callback
+QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
+
+# Gemini AI (for receipt extraction)
 GEMINI_API_KEY=your_gemini_api_key
 ```
 
-### 4. Run the Application
+### 3. Authenticate with QuickBooks
 
 ```bash
-# Development mode with auto-reload
+# Run OAuth authentication
+uv run quickexpense auth
+
+# Verify connection
+uv run quickexpense status
+```
+
+### 4. Process Your First Receipt
+
+```bash
+# Process a receipt and create expense in QuickBooks
+uv run quickexpense upload receipt.jpg
+
+# Preview without creating expense
+uv run quickexpense upload receipt.jpg --dry-run
+```
+
+## Usage
+
+### CLI Commands
+
+```bash
+# Show help
+uv run quickexpense --help
+
+# Authenticate with QuickBooks
+uv run quickexpense auth [--force]
+
+# Check system status
+uv run quickexpense status
+
+# Upload and process receipt
+uv run quickexpense upload <receipt-file> [--dry-run] [--output json]
+```
+
+### Supported Receipt Formats
+- JPEG (.jpg, .jpeg)
+- PNG (.png)
+- GIF (.gif)
+- BMP (.bmp)
+- WebP (.webp)
+
+### Example Output
+```
+$ uv run quickexpense upload receipt.jpg
+
+Extracting data from receipt: receipt.jpg
+Creating expense in QuickBooks...
+
+=== Receipt Data ===
+Vendor: Office Depot
+Date: 2024-01-15
+Total Amount: $45.99
+Tax: $3.42
+
+=== Result ===
+Successfully created expense in QuickBooks (ID: 123)
+```
+
+### API Usage (Alternative)
+
+If you prefer the REST API:
+
+```bash
+# Start the API server
 uv run fastapi dev src/quickexpense/main.py
 
-# Production mode
-uv run uvicorn src.quickexpense.main:app --host 0.0.0.0 --port 8000
-```
-
-## API Usage
-
-### Test Connection
-```bash
-curl http://localhost:8000/api/v1/test-connection
-```
-
-### Create Expense
-```bash
+# Create expense via API
 curl -X POST http://localhost:8000/api/v1/expenses \
   -H "Content-Type: application/json" \
-  -d '{
-    "vendor_name": "Office Depot",
-    "amount": 45.99,
-    "date": "2024-01-15",
-    "category": "Office Supplies",
-    "tax_amount": 3.42
-  }'
-```
-
-### Extract Receipt (AI-Powered)
-```bash
-# Convert image to base64
-base64 -i receipt.jpg > receipt.b64
-
-# Extract expense data
-curl -X POST http://localhost:8000/api/v1/receipts/extract \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"image_base64\": \"$(cat receipt.b64)\",
-    \"category\": \"Office Supplies\"
-  }"
+  -d '{"vendor_name": "Office Depot", "amount": 45.99, "date": "2024-01-15"}'
 ```
 
 ## Project Structure
@@ -99,45 +127,53 @@ quickExpense/
 │   ├── core/          # Configuration & dependencies
 │   ├── models/        # Pydantic models
 │   ├── services/      # Business logic & integrations
+│   ├── cli.py         # CLI interface
 │   └── main.py        # FastAPI app entry point
-├── scripts/
-│   └── connect_quickbooks_cli.py  # OAuth setup tool
+├── data/
+│   └── tokens.json    # OAuth tokens (gitignored)
+├── scripts/           # Utility scripts
 ├── tests/             # Test suite
 ├── pyproject.toml     # Project dependencies
-└── .env              # Environment variables (created by OAuth tool)
+└── .env              # Environment variables
 ```
 
 ## Key Features Explained
 
+### CLI Features
+- Simple command-line interface for all operations
+- Built-in authentication flow with browser integration
+- Real-time status checking and connection validation
+- Dry-run mode for testing without creating expenses
+- JSON output option for integration with other tools
+
 ### Automatic Token Refresh
 - Access tokens auto-refresh before expiry (5-min buffer)
-- Background task checks token validity every minute
+- Automatic retry on 401 errors with token refresh
 - Handles QuickBooks refresh token rotation
 - Zero downtime from token expiration
 
 ### Receipt Processing
 - Supports JPEG, PNG, GIF, BMP, WEBP formats
-- Extracts vendor, amount, date, tax information
-- Returns QuickBooks-ready expense data
+- AI-powered extraction of vendor, amount, date, tax
+- Automatic vendor creation if not found
+- Smart expense account categorization
+- Automatic payment account selection (bank/credit card)
 
 ### Environment Variables
 
-Required:
+Required in `.env`:
 ```env
+# QuickBooks OAuth Configuration
 QB_CLIENT_ID=your_client_id
 QB_CLIENT_SECRET=your_client_secret
-QB_COMPANY_ID=your_company_id        # Set by OAuth tool
-QB_ACCESS_TOKEN=your_access_token    # Set by OAuth tool
-QB_REFRESH_TOKEN=your_refresh_token  # Set by OAuth tool
-GEMINI_API_KEY=your_gemini_key       # For receipt extraction
+QB_REDIRECT_URI=http://localhost:8000/callback
+QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
+
+# Gemini AI Configuration
+GEMINI_API_KEY=your_gemini_key
 ```
 
-Optional:
-```env
-QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com  # Default
-QB_TOKEN_REFRESH_BUFFER=300  # Seconds before expiry to refresh
-DEBUG=false                  # Enable debug logging
-```
+Tokens are stored separately in `data/tokens.json` after authentication.
 
 ## Development
 
@@ -168,12 +204,26 @@ uv run pre-commit install --hook-type commit-msg
 
 | Issue | Solution |
 |-------|----------|
-| "401 Unauthorized" | Tokens expired - run `uv run python scripts/connect_quickbooks_cli.py` |
+| "401 Unauthorized" | Tokens expired - run `uv run quickexpense auth --force` |
+| "No authentication tokens found" | Run `uv run quickexpense auth` |
+| "Invalid account type" | Fixed! The CLI now properly handles payment accounts |
 | "Module not found" | Run `uv sync` to install dependencies |
-| "Connection failed" | Check QB credentials and company ID in `.env` |
-| Token refresh fails | Ensure refresh token hasn't expired (100 days) |
+| "Connection failed" | Check credentials in `.env` and run `quickexpense status` |
+| Token refresh fails | Run `uv run quickexpense auth --force` for new tokens |
+
+## CLI Reference
+
+| Command | Description | Example |
+|---------|-------------|---------|  
+| `quickexpense auth` | Authenticate with QuickBooks | `quickexpense auth --force` |
+| `quickexpense status` | Check system status | `quickexpense status` |
+| `quickexpense upload` | Process receipt & create expense | `quickexpense upload receipt.jpg` |
+| `quickexpense --version` | Show version | `quickexpense --version` |
+| `quickexpense --help` | Show help | `quickexpense --help` |
 
 ## API Reference
+
+For REST API usage, start the server with `uv run fastapi dev src/quickexpense/main.py`:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|

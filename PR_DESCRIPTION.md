@@ -1,132 +1,138 @@
-# Remove Legacy Files and Implement OAuth Token Management
+# PR: Implement Complete CLI Entry Point with Single Receipt Upload
 
-## Summary
-- Removed all legacy files from the root directory after successful migration to modern Python 3.12/FastAPI structure
-- Implemented JSON file-based token storage system with `data/` folder for OAuth tokens
-- Created comprehensive OAuth token management with automatic refresh
-- Added extensive testing suite and clear user documentation
-- Updated all documentation to reflect new architecture
+## 🎯 Overview
 
-## What Changed
+This PR implements a fully functional CLI for QuickExpense that allows users to upload single receipt images and automatically create expenses in QuickBooks Online. The implementation includes receipt data extraction using Gemini AI, robust error handling, and a seamless user experience.
 
-### 🗑️ Legacy File Cleanup
-- Removed 5 legacy files from root directory (~400 lines of duplicate code):
-  - `main.py` → replaced by `src/quickexpense/main.py`
-  - `models.py` → replaced by modular models in `src/quickexpense/models/`
-  - `config.py` → replaced by `src/quickexpense/core/config.py`
-  - `quickbooks_client.py` → replaced by `src/quickexpense/services/quickbooks.py`
-  - `requirements.txt` → replaced by `pyproject.toml` with uv dependency management
+## ✅ What's Implemented
 
-### 📁 New Token Storage Architecture
-- **Created `data/` folder** for dynamic token storage:
-  - Added `data/.gitkeep` to ensure folder exists
-  - `data/tokens.json` stores OAuth tokens (git-ignored)
-  - Clear separation: static config in `.env`, dynamic tokens in `data/`
-  - Tokens persist between application restarts
+### Core Features
+- **CLI Commands**:
+  - `quickexpense upload <receipt>` - Process a receipt and create expense in QuickBooks
+  - `quickexpense auth` - Authenticate with QuickBooks OAuth
+  - `quickexpense status` - Check system status and connections
+  - `quickexpense --version` - Show version information
+  - `quickexpense --help` - Display help information
 
-### 🔐 OAuth Token Management Implementation
-- **OAuth Service** (`src/quickexpense/services/quickbooks_oauth.py`):
-  - Automatic token refresh before expiry (5-minute buffer)
-  - Handles refresh token rotation per Intuit's requirements
-  - Thread-safe operations with asyncio locks
-  - Comprehensive error handling and retry logic
+### Technical Improvements
+- Fixed QuickBooks Purchase API integration by adding required `AccountRef` field
+- Added payment account selection logic (bank accounts preferred, credit cards as fallback)
+- Implemented proper OAuth token refresh with automatic retry on 401 errors
+- Enhanced error handling with user-friendly messages and clear next steps
+- Fixed field mapping between receipt extraction and expense creation
 
-- **Token Store Service** (`src/quickexpense/services/token_store.py`):
-  - JSON file-based storage for single-user prototype
-  - Atomic file operations to prevent corruption
-  - Automatic `data/` directory creation
-  - Type-safe token management with Pydantic models
+## 🧪 Testing Instructions
 
-- **OAuth Models** (`src/quickexpense/models/quickbooks_oauth.py`):
-  - Pydantic v2 models for type safety
-  - Token expiry tracking with timezone support
-  - Validation for all OAuth response fields
-
-### 📝 Enhanced Scripts and Tools
-- **OAuth Setup** (`scripts/connect_quickbooks_cli.py`):
-  - Now reads credentials from `.env` file (no hardcoding!)
-  - Interactive CLI with clear instructions
-  - Automatically saves tokens to `data/tokens.json`
-
-- **Test Scripts**:
-  - `test_quickbooks_api.sh`: Automated API testing with all endpoints
-  - `test_integration.py`: Full integration testing
-  - `test_oauth_refresh.py`: OAuth refresh flow testing
-  - `test_quickbooks_direct.py`: Direct API testing
-  - `update_tokens.py`: Manual token update utility
-
-### 📚 Documentation Updates
-- **QUICKSTART_TEST.md**: Step-by-step guide for first-time users
-- **README.md**: Updated with modern project structure
-- **CLAUDE.md**: Comprehensive development guidelines
-- **docs/MANUAL_TESTING_GUIDE.md**: Detailed testing procedures
-
-### ✅ Comprehensive Test Suite
-Added 2,000+ lines of test code:
-- Unit tests for OAuth models and token storage
-- Integration tests for full OAuth flow
-- Service tests with mocked QuickBooks API
-- 95%+ code coverage for new OAuth functionality
-
-## Quick Start for New Users
-
-1. **One-time OAuth Setup**:
+### Prerequisites
+1. Clone the repository and install dependencies:
    ```bash
-   # Ensure .env has QB_CLIENT_ID and QB_CLIENT_SECRET
-   uv run python scripts/connect_quickbooks_cli.py
+   git clone <repo-url>
+   cd quickExpense
+   uv sync
    ```
 
-2. **Start the API**:
-   ```bash
-   uv run fastapi dev src/quickexpense/main.py
+2. Set up environment variables in `.env`:
+   ```env
+   # QuickBooks OAuth (get from Intuit Developer account)
+   QB_CLIENT_ID=your_client_id
+   QB_CLIENT_SECRET=your_client_secret
+   QB_REDIRECT_URI=http://localhost:8000/callback
+   QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
+   
+   # Gemini AI (get from Google AI Studio)
+   GEMINI_API_KEY=your_gemini_api_key
    ```
 
-3. **Test the API**:
+### First-Time Setup
+1. Authenticate with QuickBooks:
    ```bash
-   # Run automated test script
-   ./test_quickbooks_api.sh
+   uv run quickexpense auth
+   ```
+   This opens a browser for OAuth authentication. Select a sandbox company.
 
-   # Or manual testing:
-   curl http://localhost:8000/health
-   curl -X POST "http://localhost:8000/api/v1/vendors?vendor_name=TestVendor"
-   curl -X POST http://localhost:8000/api/v1/expenses -H "Content-Type: application/json" -d '{"vendor_name": "TestVendor", "amount": 99.99, "date": "2024-01-15", "currency": "USD"}'
+2. Verify authentication:
+   ```bash
+   uv run quickexpense status
    ```
 
-## Technical Details
+### Testing Receipt Upload
+1. Test with dry run (no expense created):
+   ```bash
+   uv run quickexpense upload path/to/receipt.jpg --dry-run
+   ```
 
-### Token Storage Flow
+2. Create actual expense:
+   ```bash
+   uv run quickexpense upload path/to/receipt.jpg
+   ```
+
+3. Get JSON output:
+   ```bash
+   uv run quickexpense upload path/to/receipt.jpg --output json
+   ```
+
+### Supported Image Formats
+- JPEG (.jpg, .jpeg)
+- PNG (.png)
+- GIF (.gif)
+- BMP (.bmp)
+- WebP (.webp)
+
+## 📊 Example Output
+
+```bash
+$ uv run quickexpense upload receipt.jpg
+
+Extracting data from receipt: receipt.jpg
+
+Creating expense in QuickBooks...
+
+=== Receipt Data ===
+File: /path/to/receipt.jpg
+Vendor: Harrods
+Date: 2019-12-20
+Total Amount: $153.95
+Tax: $0.0
+Currency: GBP
+
+Items:
+  - 601 0000947500 Cookshop ($149.0)
+  - 601 0003079668 Cookshop ($4.95)
+
+=== Expense Data ===
+Category: General
+Description: 601 0000947500 Cookshop, 601 0003079668 Cookshop
+Payment Account: debit_card
+
+=== Result ===
+Successfully created expense in QuickBooks (ID: 184)
 ```
-Initial Setup:
-1. Run connect_quickbooks_cli.py
-2. OAuth flow → tokens saved to data/tokens.json
-3. Application reads tokens on startup
-4. Automatic refresh when needed → updated tokens saved back
-```
 
-### File Structure
-```
-quickExpense/
-├── .env                    # Static config (CLIENT_ID, SECRET)
-├── data/                   # Dynamic storage (NEW!)
-│   ├── .gitkeep           # Ensures folder exists
-│   └── tokens.json        # OAuth tokens (git-ignored)
-└── src/quickexpense/       # Modern application code
-```
+## 🔧 Key Fixes
 
-## Testing
-- ✅ All pre-commit hooks passing (ruff, black, pyright, mypy)
-- ✅ Full test suite passing
-- ✅ Manual integration testing completed
-- ✅ OAuth flow tested end-to-end with token refresh
+1. **QuickBooks API Error**: Fixed "Invalid account type" error by:
+   - Adding `AccountRef` field to Purchase API calls
+   - Implementing bank/credit card account queries
+   - Properly mapping payment accounts
 
-## Breaking Changes
-None - all functionality preserved and enhanced.
+2. **Field Mapping**: Fixed receipt-to-expense field mapping:
+   - Changed `transaction_date` to `date`
+   - Proper handling of line items and descriptions
 
-## Checklist
-- [x] Code compiles and runs
-- [x] All tests pass
-- [x] Pre-commit hooks pass
-- [x] Documentation updated
-- [x] No secrets/tokens in code
-- [x] First-time user guide created
-- [x] Automated test script verified
+3. **Authentication Flow**: Improved user experience:
+   - Clear error messages when tokens expire
+   - Automatic token refresh attempts
+   - Helpful CLI commands for re-authentication
+
+## 🚀 Deployment Notes
+
+- Tokens are stored in `data/tokens.json` (gitignored)
+- OAuth tokens refresh automatically when possible
+- Sandbox tokens expire frequently; production tokens last longer
+- All pre-commit hooks pass (with some acceptable linting exceptions)
+
+## 📝 Related Issues
+
+- Fixes PRE-106: Implement complete CLI entry point with single receipt upload
+- Resolves QuickBooks Purchase API integration issues
+- Implements all acceptance criteria from the ticket

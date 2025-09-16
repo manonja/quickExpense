@@ -14,6 +14,8 @@ The application has been successfully restructured with:
 - Dependency injection pattern
 - Comprehensive test structure
 - All pre-commit hooks passing
+- **Complete CLI interface for receipt processing**
+- **QuickBooks Purchase API integration fixed**
 
 ## Design Principles
 
@@ -172,7 +174,21 @@ This will:
 2. Capture OAuth tokens after authorization
 3. Save tokens to `data/tokens.json`
 
-### Running the Application
+### Using the CLI
+```bash
+# First-time authentication
+uv run quickexpense auth
+
+# Check system status
+uv run quickexpense status
+
+# Process a receipt
+uv run quickexpense upload receipt.jpg
+uv run quickexpense upload receipt.jpg --dry-run  # Preview only
+uv run quickexpense upload receipt.jpg --output json  # JSON output
+```
+
+### Running the API Server
 ```bash
 # Development mode (with auto-reload)
 uv run fastapi dev src/quickexpense/main.py
@@ -210,6 +226,17 @@ uv run pyright
 uv run mypy src tests
 ```
 
+## CLI Commands
+
+### Authentication and Status
+- `quickexpense auth [--force]` - Authenticate with QuickBooks
+- `quickexpense status` - Check system status and connections
+
+### Receipt Processing
+- `quickexpense upload <file> [--dry-run] [--output json]` - Process receipt and create expense
+- `quickexpense --version` - Show version
+- `quickexpense --help` - Show help
+
 ## API Endpoints
 
 ### Health Checks
@@ -226,9 +253,20 @@ uv run mypy src tests
 
 
 
-### Example Usage
+### Example CLI Usage
 ```bash
-# Create an expense
+# Process receipt with CLI
+uv run quickexpense upload /path/to/receipt.jpg
+
+# Output:
+# Extracting data from receipt: receipt.jpg
+# Creating expense in QuickBooks...
+# Successfully created expense in QuickBooks (ID: 184)
+```
+
+### Example API Usage
+```bash
+# Create an expense via API
 curl -X POST http://localhost:8000/api/v1/expenses \
   -H "Content-Type: application/json" \
   -d '{
@@ -333,18 +371,26 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
 3. **Token Refresh**: OAuth manager refreshes → callback saves to JSON
 4. **Manual Update**: Use `scripts/update_tokens.py` if needed
 
+## Recent Improvements
+
+1. ✅ **CLI Implementation**: Complete command-line interface with auth, status, and upload commands
+2. ✅ **QuickBooks Purchase Fix**: Fixed "Invalid account type" error by adding AccountRef field
+3. ✅ **Payment Account Support**: Added bank and credit card account selection
+4. ✅ **Enhanced Error Handling**: Clear user messages for authentication errors
+5. ✅ **Field Mapping Fix**: Corrected receipt-to-expense field mappings
+
 ## Next Steps
 
 1. ~~**Remove Legacy Files**: Delete old files in root directory~~ ✓
 2. ~~**Add OAuth Flow**: Implement proper OAuth2 flow for token refresh~~ ✓
-3. **Add Logging**: Structured logging with appropriate levels
-4. **Add More Tests**: Increase coverage to >90%
-5. **API Documentation**: Enhance OpenAPI/Swagger docs
-6. **Error Handling**: Implement comprehensive error responses
+3. ~~**CLI Interface**: Add command-line interface for receipt processing~~ ✓
+4. **Add Logging**: Structured logging with appropriate levels
+5. **Add More Tests**: Increase coverage to >90%
+6. **API Documentation**: Enhance OpenAPI/Swagger docs
 7. **Rate Limiting**: Add rate limiting for API endpoints
 8. **Monitoring**: Add OpenTelemetry instrumentation
 9. **Batch Processing**: Add support for multiple receipt uploads
-10. **Webhook Support**: Add webhook notifications for processed receipts
+10. **PDF Support**: Add PDF receipt extraction capability
 
 ## Commit Discipline
 
