@@ -14,9 +14,9 @@ from PIL import Image
 
 from quickexpense.models.receipt import ExtractedReceipt, PaymentMethod
 from quickexpense.services.file_processor import (
+    FileProcessingError,
     FileProcessorService,
     FileType,
-    FileProcessingError,
 )
 
 if TYPE_CHECKING:

@@ -58,7 +58,7 @@ class TestFileProcessorService:
 
     def test_detect_file_type_jpeg(self, service):
         """Test JPEG file type detection."""
-        jpeg_bytes = b"\xFF\xD8\xFF\xE0\x00\x10JFIF"
+        jpeg_bytes = b"\xff\xd8\xff\xe0\x00\x10JFIF"
         assert service.detect_file_type(jpeg_bytes) == FileType.JPEG
 
     def test_detect_file_type_png(self, service):
@@ -68,12 +68,12 @@ class TestFileProcessorService:
 
     def test_detect_file_type_pdf(self, service):
         """Test PDF file type detection."""
-        pdf_bytes = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3"
+        pdf_bytes = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3"
         assert service.detect_file_type(pdf_bytes) == FileType.PDF
 
     def test_detect_file_type_base64(self, service):
         """Test file type detection from base64."""
-        jpeg_bytes = b"\xFF\xD8\xFF\xE0\x00\x10JFIF"
+        jpeg_bytes = b"\xff\xd8\xff\xe0\x00\x10JFIF"
         jpeg_base64 = base64.b64encode(jpeg_bytes).decode()
         assert service.detect_file_type(jpeg_base64) == FileType.JPEG
 
@@ -85,7 +85,7 @@ class TestFileProcessorService:
     def test_validate_file_valid(self, service):
         """Test validating a valid file."""
         # Create a valid JPEG with sufficient size
-        jpeg_bytes = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"\x00" * 200
+        jpeg_bytes = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 200
         assert service.validate_file(jpeg_bytes, FileType.JPEG)
 
     def test_validate_file_too_small(self, service):
@@ -95,18 +95,18 @@ class TestFileProcessorService:
 
     def test_validate_file_too_large(self, service):
         """Test validating a file that's too large."""
-        large_bytes = b"\xFF\xD8\xFF" + b"\x00" * (51 * 1024 * 1024)
+        large_bytes = b"\xff\xd8\xff" + b"\x00" * (51 * 1024 * 1024)
         assert not service.validate_file(large_bytes, FileType.JPEG)
 
     def test_validate_file_type_mismatch(self, service):
         """Test validating a file with mismatched type."""
-        jpeg_bytes = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"\x00" * 200
+        jpeg_bytes = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 200
         assert not service.validate_file(jpeg_bytes, FileType.PNG)
 
     @pytest.mark.asyncio
     async def test_process_file_image(self, service):
         """Test processing an image file."""
-        jpeg_bytes = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"\x00" * 200
+        jpeg_bytes = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 200
         jpeg_base64 = base64.b64encode(jpeg_bytes).decode()
 
         result = await service.process_file(jpeg_base64, FileType.JPEG)
@@ -129,7 +129,7 @@ class TestFileProcessorService:
 
         # Mock the _pdf_converter attribute directly
         service._pdf_converter = mock_converter
-        
+
         result = await service.process_file(pdf_base64, FileType.PDF)
 
         assert isinstance(result, ProcessedFile)
@@ -142,7 +142,7 @@ class TestFileProcessorService:
     @pytest.mark.asyncio
     async def test_process_file_auto_detect(self, service):
         """Test processing a file with auto-detection."""
-        jpeg_bytes = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"\x00" * 200
+        jpeg_bytes = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 200
         result = await service.process_file(jpeg_bytes)
 
         assert result.file_type == FileType.JPEG

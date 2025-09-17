@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import io
 import logging
 from enum import Enum
 from typing import Any
@@ -78,19 +77,13 @@ class ProcessedFile(BaseModel):
 class FileProcessingError(Exception):
     """Base exception for file processing errors."""
 
-    pass
-
 
 class UnsupportedFileTypeError(FileProcessingError):
     """Raised when file type is not supported."""
 
-    pass
-
 
 class CorruptedFileError(FileProcessingError):
     """Raised when file is corrupted or unreadable."""
-
-    pass
 
 
 class FileProcessorService:
@@ -98,7 +91,7 @@ class FileProcessorService:
 
     # Magic bytes for file type detection
     MAGIC_BYTES = {
-        b"\xFF\xD8\xFF": FileType.JPEG,
+        b"\xff\xd8\xff": FileType.JPEG,
         b"\x89PNG\r\n\x1a\n": FileType.PNG,
         b"GIF87a": FileType.GIF,
         b"GIF89a": FileType.GIF,
@@ -206,15 +199,14 @@ class FileProcessorService:
             processed_content = image_base64
             file_type = FileType.PNG  # PDF converter outputs PNG
             processing_metadata["conversion"] = "pdf_to_png"
-            processing_metadata["pdf_pages"] = await self.pdf_converter.get_pdf_page_count(
-                pdf_base64
-            )
+            processing_metadata[
+                "pdf_pages"
+            ] = await self.pdf_converter.get_pdf_page_count(pdf_base64)
+        # Images can be processed directly
+        elif content_is_base64:
+            processed_content = file_content
         else:
-            # Images can be processed directly
-            if content_is_base64:
-                processed_content = file_content
-            else:
-                processed_content = base64.b64encode(file_bytes).decode()
+            processed_content = base64.b64encode(file_bytes).decode()
 
         return ProcessedFile(
             content=processed_content,

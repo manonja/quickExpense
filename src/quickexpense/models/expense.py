@@ -29,7 +29,7 @@ class LineItem(BaseModel):
 
     def to_categorized(
         self, category: str, deductibility_percentage: int = 100, **kwargs: Any
-    ) -> "CategorizedLineItem":
+    ) -> CategorizedLineItem:
         """Convert basic line item to categorized line item."""
         from .enhanced_expense import CategorizedLineItem
 
@@ -73,7 +73,7 @@ class Expense(BaseModel):
 
     def to_multi_category(
         self, deductibility_percentage: int = 100, **kwargs: Any
-    ) -> "MultiCategoryExpense":
+    ) -> MultiCategoryExpense:
         """Convert single-category expense to multi-category format."""
         from .enhanced_expense import CategorizedLineItem, MultiCategoryExpense
 
