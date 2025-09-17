@@ -1,0 +1,199 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Business Rules Configuration",
+  "description": "Schema for validating business rules configuration for expense categorization",
+  "type": "object",
+  "required": ["version", "rules", "fallback_rules"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Configuration version in semantic format (e.g., '1.0')"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "description": { "type": "string" },
+        "jurisdiction": { "type": "string" },
+        "tax_year": { "type": "string" },
+        "compliance_references": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "last_updated": { "type": "string", "format": "date" }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/BusinessRule"
+      }
+    },
+    "fallback_rules": {
+      "type": "object",
+      "required": ["unknown_expense"],
+      "properties": {
+        "unknown_expense": {
+          "$ref": "#/definitions/RuleActions"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "BusinessRule": {
+      "type": "object",
+      "required": ["id", "priority", "name", "conditions", "actions"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Unique identifier for the rule (lowercase, underscores allowed)"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Rule priority (1-1000, higher numbers = higher priority)"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable name for the rule"
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional detailed description of the rule"
+        },
+        "conditions": {
+          "$ref": "#/definitions/RuleConditions"
+        },
+        "actions": {
+          "$ref": "#/definitions/RuleActions"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this rule is active"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the rule was created"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the rule was last updated"
+        }
+      }
+    },
+    "RuleConditions": {
+      "type": "object",
+      "properties": {
+        "description_keywords": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Keywords to match in line item descriptions"
+        },
+        "description_patterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Glob patterns to match in descriptions (* and ? wildcards)"
+        },
+        "description_regex": {
+          "type": "string",
+          "description": "Regular expression to match descriptions"
+        },
+        "vendor_patterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Glob patterns to match vendor names"
+        },
+        "vendor_keywords": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Keywords to match in vendor names"
+        },
+        "amount_min": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum amount for matching (inclusive)"
+        },
+        "amount_max": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum amount for matching (inclusive)"
+        },
+        "category_hints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Category hints from AI or other sources"
+        }
+      },
+      "anyOf": [
+        { "required": ["description_keywords"] },
+        { "required": ["description_patterns"] },
+        { "required": ["description_regex"] },
+        { "required": ["vendor_patterns"] },
+        { "required": ["vendor_keywords"] },
+        { "required": ["amount_min"] },
+        { "required": ["amount_max"] }
+      ],
+      "description": "At least one matching condition must be specified"
+    },
+    "RuleActions": {
+      "type": "object",
+      "required": ["category", "deductibility_percentage", "qb_account"],
+      "properties": {
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Expense category to assign"
+        },
+        "deductibility_percentage": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of expense that is tax deductible (0-100)"
+        },
+        "qb_account": {
+          "type": "string",
+          "minLength": 1,
+          "description": "QuickBooks account to map to"
+        },
+        "tax_treatment": {
+          "type": "string",
+          "enum": ["standard", "meals_limitation", "capital", "input_tax_credit", "non_deductible"],
+          "default": "standard",
+          "description": "Type of tax treatment for this expense"
+        },
+        "confidence_boost": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0,
+          "default": 0.0,
+          "description": "Adjustment to confidence score (-1.0 to 1.0)"
+        },
+        "compliance_note": {
+          "type": "string",
+          "description": "Note about tax compliance or regulations"
+        },
+        "requires_manual_review": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this expense should be flagged for manual review"
+        },
+        "account_mapping": {
+          "type": "string",
+          "description": "Additional account mapping information"
+        },
+        "business_rule_id": {
+          "type": "string",
+          "description": "Reference back to the business rule ID"
+        }
+      }
+    }
+  }
+}
