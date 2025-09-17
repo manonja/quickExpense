@@ -13,6 +13,11 @@ import google.generativeai as genai
 from PIL import Image
 
 from quickexpense.models.receipt import ExtractedReceipt, PaymentMethod
+from quickexpense.services.file_processor import (
+    FileProcessorService,
+    FileType,
+    FileProcessingError,
+)
 
 if TYPE_CHECKING:
     from quickexpense.core.config import Settings
@@ -26,6 +31,7 @@ class GeminiService:
     def __init__(self, settings: Settings) -> None:
         """Initialize the Gemini service."""
         self.settings = settings
+        self.file_processor = FileProcessorService()
         genai.configure(api_key=settings.gemini_api_key)  # type: ignore[attr-defined]
 
         # Configure the model with JSON schema response
@@ -42,27 +48,46 @@ class GeminiService:
 
     async def extract_receipt_data(
         self,
-        image_base64: str,
+        file_base64: str,
         additional_context: str | None = None,
+        file_type: FileType | str | None = None,
     ) -> ExtractedReceipt:
-        """Extract receipt data from a base64 encoded image.
+        """Extract receipt data from a base64 encoded file (image or PDF).
 
         Args:
-            image_base64: Base64 encoded image data
+            file_base64: Base64 encoded file data (image or PDF)
             additional_context: Optional context to help with extraction
+            file_type: Optional file type hint (auto-detected if not provided)
 
         Returns:
             ExtractedReceipt: Extracted receipt data
 
         Raises:
-            ValueError: If image decoding or processing fails
+            ValueError: If file decoding or processing fails
+            FileProcessingError: If file type is unsupported or corrupted
             ValidationError: If extracted data doesn't match expected schema
         """
         start_time = time.time()
 
         try:
-            # Decode base64 image
-            image_data = base64.b64decode(image_base64)
+            # Convert string file type to enum if needed
+            if isinstance(file_type, str):
+                file_type = FileType.from_extension(file_type)
+
+            # Process file (handles PDF to image conversion if needed)
+            processed_file = await self.file_processor.process_file(
+                file_base64, file_type
+            )
+
+            # Log processing info
+            if processed_file.original_file_type.is_pdf:
+                logger.info(
+                    "Converted PDF to image for processing (pages: %s)",
+                    processed_file.processing_metadata.get("pdf_pages", "unknown"),
+                )
+
+            # Decode the processed image
+            image_data = base64.b64decode(processed_file.content)
             image = Image.open(BytesIO(image_data))
 
             # Build the prompt
@@ -88,14 +113,17 @@ class GeminiService:
             # Add processing metadata
             processing_time = time.time() - start_time
             logger.info(
-                "Successfully extracted receipt data in %.2f seconds",
+                "Successfully extracted receipt data from %s in %.2f seconds",
+                processed_file.original_file_type.value,
                 processing_time,
             )
 
             return receipt
 
+        except FileProcessingError:
+            raise
         except (OSError, ValueError) as e:
-            msg = f"Failed to decode or process image: {e}"
+            msg = f"Failed to decode or process file: {e}"
             raise ValueError(msg) from e
 
     def _build_extraction_prompt(self, additional_context: str | None) -> str:

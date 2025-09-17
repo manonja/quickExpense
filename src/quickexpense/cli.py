@@ -36,8 +36,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Supported image formats
-SUPPORTED_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+# Supported file formats (images and PDFs)
+SUPPORTED_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".pdf"}
 
 
 class CLIError(Exception):

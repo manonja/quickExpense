@@ -134,7 +134,9 @@ class ExtractedReceipt(BaseModel):
 class ReceiptExtractionRequest(BaseModel):
     """Request model for receipt extraction."""
 
-    image_base64: str = Field(..., description="Base64 encoded image data")
+    image_base64: str = Field(
+        ..., description="Base64 encoded file data (image or PDF)"
+    )
     category: str = Field(..., description="Expense category to assign")
     additional_context: str | None = Field(
         None,

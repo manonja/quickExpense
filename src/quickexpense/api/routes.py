@@ -118,10 +118,10 @@ async def extract_receipt(
     request: ReceiptExtractionRequest,
     gemini_service: GeminiServiceDep,
 ) -> ReceiptExtractionResponse:
-    """Extract expense data from a receipt image using Gemini AI.
+    """Extract expense data from a receipt file (image or PDF) using Gemini AI.
 
     Args:
-        request: Contains base64 encoded image and optional context
+        request: Contains base64 encoded file (image or PDF) and optional context
         gemini_service: Gemini AI service for receipt processing
 
     Returns:
@@ -131,9 +131,9 @@ async def extract_receipt(
         # Start timing
         start_time = time.time()
 
-        # Extract receipt data
+        # Extract receipt data (now supports both images and PDFs)
         receipt = await gemini_service.extract_receipt_data(
-            request.image_base64,
+            request.image_base64,  # Can be image or PDF base64
             request.additional_context,
         )
 

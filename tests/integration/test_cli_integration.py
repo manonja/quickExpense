@@ -62,12 +62,12 @@ def test_upload_nonexistent_file() -> None:
 def test_upload_invalid_format() -> None:
     """Test upload with invalid file format."""
     # Create a test file with unsupported format
-    test_file = Path("test.pdf")
+    test_file = Path("test.txt")
     test_file.write_text("test")
 
     try:
         result = subprocess.run(
-            ["uv", "run", "quickexpense", "upload", "test.pdf"],
+            ["uv", "run", "quickexpense", "upload", "test.txt"],
             capture_output=True,
             text=True,
             check=False,
