@@ -74,11 +74,17 @@ class MultiCategoryExpense(BaseModel):
 
     def calculate_total_deductible(self) -> Decimal:
         """Calculate total deductible amount from line items."""
-        return Decimal(str(sum(item.deductible_amount for item in self.categorized_line_items)))
+        return Decimal(
+            str(sum(item.deductible_amount for item in self.categorized_line_items))
+        )
 
     def calculate_line_items_total(self) -> Decimal:
         """Calculate total from line items for validation."""
-        return Decimal(str(sum(item.amount * item.quantity for item in self.categorized_line_items)))
+        return Decimal(
+            str(
+                sum(item.amount * item.quantity for item in self.categorized_line_items)
+            )
+        )
 
     def model_post_init(self, __context: Any) -> None:  # noqa: ANN401
         """Post-initialization validation and calculations."""

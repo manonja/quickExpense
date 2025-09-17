@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
+
+if TYPE_CHECKING:
+    from .enhanced_expense import CategorizedLineItem, MultiCategoryExpense
 
 
 class LineItem(BaseModel):
