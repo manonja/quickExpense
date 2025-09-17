@@ -1,24 +1,18 @@
-"""PDF to image conversion service using pdf2image."""
+"""PDF to image conversion service using PyMuPDF (fitz)."""
 
 from __future__ import annotations
 
 import base64
 import io
 import logging
-import tempfile
-from pathlib import Path
 from typing import Any
 
 try:
-    from pdf2image import convert_from_bytes
-    from pdf2image.exceptions import PDFPageCountError, PDFSyntaxError
-    from pypdf import PdfReader
+    import fitz  # PyMuPDF
 
     PDF_SUPPORT = True
 except ImportError:
     PDF_SUPPORT = False
-    PDFPageCountError = Exception
-    PDFSyntaxError = Exception
 
 from PIL import Image
 
@@ -36,13 +30,13 @@ class PDFConverterService:
         """Initialize PDF converter service."""
         if not PDF_SUPPORT:
             logger.warning(
-                "PDF support not available. Install with: pip install pdf2image pypdf"
+                "PDF support not available. Install with: pip install pymupdf"
             )
 
     def _ensure_pdf_support(self) -> None:
         """Check if PDF support is available."""
         if not PDF_SUPPORT:
-            msg = "PDF support not installed. Install with: pip install pdf2image pypdf"
+            msg = "PDF support not installed. Install with: pip install pymupdf"
             raise ImportError(msg)
 
     async def convert_pdf_to_image(
@@ -60,7 +54,7 @@ class PDFConverterService:
 
         Raises:
             ValueError: If PDF is invalid or page doesn't exist
-            ImportError: If PDF libraries not installed
+            ImportError: If PyMuPDF not installed
         """
         self._ensure_pdf_support()
 
@@ -71,19 +65,31 @@ class PDFConverterService:
             # Decode PDF
             pdf_bytes = base64.b64decode(pdf_base64)
 
-            # Convert PDF to images
-            images = convert_from_bytes(
-                pdf_bytes,
-                dpi=dpi,
-                first_page=page + 1,  # pdf2image uses 1-based indexing
-                last_page=page + 1,
-            )
+            # Open PDF with PyMuPDF
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
-            if not images:
-                msg = f"No image generated for page {page}"
+            if len(doc) == 0:
+                msg = "PDF contains no pages"
                 raise ValueError(msg)
 
-            image = images[0]
+            if page >= len(doc):
+                msg = f"Page {page} does not exist (PDF has {len(doc)} pages)"
+                raise ValueError(msg)
+
+            # Get the page
+            pdf_page = doc[page]
+
+            # Calculate matrix for desired DPI
+            # PyMuPDF default is 72 DPI, so scale factor = desired_dpi / 72
+            scale = dpi / 72.0
+            matrix = fitz.Matrix(scale, scale)
+
+            # Render page to pixmap
+            pixmap = pdf_page.get_pixmap(matrix=matrix)
+
+            # Convert to PIL Image
+            img_data = pixmap.tobytes("png")
+            image = Image.open(io.BytesIO(img_data))
 
             # Resize if too large while maintaining aspect ratio
             image.thumbnail(self.MAX_IMAGE_SIZE, Image.Resampling.LANCZOS)
@@ -93,17 +99,17 @@ class PDFConverterService:
             image.save(buffer, format="PNG", optimize=True)
             buffer.seek(0)
 
+            # Close resources
+            doc.close()
+
             # Return base64 encoded
             return base64.b64encode(buffer.read()).decode()
 
-        except PDFPageCountError as e:
-            msg = f"Invalid page number {page}"
-            raise ValueError(msg) from e
-        except PDFSyntaxError as e:
-            msg = "Invalid or corrupted PDF file"
-            raise ValueError(msg) from e
         except Exception as e:
-            logger.error(f"PDF conversion failed: {e}")
+            logger.error("PDF conversion failed: %s", e)
+            if "fitz" in str(type(e)):
+                msg = f"PyMuPDF error: {e}"
+                raise ValueError(msg) from e
             raise
 
     async def validate_pdf(self, pdf_base64: str) -> bool:
@@ -120,19 +126,21 @@ class PDFConverterService:
         try:
             pdf_bytes = base64.b64decode(pdf_base64)
 
-            # Try to read with pypdf
-            reader = PdfReader(io.BytesIO(pdf_bytes))
+            # Try to open with PyMuPDF
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
             # Check basic properties
-            if len(reader.pages) == 0:
+            if len(doc) == 0:
+                doc.close()
                 return False
 
             # Try to access first page
-            _ = reader.pages[0]
+            _ = doc[0]
+            doc.close()
 
             return True
-        except Exception as e:
-            logger.debug(f"PDF validation failed: {e}")
+        except Exception as e:  # noqa: BLE001
+            logger.debug("PDF validation failed: %s", e)
             return False
 
     async def get_pdf_page_count(self, pdf_base64: str) -> int:
@@ -151,8 +159,10 @@ class PDFConverterService:
 
         try:
             pdf_bytes = base64.b64decode(pdf_base64)
-            reader = PdfReader(io.BytesIO(pdf_bytes))
-            return len(reader.pages)
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            page_count = len(doc)
+            doc.close()
+            return page_count
         except Exception as e:
             msg = f"Failed to read PDF: {e}"
             raise ValueError(msg) from e
@@ -170,22 +180,25 @@ class PDFConverterService:
 
         try:
             pdf_bytes = base64.b64decode(pdf_base64)
-            reader = PdfReader(io.BytesIO(pdf_bytes))
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
-            metadata = {}
-            if reader.metadata:
-                # Extract common metadata fields
-                for key, value in reader.metadata.items():
-                    if key.startswith("/"):
-                        key = key[1:]  # Remove leading slash
-                    metadata[key] = str(value) if value else None
+            # Extract metadata
+            metadata = doc.metadata
+            metadata["page_count"] = len(doc)
+            metadata["is_encrypted"] = doc.is_encrypted
+            metadata["needs_pass"] = doc.needs_pass
 
-            metadata["page_count"] = len(reader.pages)
-            metadata["is_encrypted"] = reader.is_encrypted
+            # Add page information
+            if len(doc) > 0:
+                first_page = doc[0]
+                metadata["page_width"] = first_page.rect.width
+                metadata["page_height"] = first_page.rect.height
 
+            doc.close()
             return metadata
-        except Exception as e:
-            logger.error(f"Failed to extract PDF metadata: {e}")
+
+        except Exception as e:  # noqa: BLE001
+            logger.error("Failed to extract PDF metadata: %s", e)
             return {"error": str(e)}
 
     async def convert_pdf_all_pages(
@@ -202,9 +215,6 @@ class PDFConverterService:
         """
         self._ensure_pdf_support()
 
-        if dpi is None:
-            dpi = self.DEFAULT_DPI
-
         page_count = await self.get_pdf_page_count(pdf_base64)
         images = []
 
@@ -212,8 +222,8 @@ class PDFConverterService:
             try:
                 image_base64 = await self.convert_pdf_to_image(pdf_base64, page, dpi)
                 images.append(image_base64)
-            except Exception as e:
-                logger.error(f"Failed to convert page {page}: {e}")
+            except Exception as e:  # noqa: BLE001
+                logger.error("Failed to convert page %s: %s", page, e)
                 # Continue with other pages
 
         return images

@@ -15,12 +15,12 @@ This document describes the implementation of the universal file processing infr
    - Error handling for corrupted files
 
 2. **PDFConverterService** (`src/quickexpense/services/pdf_converter.py`)
-   - PDF to image conversion using pdf2image
+   - PDF to image conversion using PyMuPDF (fitz)
    - High-quality rendering at 300 DPI
    - Multi-page PDF support
    - Metadata extraction from PDFs
 
-3. **FileType Enum** 
+3. **FileType Enum**
    - Comprehensive type system for supported formats
    - Helper methods for type checking
    - MIME type and extension mappings
@@ -90,7 +90,7 @@ MAGIC_BYTES = {
 
 ### PDF Conversion Process
 
-1. Validate PDF integrity using pypdf
+1. Validate PDF integrity using PyMuPDF
 2. Convert PDF to high-resolution PNG (300 DPI)
 3. Resize if needed while maintaining aspect ratio
 4. Return base64 encoded PNG for AI processing
@@ -104,9 +104,10 @@ The system handles various error scenarios:
 
 ### Performance Considerations
 
-- PDF conversion is CPU-intensive; consider caching for repeated processing
+- PyMuPDF provides faster PDF processing than alternatives
 - Large PDFs are handled page-by-page to avoid memory issues
 - Image resizing maintains quality while reducing processing time
+- No system dependencies required (pure Python)
 
 ## Testing
 
@@ -132,21 +133,14 @@ uv run python scripts/test_pdf_conversion.py sample.pdf
 ## System Requirements
 
 ### PDF Support
-PDF processing requires system libraries:
+PDF processing uses PyMuPDF (pure Python):
 
-**macOS:**
+**All Platforms:**
 ```bash
-brew install poppler
+pip install pymupdf
 ```
 
-**Ubuntu/Debian:**
-```bash
-sudo apt-get install poppler-utils
-```
-
-**Windows:**
-- Download poppler binaries from: https://github.com/oschwartz10612/poppler-windows/releases
-- Add to PATH
+No additional system libraries required!
 
 ## Future Enhancements
 
@@ -180,7 +174,7 @@ Common error messages users might encounter:
 - "Unsupported file format" - File type not recognized
 - "File too large" - File exceeds 50MB limit
 - "Invalid or corrupted PDF" - PDF cannot be read
-- "PDF support not installed" - Missing system dependencies
+- "PDF support not installed" - Missing PyMuPDF package
 
 ## Monitoring
 
