@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
+if TYPE_CHECKING:
+    from .enhanced_expense import CategorizedLineItem, MultiCategoryExpense
+
 
 class LineItem(BaseModel):
-    """Represents a line item in an expense."""
+    """Basic line item for backward compatibility."""
 
     description: str = Field(..., min_length=1)
     amount: Decimal = Field(..., gt=0, decimal_places=2)
@@ -24,14 +27,29 @@ class LineItem(BaseModel):
             return Decimal(str(v))
         return Decimal(v) if not isinstance(v, Decimal) else v
 
+    def to_categorized(
+        self, category: str, deductibility_percentage: int = 100, **kwargs: Any
+    ) -> CategorizedLineItem:
+        """Convert basic line item to categorized line item."""
+        from .enhanced_expense import CategorizedLineItem
+
+        return CategorizedLineItem(
+            description=self.description,
+            amount=self.amount,
+            quantity=self.quantity,
+            category=category,
+            deductibility_percentage=deductibility_percentage,
+            **kwargs,
+        )
+
 
 class Expense(BaseModel):
-    """Represents an expense to be submitted to QuickBooks."""
+    """Single-category expense model for backward compatibility."""
 
     vendor_name: str = Field(..., min_length=1, max_length=100)
     amount: Decimal = Field(..., gt=0, decimal_places=2)
     date: date
-    currency: str = Field(default="USD", pattern="^[A-Z]{3}$")
+    currency: str = Field(default="CAD", pattern="^[A-Z]{3}$")
     category: str = Field(..., min_length=1)
     tax_amount: Decimal = Field(default=Decimal("0.00"), ge=0, decimal_places=2)
     line_items: list[LineItem] | None = None
@@ -53,6 +71,42 @@ class Expense(BaseModel):
             raise ValueError(msg)
         return v
 
+    def to_multi_category(
+        self, deductibility_percentage: int = 100, **kwargs: Any
+    ) -> MultiCategoryExpense:
+        """Convert single-category expense to multi-category format."""
+        from .enhanced_expense import CategorizedLineItem, MultiCategoryExpense
+
+        # Create single categorized line item
+        main_item = CategorizedLineItem(
+            description=self.category,
+            amount=self.amount - self.tax_amount,
+            category=self.category,
+            deductibility_percentage=deductibility_percentage,
+            **kwargs,
+        )
+
+        categorized_items = [main_item]
+
+        # Add tax as separate line item if present
+        if self.tax_amount > 0:
+            tax_item = CategorizedLineItem(
+                description="Tax",
+                amount=self.tax_amount,
+                category="Tax-GST",
+                deductibility_percentage=100,
+                tax_treatment="input_tax_credit",
+            )
+            categorized_items.append(tax_item)
+
+        return MultiCategoryExpense(
+            vendor_name=self.vendor_name,
+            date=self.date,
+            total_amount=self.amount,
+            currency=self.currency,
+            categorized_line_items=categorized_items,
+        )
+
     model_config = {
         "json_schema_extra": {
             "examples": [
@@ -60,7 +114,7 @@ class Expense(BaseModel):
                     "vendor_name": "Office Depot",
                     "amount": 45.99,
                     "date": "2024-01-15",
-                    "currency": "USD",
+                    "currency": "CAD",
                     "category": "Office Supplies",
                     "tax_amount": 3.42,
                 }

@@ -254,7 +254,7 @@ uv run pre-commit install --hook-type commit-msg
 ## CLI Reference
 
 | Command | Description | Example |
-|---------|-------------|---------|  
+|---------|-------------|---------|
 | `quickexpense auth` | Authenticate with QuickBooks | `quickexpense auth --force` |
 | `quickexpense status` | Check system status | `quickexpense status` |
 | `quickexpense upload` | Process receipt & create expense | `quickexpense upload receipt.jpg` |
