@@ -1,6 +1,6 @@
 """Integration test for CLI functionality."""
 
-# ruff: noqa: S607
+# ruff: noqa: S603, S607
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 def test_cli_help() -> None:
     """Test that CLI help works."""
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         ["uv", "run", "quickexpense", "--help"],
         capture_output=True,
         text=True,
@@ -23,7 +23,7 @@ def test_cli_help() -> None:
 
 def test_cli_version() -> None:
     """Test that CLI version works."""
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         ["uv", "run", "quickexpense", "--version"],
         capture_output=True,
         text=True,
@@ -35,7 +35,7 @@ def test_cli_version() -> None:
 
 def test_upload_help() -> None:
     """Test that upload command help works."""
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         ["uv", "run", "quickexpense", "upload", "--help"],
         capture_output=True,
         text=True,
@@ -49,7 +49,7 @@ def test_upload_help() -> None:
 
 def test_upload_nonexistent_file() -> None:
     """Test upload with non-existent file."""
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         ["uv", "run", "quickexpense", "upload", "nonexistent.jpg"],
         capture_output=True,
         text=True,
@@ -62,12 +62,12 @@ def test_upload_nonexistent_file() -> None:
 def test_upload_invalid_format() -> None:
     """Test upload with invalid file format."""
     # Create a test file with unsupported format
-    test_file = Path("test.pdf")
+    test_file = Path("test.txt")
     test_file.write_text("test")
 
     try:
-        result = subprocess.run(  # noqa: S603
-            ["uv", "run", "quickexpense", "upload", "test.pdf"],
+        result = subprocess.run(
+            ["uv", "run", "quickexpense", "upload", "test.txt"],
             capture_output=True,
             text=True,
             check=False,
