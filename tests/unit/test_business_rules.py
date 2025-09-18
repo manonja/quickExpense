@@ -33,6 +33,7 @@ class TestRuleConditions:
             vendor_patterns=["*hotel*"],
             amount_min=Decimal("50.00"),
             amount_max=Decimal("500.00"),
+            description_regex=None,
         )
 
         assert conditions.description_keywords == ["hotel", "room"]
@@ -49,6 +50,7 @@ class TestRuleConditions:
                 description_keywords=["test"],
                 amount_min=Decimal("100.00"),
                 amount_max=Decimal("50.00"),
+                description_regex=None,
             )
 
     def test_decimal_conversion(self):
@@ -57,6 +59,7 @@ class TestRuleConditions:
             description_keywords=["test"],
             amount_min=50.0,
             amount_max=500.0,
+            description_regex=None,
         )
 
         assert isinstance(conditions.amount_min, Decimal)
@@ -75,9 +78,6 @@ class TestRuleActions:
             qb_account="Travel - Lodging",
             tax_treatment=TaxTreatment.STANDARD,
             confidence_boost=0.1,
-            compliance_note=None,
-            account_mapping=None,
-            business_rule_id=None,
         )
 
         assert actions.category == "Travel-Lodging"
@@ -93,9 +93,6 @@ class TestRuleActions:
                 category="Test",
                 deductibility_percentage=150,  # Invalid: > 100
                 qb_account="Test Account",
-                compliance_note=None,
-                account_mapping=None,
-                business_rule_id=None,
             )
 
         with pytest.raises(ValueError):
@@ -103,9 +100,6 @@ class TestRuleActions:
                 category="Test",
                 deductibility_percentage=-10,  # Invalid: < 0
                 qb_account="Test Account",
-                compliance_note=None,
-                account_mapping=None,
-                business_rule_id=None,
             )
 
 
@@ -135,9 +129,6 @@ class TestBusinessRule:
                 deductibility_percentage=100,
                 qb_account="Travel - Lodging",
                 confidence_boost=0.2,
-                compliance_note=None,
-                account_mapping=None,
-                business_rule_id=None,
             ),
         )
 
@@ -164,9 +155,6 @@ class TestBusinessRule:
                 deductibility_percentage=50,
                 qb_account="Travel - Meals & Entertainment",
                 tax_treatment=TaxTreatment.MEALS_LIMITATION,
-                compliance_note=None,
-                account_mapping=None,
-                business_rule_id=None,
             ),
         )
 

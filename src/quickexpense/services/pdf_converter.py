@@ -183,7 +183,8 @@ class PDFConverterService:
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
             # Extract metadata
-            metadata = doc.metadata
+            raw_metadata = doc.metadata
+            metadata: dict[str, Any] = dict(raw_metadata) if raw_metadata else {}
             metadata["page_count"] = len(doc)
             metadata["is_encrypted"] = doc.is_encrypted
             metadata["needs_pass"] = doc.needs_pass

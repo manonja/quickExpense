@@ -41,7 +41,11 @@ class LineItem(BaseModel):
             deductibility_percentage=deductibility_percentage,
             account_mapping=kwargs.get("account_mapping"),
             business_rule_id=kwargs.get("business_rule_id"),
-            **{k: v for k, v in kwargs.items() if k not in {"account_mapping", "business_rule_id"}},
+            **{
+                k: v
+                for k, v in kwargs.items()
+                if k not in {"account_mapping", "business_rule_id"}
+            },
         )
 
 

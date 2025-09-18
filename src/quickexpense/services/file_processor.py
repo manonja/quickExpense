@@ -102,7 +102,7 @@ class FileProcessorService:
 
     def __init__(self) -> None:
         """Initialize file processor service."""
-        self._pdf_converter = None
+        self._pdf_converter: Any = None
 
     @property
     def pdf_converter(self) -> Any:
