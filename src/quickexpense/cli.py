@@ -651,7 +651,7 @@ class QuickExpenseCLI:
             # Import and run the OAuth script functionality
             import subprocess
 
-            result = subprocess.run(  # noqa: ASYNC221, S603, S607
+            result = subprocess.run(  # noqa: ASYNC221, S603
                 ["uv", "run", "python", "scripts/connect_quickbooks_cli.py"],
                 capture_output=False,
                 text=True,
