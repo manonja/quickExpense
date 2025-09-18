@@ -8,6 +8,7 @@ import base64
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,10 +17,16 @@ from pydantic import ValidationError
 
 from quickexpense.core.config import get_settings
 from quickexpense.models import Expense, ReceiptExtractionRequest
+from quickexpense.models.business_rules import ExpenseContext
+from quickexpense.models.enhanced_expense import (
+    CategorizedLineItem,
+    MultiCategoryExpense,
+)
 from quickexpense.models.quickbooks_oauth import (
     QuickBooksOAuthConfig,
     QuickBooksTokenResponse,
 )
+from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.services.gemini import GeminiService
 from quickexpense.services.quickbooks import (
     QuickBooksClient,
@@ -62,6 +69,7 @@ class QuickExpenseCLI:
         self.quickbooks_service: QuickBooksService | None = None
         self.quickbooks_client: QuickBooksClient | None = None
         self.oauth_manager: QuickBooksOAuthManager | None = None
+        self.business_rules_engine: BusinessRuleEngine | None = None
 
     async def initialize_services(self) -> None:
         """Initialize API services with proper authentication."""
@@ -133,7 +141,7 @@ class QuickExpenseCLI:
                 )
 
                 # Set up token save callback
-                def save_tokens_callback(tokens: Any) -> None:
+                def save_tokens_callback(tokens: Any) -> None:  # noqa: ANN401
                     """Save updated tokens back to file."""
                     updated_data = {
                         "access_token": tokens.access_token,
@@ -169,6 +177,12 @@ class QuickExpenseCLI:
 
             # Initialize QuickBooks service
             self.quickbooks_service = QuickBooksService(client=self.quickbooks_client)
+
+            # Initialize Business Rules Engine
+            config_path = (
+                Path(__file__).parent.parent.parent / "config" / "business_rules.json"
+            )
+            self.business_rules_engine = BusinessRuleEngine(config_path)
 
             logger.info("Services initialized successfully")
 
@@ -207,12 +221,57 @@ class QuickExpenseCLI:
             )
             raise FileValidationError(msg)
 
+    def _create_categorized_items(
+        self, receipt_data: Any, rule_results: list[Any]  # noqa: ANN401
+    ) -> list[CategorizedLineItem]:
+        """Create categorized line items from receipt and rule results."""
+        categorized_items = []
+        for line_item, rule_result in zip(
+            receipt_data.line_items, rule_results, strict=False
+        ):
+            categorized_item = CategorizedLineItem(
+                description=line_item.description,
+                amount=line_item.total_price,  # Use total_price for receipt
+                quantity=int(line_item.quantity),  # Convert Decimal to int
+                category=rule_result.category,
+                deductibility_percentage=rule_result.deductibility_percentage,
+                account_mapping=rule_result.qb_account,
+                tax_treatment=rule_result.tax_treatment.value,
+                confidence_score=rule_result.confidence_score,
+                business_rule_id=rule_result.business_rule_id,
+            )
+            categorized_items.append(categorized_item)
+        return categorized_items
+
+    def _create_enhanced_expense(
+        self,
+        receipt_data: Any,  # noqa: ANN401
+        categorized_items: list[CategorizedLineItem],
+        rule_results: list[Any],  # noqa: ANN401
+    ) -> MultiCategoryExpense:
+        """Create enhanced multi-category expense."""
+        return MultiCategoryExpense(
+            vendor_name=receipt_data.vendor_name,
+            date=receipt_data.transaction_date,
+            total_amount=receipt_data.total_amount,
+            currency=receipt_data.currency,
+            categorized_line_items=categorized_items,
+            business_rules_applied=[
+                rule_result.business_rule_id or "fallback"
+                for rule_result in rule_results
+            ],
+            payment_method=receipt_data.payment_method.value,
+            payment_account="Chequing",  # Default payment account
+            total_deductible_amount=None,  # Will be auto-calculated
+            foreign_exchange_rate=None,  # No FX for now
+        )
+
     async def process_receipt(
         self,
         file_path: Path,
         dry_run: bool = False,  # noqa: FBT001, FBT002
     ) -> dict[str, Any]:
-        """Process a single receipt file."""
+        """Process a single receipt file with business rules categorization."""
         logger.info("Processing receipt: %s", file_path)
 
         try:
@@ -220,7 +279,7 @@ class QuickExpenseCLI:
             image_data = file_path.read_bytes()
             image_base64 = base64.b64encode(image_data).decode("utf-8")
 
-            # Extract receipt data
+            # Extract receipt data using Gemini AI
             print(f"\nExtracting data from receipt: {file_path.name}")  # noqa: T201
             receipt_request = ReceiptExtractionRequest(
                 image_base64=image_base64,
@@ -237,12 +296,73 @@ class QuickExpenseCLI:
                 receipt_request.additional_context,
             )
 
-            # Convert to expense
-            expense_dict = receipt_data.to_expense(receipt_request.category)
+            # Apply business rules to categorize line items
+            print("Applying business rules for categorization...")  # noqa: T201
+            if not self.business_rules_engine:
+                raise APIError("Business rules engine not initialized")
 
+            # Create expense context
+            expense_context = ExpenseContext(
+                vendor_name=receipt_data.vendor_name,
+                transaction_date=datetime.combine(
+                    receipt_data.transaction_date, datetime.min.time()
+                ),
+                total_amount=receipt_data.total_amount,
+                currency=receipt_data.currency,
+                payment_method=receipt_data.payment_method.value,
+                business_purpose="Business expense",
+                location=receipt_data.vendor_address,
+            )
+
+            # Categorize line items using business rules
+            rule_results = self.business_rules_engine.categorize_line_items(
+                receipt_data.line_items, expense_context
+            )
+
+            # Create categorized line items and enhanced expense
+            categorized_items = self._create_categorized_items(
+                receipt_data, rule_results
+            )
+            enhanced_expense = self._create_enhanced_expense(
+                receipt_data, categorized_items, rule_results
+            )
+
+            # Create result structure
             result: dict[str, Any] = {
                 "receipt": receipt_data.model_dump(),
-                "expense": expense_dict,
+                "enhanced_expense": enhanced_expense.model_dump(),
+                "business_rules": {
+                    "rule_applications": [
+                        {
+                            "line_item": line_item.description,
+                            "rule_applied": (
+                                rule_result.rule_applied.name
+                                if rule_result.rule_applied
+                                else "Fallback Rule"
+                            ),
+                            "category": rule_result.category,
+                            "deductibility_percentage": (
+                                rule_result.deductibility_percentage
+                            ),
+                            "qb_account": rule_result.qb_account,
+                            "tax_treatment": rule_result.tax_treatment.value,
+                            "confidence_score": rule_result.confidence_score,
+                            "is_fallback": rule_result.is_fallback,
+                        }
+                        for line_item, rule_result in zip(
+                            receipt_data.line_items, rule_results, strict=False
+                        )
+                    ],
+                    "total_deductible_amount": float(
+                        enhanced_expense.total_deductible_amount or 0
+                    ),
+                    "deductible_by_category": {
+                        category: float(amount)
+                        for category, amount in (
+                            enhanced_expense.get_deductible_amount_by_category().items()
+                        )
+                    },
+                },
                 "file": str(file_path),
             }
 
@@ -250,12 +370,27 @@ class QuickExpenseCLI:
                 result["dry_run"] = True
                 result["message"] = "DRY RUN - No expense created in QuickBooks"
             else:
-                # Create expense in QuickBooks
+                # For now, convert enhanced expense back to simple expense for QB
+                # TODO: Implement multi-category expense support in QB service
+                #   Need to update QB service to handle multi-category expenses
+                print("\nCreating expense in QuickBooks...")  # noqa: T201
                 if not self.quickbooks_service:
                     raise APIError("QuickBooks service not initialized")
 
-                print("\nCreating expense in QuickBooks...")  # noqa: T201
-                expense = Expense(**expense_dict)
+                # Use the first categorized item for primary category
+                primary_item = categorized_items[0] if categorized_items else None
+
+                expense = Expense(
+                    vendor_name=enhanced_expense.vendor_name,
+                    amount=enhanced_expense.total_amount,
+                    date=enhanced_expense.date,
+                    currency=enhanced_expense.currency,
+                    category=(
+                        primary_item.category
+                        if primary_item
+                        else "General Business Expense"
+                    ),
+                )
                 qb_response = await self.quickbooks_service.create_expense(expense)
                 result["quickbooks_response"] = qb_response
                 purchase_id = qb_response.get("Purchase", {}).get("Id", "Unknown")
@@ -287,7 +422,8 @@ class QuickExpenseCLI:
         except httpx.HTTPStatusError as e:
             logger.error("HTTP error: %s", e)
             # Check for specific authentication errors
-            if e.response.status_code == 401:  # HTTP Unauthorized
+            http_unauthorized = 401
+            if e.response.status_code == http_unauthorized:
                 response_text = str(e.response.text)
                 if (
                     "Token expired" in response_text
@@ -308,9 +444,10 @@ class QuickExpenseCLI:
         if output_format == "json":
             return json.dumps(result, indent=2, default=str)
 
-        # Human-readable format
+        # Human-readable format with business rules information
         receipt = result.get("receipt", {})
-        expense = result.get("expense", {})
+        enhanced_expense = result.get("enhanced_expense", {})
+        business_rules = result.get("business_rules", {})
         lines = []
 
         if result.get("dry_run"):
@@ -324,28 +461,73 @@ class QuickExpenseCLI:
                 f"Date: {receipt.get('transaction_date', 'Unknown')}",
                 f"Total Amount: ${receipt.get('total_amount', '0.00')}",
                 f"Tax: ${receipt.get('tax_amount', '0.00')}",
-                f"Currency: {receipt.get('currency', 'USD')}",
+                f"Currency: {receipt.get('currency', 'CAD')}",
             ]
         )
 
-        if receipt.get("line_items"):
-            lines.append("\nItems:")
-            lines.extend(
-                (
-                    f"  - {item.get('description', 'Unknown')} "
-                    f"(${item.get('total_price', '0.00')})"
+        # Show line items with business rules categorization
+        rule_applications = business_rules.get("rule_applications", [])
+        if rule_applications:
+            lines.append("\n=== Business Rules Categorization ===")
+            for app in rule_applications:
+                lines.extend(
+                    [
+                        f"\n📄 {app.get('line_item', 'Unknown Item')}",
+                        f"   Rule Applied: {app.get('rule_applied', 'Unknown')}",
+                        f"   Category: {app.get('category', 'Unknown')}",
+                        f"   QuickBooks Account: {app.get('qb_account', 'Unknown')}",
+                        f"   Tax Deductible: {app.get('deductibility_percentage', 0)}%",
+                        f"   Tax Treatment: {app.get('tax_treatment', 'standard')}",
+                        f"   Confidence: {app.get('confidence_score', 0):.1%}",
+                        (
+                            "   ⚠️  Fallback Rule Applied"
+                            if app.get("is_fallback")
+                            else "   ✅ Matched Rule"
+                        ),
+                    ]
                 )
-                for item in receipt["line_items"]
+
+        # Show tax summary
+        if business_rules:
+            total_deductible = float(business_rules.get("total_deductible_amount", 0))
+            total_amount = float(enhanced_expense.get("total_amount", 0))
+            deductible_percentage = (
+                (total_deductible / total_amount * 100) if total_amount > 0 else 0
             )
 
-        lines.extend(
-            [
-                "\n=== Expense Data ===",
-                f"Category: {expense.get('category', 'General')}",
-                f"Description: {expense.get('description', 'N/A')}",
-                f"Payment Account: {expense.get('payment_account', 'Unknown')}",
-            ]
-        )
+            lines.extend(
+                [
+                    "\n=== Tax Deductibility Summary ===",
+                    f"Total Amount: ${total_amount:.2f}",
+                    f"Deductible Amount: ${total_deductible:.2f} "
+                    f"({deductible_percentage:.1f}%)",
+                ]
+            )
+
+            # Show breakdown by category
+            deductible_by_category = business_rules.get("deductible_by_category", {})
+            if deductible_by_category:
+                lines.append("\nDeductible by Category:")
+                for category, amount in deductible_by_category.items():
+                    lines.append(f"  • {category}: ${amount:.2f}")
+
+        # Show enhanced expense summary
+        if enhanced_expense:
+            lines.extend(
+                [
+                    "\n=== Enhanced Expense Summary ===",
+                    f"Vendor: {enhanced_expense.get('vendor_name', 'Unknown')}",
+                    f"Categories: {len(enhanced_expense.get('categorized_line_items', []))} "
+                    f"items across {len(set(
+                        item.get('category', '') 
+                        for item in enhanced_expense.get('categorized_line_items', [])
+                    ))} categories",
+                    f"Business Rules Applied: "
+                    f"{len(enhanced_expense.get('business_rules_applied', []))}",
+                    f"Payment Method: "
+                    f"{enhanced_expense.get('payment_method', 'unknown')}",
+                ]
+            )
 
         if result.get("message"):
             lines.extend(["\n=== Result ===", result["message"]])
@@ -485,7 +667,8 @@ class QuickExpenseCLI:
                     # Try a simple API call
                     accounts = await self.quickbooks_service.get_expense_accounts()
                     print(
-                        f"✅ QuickBooks API: Connected ({len(accounts)} expense accounts)"
+                        f"✅ QuickBooks API: Connected "
+                        f"({len(accounts)} expense accounts)"
                     )
                 else:
                     print("❌ QuickBooks API: Service not initialized")  # noqa: T201
@@ -504,6 +687,30 @@ class QuickExpenseCLI:
             except Exception as e:
                 print(f"⚠️  Gemini AI: Error checking configuration ({e})")  # noqa: T201
 
+            # Check Business Rules Engine
+            print("\n📋 Testing Business Rules Engine...")  # noqa: T201
+            try:
+                if self.business_rules_engine:
+                    rule_count = (
+                        len(self.business_rules_engine.config.rules)
+                        if self.business_rules_engine.config
+                        else 0
+                    )
+                    print(f"✅ Business Rules: Loaded ({rule_count} rules)")
+
+                    # Validate configuration
+                    errors = self.business_rules_engine.validate_configuration()
+                    if errors:
+                        print(f"⚠️  Configuration warnings: {len(errors)}")  # noqa: T201
+                        for error in errors[:3]:  # Show first 3 errors
+                            print(f"   - {error}")  # noqa: T201
+                    else:
+                        print("✅ Configuration: Valid")  # noqa: T201
+                else:
+                    print("❌ Business Rules: Engine not initialized")  # noqa: T201
+            except Exception as e:
+                print(f"❌ Business Rules: Configuration error ({e})")  # noqa: T201
+
         except Exception as e:
             print(f"\n❌ Status check error: {e}")  # noqa: T201
             sys.exit(1)
@@ -514,15 +721,22 @@ class QuickExpenseCLI:
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
     parser = argparse.ArgumentParser(
-        description="QuickExpense CLI - Process receipts into QuickBooks",
+        description="QuickExpense CLI - Process receipts with AI and business rules",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   quickexpense upload receipt.jpeg
-  quickexpense upload receipt.png --dry-run
-  quickexpense upload receipt.jpg --output json
+  quickexpense upload marriott.pdf --dry-run
+  quickexpense upload receipt.png --output json
 
-Supported formats: JPEG, PNG, GIF, BMP, WebP
+Features:
+  • AI-powered receipt extraction (Gemini)
+  • Business rules for automatic categorization
+  • Canadian tax compliance (CRA Section 67.1)
+  • Multi-category expense support
+  • PDF and image processing
+
+Supported formats: JPEG, PNG, GIF, BMP, WebP, PDF
         """,
     )
 

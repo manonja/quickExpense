@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from quickexpense.models.business_rules import (
     BusinessRule,
@@ -16,9 +16,6 @@ from quickexpense.models.business_rules import (
     RuleApplication,
     RuleResult,
 )
-
-if TYPE_CHECKING:
-    from quickexpense.models.expense import LineItem
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +239,7 @@ class BusinessRuleEngine:
 
     def categorize_line_items(
         self,
-        line_items: list[LineItem],
+        line_items: list[Any],  # Accept both expense.LineItem and receipt.LineItem
         context: ExpenseContext | None = None,
     ) -> list[RuleResult]:
         """Categorize multiple line items using business rules."""
@@ -252,10 +249,24 @@ class BusinessRuleEngine:
             # Extract vendor from context if available
             vendor_name = context.vendor_name if context else None
 
+            # Handle both expense.LineItem and receipt.LineItem models
+            if hasattr(item, "amount"):
+                # expense.LineItem model: amount + quantity
+                total_amount = item.amount * item.quantity
+            elif hasattr(item, "total_price"):
+                # receipt.LineItem model: total_price
+                total_amount = item.total_price
+            else:
+                # Fallback: try to extract amount from item
+                logger.warning("Unknown LineItem type, attempting fallback")
+                total_amount = getattr(
+                    item, "amount", getattr(item, "total_price", Decimal("0"))
+                )
+
             result = self.categorize_line_item(
                 description=item.description,
                 vendor_name=vendor_name,
-                amount=item.amount * item.quantity,  # Total amount for this line
+                amount=total_amount,
                 context=context,
             )
 
@@ -284,6 +295,9 @@ class BusinessRuleEngine:
                 qb_account=result.qb_account,
                 tax_treatment=result.tax_treatment,
                 requires_manual_review=result.requires_manual_review,
+                compliance_note=None,
+                account_mapping=None,
+                business_rule_id=None,
             )
 
         application = RuleApplication(
@@ -311,7 +325,7 @@ class BusinessRuleEngine:
             return {"total_applications": 0}
 
         total_applications = len(self.rule_history)
-        rule_usage = {}
+        rule_usage: dict[str, int] = {}
         fallback_count = 0
 
         for application in self.rule_history:

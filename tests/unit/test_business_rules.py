@@ -75,6 +75,9 @@ class TestRuleActions:
             qb_account="Travel - Lodging",
             tax_treatment=TaxTreatment.STANDARD,
             confidence_boost=0.1,
+            compliance_note=None,
+            account_mapping=None,
+            business_rule_id=None,
         )
 
         assert actions.category == "Travel-Lodging"
@@ -90,6 +93,9 @@ class TestRuleActions:
                 category="Test",
                 deductibility_percentage=150,  # Invalid: > 100
                 qb_account="Test Account",
+                compliance_note=None,
+                account_mapping=None,
+                business_rule_id=None,
             )
 
         with pytest.raises(ValueError):
@@ -97,6 +103,9 @@ class TestRuleActions:
                 category="Test",
                 deductibility_percentage=-10,  # Invalid: < 0
                 qb_account="Test Account",
+                compliance_note=None,
+                account_mapping=None,
+                business_rule_id=None,
             )
 
 
@@ -110,17 +119,25 @@ class TestBusinessRule:
             id="hotel_accommodation",
             priority=100,
             name="Hotel Accommodation",
+            description="Hotel accommodation charges",
             conditions=RuleConditions(
                 description_keywords=["room charge", "accommodation"],
+                description_patterns=[],
+                description_regex=None,
                 vendor_patterns=["*hotel*", "*inn*"],
+                vendor_keywords=[],
                 amount_min=Decimal("30.00"),
                 amount_max=Decimal("1000.00"),
+                category_hints=[],
             ),
             actions=RuleActions(
                 category="Travel-Lodging",
                 deductibility_percentage=100,
                 qb_account="Travel - Lodging",
                 confidence_boost=0.2,
+                compliance_note=None,
+                account_mapping=None,
+                business_rule_id=None,
             ),
         )
 
@@ -131,15 +148,25 @@ class TestBusinessRule:
             id="restaurant_meals",
             priority=90,
             name="Restaurant Meals",
+            description="Restaurant and meal expenses",
             conditions=RuleConditions(
                 description_keywords=["restaurant", "meal", "dining"],
+                description_patterns=[],
+                description_regex=None,
                 vendor_patterns=["*restaurant*", "*cafe*"],
+                vendor_keywords=[],
+                amount_min=None,
+                amount_max=None,
+                category_hints=[],
             ),
             actions=RuleActions(
                 category="Travel-Meals",
                 deductibility_percentage=50,
                 qb_account="Travel - Meals & Entertainment",
                 tax_treatment=TaxTreatment.MEALS_LIMITATION,
+                compliance_note=None,
+                account_mapping=None,
+                business_rule_id=None,
             ),
         )
 
@@ -363,7 +390,14 @@ class TestBusinessRuleEngine:
             ),
         ]
 
-        context = ExpenseContext(vendor_name="Marriott Hotel")
+        context = ExpenseContext(
+            vendor_name="Marriott Hotel",
+            transaction_date=None,
+            total_amount=None,
+            payment_method=None,
+            business_purpose=None,
+            location=None,
+        )
         results = rule_engine.categorize_line_items(line_items, context)
 
         assert len(results) == 3
@@ -476,8 +510,12 @@ class TestMarriottHotelBillScenario:
         """Create expense context for Marriott hotel."""
         return ExpenseContext(
             vendor_name="Courtyard by Marriott",
+            transaction_date=None,
             total_amount=Decimal("237.17"),
             currency="CAD",
+            payment_method=None,
+            business_purpose=None,
+            location=None,
         )
 
     def test_marriott_bill_categorization(self, marriott_line_items, marriott_context):

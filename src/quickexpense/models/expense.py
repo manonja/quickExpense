@@ -39,7 +39,9 @@ class LineItem(BaseModel):
             quantity=self.quantity,
             category=category,
             deductibility_percentage=deductibility_percentage,
-            **kwargs,
+            account_mapping=kwargs.get("account_mapping"),
+            business_rule_id=kwargs.get("business_rule_id"),
+            **{k: v for k, v in kwargs.items() if k not in {"account_mapping", "business_rule_id"}},
         )
 
 
@@ -96,6 +98,8 @@ class Expense(BaseModel):
                 category="Tax-GST",
                 deductibility_percentage=100,
                 tax_treatment="input_tax_credit",
+                account_mapping=None,
+                business_rule_id=None,
             )
             categorized_items.append(tax_item)
 
@@ -105,6 +109,9 @@ class Expense(BaseModel):
             total_amount=self.amount,
             currency=self.currency,
             categorized_line_items=categorized_items,
+            total_deductible_amount=None,
+            foreign_exchange_rate=None,
+            payment_account=None,
         )
 
     model_config = {
