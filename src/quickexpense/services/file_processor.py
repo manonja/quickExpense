@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import logging
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
@@ -89,8 +89,12 @@ class CorruptedFileError(FileProcessingError):
 class FileProcessorService:
     """Service for detecting and processing various file types."""
 
+    # Constants
+    MIN_FILE_SIZE = 100  # Minimum file size in bytes
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # Maximum file size (50MB)
+
     # Magic bytes for file type detection
-    MAGIC_BYTES = {
+    MAGIC_BYTES: ClassVar[dict[bytes, FileType]] = {
         b"\xff\xd8\xff": FileType.JPEG,
         b"\x89PNG\r\n\x1a\n": FileType.PNG,
         b"GIF87a": FileType.GIF,
@@ -105,7 +109,7 @@ class FileProcessorService:
         self._pdf_converter: Any = None
 
     @property
-    def pdf_converter(self) -> Any:
+    def pdf_converter(self) -> Any:  # noqa: ANN401
         """Lazy load PDF converter to avoid circular imports."""
         if self._pdf_converter is None:
             from .pdf_converter import PDFConverterService
@@ -119,7 +123,7 @@ class FileProcessorService:
             # Assume base64 encoded
             try:
                 file_content = base64.b64decode(file_content)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("Failed to decode base64 content")
                 return FileType.UNKNOWN
 
@@ -138,24 +142,21 @@ class FileProcessorService:
         if isinstance(file_content, str):
             try:
                 file_bytes = base64.b64decode(file_content)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return False
         else:
             file_bytes = file_content
 
         # Basic size validation
-        if len(file_bytes) < 100:  # Too small to be a valid receipt
+        if len(file_bytes) < self.MIN_FILE_SIZE:  # Too small to be a valid receipt
             return False
 
-        if len(file_bytes) > 50 * 1024 * 1024:  # Larger than 50MB
+        if len(file_bytes) > self.MAX_FILE_SIZE:  # Larger than 50MB
             return False
 
         # Type-specific validation
         detected_type = self.detect_file_type(file_bytes)
-        if file_type != FileType.UNKNOWN and detected_type != file_type:
-            return False
-
-        return True
+        return not (file_type not in (FileType.UNKNOWN, detected_type))
 
     async def process_file(
         self, file_content: str | bytes, file_type: FileType | None = None
@@ -199,9 +200,8 @@ class FileProcessorService:
             processed_content = image_base64
             file_type = FileType.PNG  # PDF converter outputs PNG
             processing_metadata["conversion"] = "pdf_to_png"
-            processing_metadata[
-                "pdf_pages"
-            ] = await self.pdf_converter.get_pdf_page_count(pdf_base64)
+            page_count = await self.pdf_converter.get_pdf_page_count(pdf_base64)
+            processing_metadata["pdf_pages"] = page_count
         # Images can be processed directly
         elif content_is_base64:
             processed_content = file_content
@@ -209,7 +209,7 @@ class FileProcessorService:
             processed_content = base64.b64encode(file_bytes).decode()
 
         return ProcessedFile(
-            content=processed_content,
+            content=str(processed_content),
             file_type=file_type,
             original_file_type=original_file_type,
             processing_metadata=processing_metadata,
@@ -229,7 +229,7 @@ class FileProcessorService:
 
     def is_supported_file(self, filename: str) -> bool:
         """Check if file extension is supported."""
-        import os
+        from pathlib import Path
 
-        ext = os.path.splitext(filename)[1].lower()
+        ext = Path(filename).suffix.lower()
         return ext in self.get_supported_extensions()

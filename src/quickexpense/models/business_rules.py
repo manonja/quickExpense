@@ -91,7 +91,7 @@ class BusinessRule(BaseModel):
     created_at: datetime | None = Field(default=None)
     updated_at: datetime | None = Field(default=None)
 
-    def matches_description(self, description: str) -> bool:
+    def matches_description(self, description: str) -> bool:  # noqa: C901
         """Check if description matches rule conditions."""
         if not description:
             return False
@@ -156,13 +156,10 @@ class BusinessRule(BaseModel):
         ):
             return False
 
-        if (
+        return not (
             self.conditions.amount_max is not None
             and amount > self.conditions.amount_max
-        ):
-            return False
-
-        return True
+        )
 
     def matches(
         self,
@@ -179,21 +176,22 @@ class BusinessRule(BaseModel):
             return False
 
         # Vendor matching (if specified)
-        if vendor_name and (
-            self.conditions.vendor_patterns or self.conditions.vendor_keywords
+        if (
+            vendor_name
+            and (self.conditions.vendor_patterns or self.conditions.vendor_keywords)
+            and not self.matches_vendor(vendor_name)
         ):
-            if not self.matches_vendor(vendor_name):
-                return False
+            return False
 
         # Amount matching (if specified)
-        if amount is not None and (
-            self.conditions.amount_min is not None
-            or self.conditions.amount_max is not None
-        ):
-            if not self.matches_amount(amount):
-                return False
-
-        return True
+        return not (
+            amount is not None
+            and (
+                self.conditions.amount_min is not None
+                or self.conditions.amount_max is not None
+            )
+            and not self.matches_amount(amount)
+        )
 
 
 class RuleApplication(BaseModel):

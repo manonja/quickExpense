@@ -28,7 +28,10 @@ class LineItem(BaseModel):
         return Decimal(v) if not isinstance(v, Decimal) else v
 
     def to_categorized(
-        self, category: str, deductibility_percentage: int = 100, **kwargs: Any
+        self,
+        category: str,
+        deductibility_percentage: int = 100,
+        **kwargs: Any,  # noqa: ANN401
     ) -> CategorizedLineItem:
         """Convert basic line item to categorized line item."""
         from .enhanced_expense import CategorizedLineItem
@@ -78,7 +81,9 @@ class Expense(BaseModel):
         return v
 
     def to_multi_category(
-        self, deductibility_percentage: int = 100, **kwargs: Any
+        self,
+        deductibility_percentage: int = 100,
+        **kwargs: Any,  # noqa: ANN401
     ) -> MultiCategoryExpense:
         """Convert single-category expense to multi-category format."""
         from .enhanced_expense import CategorizedLineItem, MultiCategoryExpense

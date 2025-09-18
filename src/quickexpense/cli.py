@@ -128,17 +128,17 @@ class QuickExpenseCLI:
     def _validate_token_expiry(self, token_info: Any) -> None:  # noqa: ANN401
         """Validate token expiry status."""
         if token_info.access_token_expired and token_info.refresh_token_expired:
-            raise APIError(
+            msg = (
                 "OAuth tokens have completely expired. "
-                "Please re-authenticate:\n"
-                "  quickexpense auth --force"
+                "Please re-authenticate:\n  quickexpense auth --force"
             )
+            raise APIError(msg)
         if token_info.refresh_token_expired:
-            raise APIError(
+            msg = (
                 "Refresh token has expired. "
-                "Please re-authenticate:\n"
-                "  quickexpense auth --force"
+                "Please re-authenticate:\n  quickexpense auth --force"
             )
+            raise APIError(msg)
         if token_info.access_token_expired:
             logger.info("Access token expired, will attempt refresh during API calls")
 
@@ -206,11 +206,11 @@ class QuickExpenseCLI:
                 # Re-raise token errors with helpful message
                 raise
             if "company_id" in str(e):
-                raise APIError(
+                msg = (
                     f"Invalid tokens: {e}\n"
-                    "Please run OAuth setup again:\n"
-                    "  quickexpense auth --force"
-                ) from e
+                    "Please run OAuth setup again:\n  quickexpense auth --force"
+                )
+                raise APIError(msg) from e
             raise APIError(f"Failed to initialize services: {e}") from e
 
     async def cleanup(self) -> None:
@@ -392,9 +392,9 @@ class QuickExpenseCLI:
         categorized_items: list[CategorizedLineItem],
     ) -> dict[str, Any]:
         """Create expense in QuickBooks from enhanced expense data."""
-        # TODO(@user): Implement multi-category expense support in QB service
-        # Issue: https://github.com/project/quickExpense/issues/XXX
-        #   Need to update QB service to handle multi-category expenses
+        # TODO(manonja): Implement multi-category expense support  # noqa: FIX002
+        # https://github.com/project/quickExpense/issues/XXX
+        # Need to update QB service to handle multi-category expenses
         print("\nCreating expense in QuickBooks...")  # noqa: T201
         if not self.quickbooks_service:
             raise APIError("QuickBooks service not initialized")
@@ -465,11 +465,11 @@ class QuickExpenseCLI:
                 or "Token expired" in str(e)
                 or "AuthenticationFailed" in str(e)
             ):
-                raise APIError(
+                msg = (
                     "QuickBooks authentication has expired. "
-                    "Please re-authenticate:\n"
-                    "  quickexpense auth --force"
-                ) from e
+                    "Please re-authenticate:\n  quickexpense auth --force"
+                )
+                raise APIError(msg) from e
             raise APIError(f"QuickBooks API error: {e}") from e
         except httpx.HTTPStatusError as e:
             logger.error("HTTP error: %s", e)
@@ -481,11 +481,11 @@ class QuickExpenseCLI:
                     "Token expired" in response_text
                     or "AuthenticationFailed" in response_text
                 ):
-                    raise APIError(
+                    msg = (
                         "QuickBooks authentication has expired. "
-                        "Please re-authenticate:\n"
-                        "  quickexpense auth --force"
-                    ) from e
+                        "Please re-authenticate:\n  quickexpense auth --force"
+                    )
+                    raise APIError(msg) from e
             raise APIError(f"API request failed: {e}") from e
         except Exception as e:
             logger.exception("Unexpected error processing receipt")
@@ -551,8 +551,10 @@ class QuickExpenseCLI:
                 [
                     "\n=== Tax Deductibility Summary ===",
                     f"Total Amount: ${total_amount:.2f}",
-                    f"Deductible Amount: ${total_deductible:.2f} "
-                    f"({deductible_percentage:.1f}%)",
+                    (
+                        f"Deductible Amount: ${total_deductible:.2f} "
+                        f"({deductible_percentage:.1f}%)"
+                    ),
                 ]
             )
 
@@ -575,12 +577,15 @@ class QuickExpenseCLI:
                 [
                     "\n=== Enhanced Expense Summary ===",
                     f"Vendor: {enhanced_expense.get('vendor_name', 'Unknown')}",
-                    f"Categories: {len(categorized_items)} items across "
-                    f"{unique_categories} categories",
-                    f"Business Rules Applied: "
-                    f"{len(enhanced_expense.get('business_rules_applied', []))}",
-                    f"Payment Method: "
-                    f"{enhanced_expense.get('payment_method', 'unknown')}",
+                    (
+                        f"Categories: {len(categorized_items)} items across "
+                        f"{unique_categories} categories"
+                    ),
+                    (
+                        "Business Rules Applied: "
+                        f"{len(enhanced_expense.get('business_rules_applied', []))}"
+                    ),
+                    f"Payment: {enhanced_expense.get('payment_method', 'unknown')}",
                 ]
             )
 
@@ -652,7 +657,12 @@ class QuickExpenseCLI:
             import subprocess
 
             result = subprocess.run(  # noqa: ASYNC221, S603
-                ["uv", "run", "python", "scripts/connect_quickbooks_cli.py"],
+                [  # noqa: S607
+                    "uv",
+                    "run",
+                    "python",
+                    "scripts/connect_quickbooks_cli.py",
+                ],
                 capture_output=False,
                 text=True,
                 check=False,

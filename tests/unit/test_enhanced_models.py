@@ -68,18 +68,28 @@ class TestCategorizedLineItem:
                 amount=Decimal("10.00"),
                 category="Test",
                 deductibility_percentage=150,  # Invalid: > 100
+                account_mapping=None,
+                business_rule_id=None,
             )
 
         # Negative amount
         with pytest.raises(ValidationError):
             CategorizedLineItem(
-                description="Test", amount=Decimal("-10.00"), category="Test"
+                description="Test",
+                amount=Decimal("-10.00"),
+                category="Test",
+                account_mapping=None,
+                business_rule_id=None,
             )
 
         # Empty description
         with pytest.raises(ValidationError):
             CategorizedLineItem(
-                description="", amount=Decimal("10.00"), category="Test"
+                description="",
+                amount=Decimal("10.00"),
+                category="Test",
+                account_mapping=None,
+                business_rule_id=None,
             )
 
     def test_confidence_score_validation(self):
@@ -87,6 +97,8 @@ class TestCategorizedLineItem:
         # Valid confidence score
         item = CategorizedLineItem(
             description="Test",
+            account_mapping=None,
+            business_rule_id=None,
             amount=Decimal("10.00"),
             category="Test",
             confidence_score=0.85,
@@ -100,6 +112,8 @@ class TestCategorizedLineItem:
                 amount=Decimal("10.00"),
                 category="Test",
                 confidence_score=1.5,  # Invalid: > 1.0
+                account_mapping=None,
+                business_rule_id=None,
             )
 
 
@@ -113,12 +127,17 @@ class TestMultiCategoryExpense:
             date=date(2025, 4, 24),
             total_amount=Decimal("231.92"),
             currency="CAD",
+            total_deductible_amount=None,
+            foreign_exchange_rate=None,
+            payment_account=None,
             categorized_line_items=[
                 CategorizedLineItem(
                     description="Room Charge",
                     amount=Decimal("175.00"),
                     category="Travel-Lodging",
                     deductibility_percentage=100,
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
                 CategorizedLineItem(
                     description="Restaurant Room Charge",
@@ -126,12 +145,16 @@ class TestMultiCategoryExpense:
                     category="Travel-Meals",
                     deductibility_percentage=50,
                     tax_treatment="meals_limitation",
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
                 CategorizedLineItem(
                     description="Tourism Levy",
                     amount=Decimal("7.21"),
                     category="Travel-Lodging",
                     deductibility_percentage=100,
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
                 CategorizedLineItem(
                     description="GST",
@@ -139,6 +162,8 @@ class TestMultiCategoryExpense:
                     category="Tax-GST",
                     deductibility_percentage=100,
                     tax_treatment="input_tax_credit",
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
             ],
         )
@@ -185,20 +210,27 @@ class TestMultiCategoryExpense:
     def test_line_items_total_validation(self):
         """Test validation that line items total matches expense total."""
         # Valid expense (totals match)
-        valid_expense = MultiCategoryExpense(  # type: ignore[call-arg]
+        valid_expense = MultiCategoryExpense(
             vendor_name="Test Vendor",
             date=date(2025, 1, 15),
             total_amount=Decimal("100.00"),
+            total_deductible_amount=None,
+            foreign_exchange_rate=None,
+            payment_account=None,
             categorized_line_items=[
                 CategorizedLineItem(
                     description="Item 1",
                     amount=Decimal("60.00"),
                     category="Category1",
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
                 CategorizedLineItem(
                     description="Item 2",
                     amount=Decimal("40.00"),
                     category="Category2",
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
             ],
         )
@@ -206,37 +238,48 @@ class TestMultiCategoryExpense:
 
         # Invalid expense (totals don't match)
         with pytest.raises(ValidationError, match="Line items total.*does not match"):
-            MultiCategoryExpense(  # type: ignore[call-arg]
+            MultiCategoryExpense(
                 vendor_name="Test Vendor",
                 date=date(2025, 1, 15),
                 total_amount=Decimal("100.00"),
+                total_deductible_amount=None,
+                foreign_exchange_rate=None,
+                payment_account=None,
                 categorized_line_items=[
                     CategorizedLineItem(
                         description="Item 1",
                         amount=Decimal("60.00"),
                         category="Category1",
+                        account_mapping=None,
+                        business_rule_id=None,
                     ),
                     CategorizedLineItem(
                         description="Item 2",
                         amount=Decimal("30.00"),  # Total only 90.00
                         category="Category2",
+                        account_mapping=None,
+                        business_rule_id=None,
                     ),
                 ],
             )
 
     def test_foreign_exchange_handling(self):
         """Test foreign exchange rate handling."""
-        expense = MultiCategoryExpense(  # type: ignore[call-arg]
+        expense = MultiCategoryExpense(
             vendor_name="USD Vendor",
             date=date(2025, 1, 15),
             total_amount=Decimal("100.00"),
             currency="CAD",
             foreign_exchange_rate=Decimal("1.35"),
+            total_deductible_amount=None,
+            payment_account=None,
             categorized_line_items=[
                 CategorizedLineItem(
                     description="Test Item",
                     amount=Decimal("100.00"),
                     category="Test",
+                    account_mapping=None,
+                    business_rule_id=None,
                 )
             ],
         )
@@ -245,17 +288,21 @@ class TestMultiCategoryExpense:
 
     def test_business_rules_tracking(self):
         """Test business rules tracking."""
-        expense = MultiCategoryExpense(  # type: ignore[call-arg]
+        expense = MultiCategoryExpense(
             vendor_name="Test Vendor",
             date=date(2025, 1, 15),
             total_amount=Decimal("50.00"),
             business_rules_applied=["hotel_accommodation", "restaurant_meals"],
+            total_deductible_amount=None,
+            foreign_exchange_rate=None,
+            payment_account=None,
             categorized_line_items=[
                 CategorizedLineItem(
                     description="Test Item",
                     amount=Decimal("50.00"),
                     category="Test",
                     business_rule_id="hotel_accommodation",
+                    account_mapping=None,
                 )
             ],
         )
@@ -333,25 +380,34 @@ class TestValidationEdgeCases:
     def test_rounding_tolerance(self):
         """Test that small rounding differences are tolerated."""
         # Should pass with 1 cent tolerance
-        expense = MultiCategoryExpense(  # type: ignore[call-arg]
+        expense = MultiCategoryExpense(
             vendor_name="Test Vendor",
             date=date(2025, 1, 15),
             total_amount=Decimal("100.00"),
+            total_deductible_amount=None,
+            foreign_exchange_rate=None,
+            payment_account=None,
             categorized_line_items=[
                 CategorizedLineItem(
                     description="Item 1",
                     amount=Decimal("33.33"),
                     category="Category1",
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
                 CategorizedLineItem(
                     description="Item 2",
                     amount=Decimal("33.33"),
                     category="Category2",
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
                 CategorizedLineItem(
                     description="Item 3",
                     amount=Decimal("33.34"),  # 99.99 + 0.01 tolerance
                     category="Category3",
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
             ],
         )
@@ -360,20 +416,27 @@ class TestValidationEdgeCases:
 
     def test_quantity_calculations(self):
         """Test calculations with quantities > 1."""
-        expense = MultiCategoryExpense(  # type: ignore[call-arg]
+        expense = MultiCategoryExpense(
             vendor_name="Test Vendor",
             date=date(2025, 1, 15),
             total_amount=Decimal("150.00"),
+            total_deductible_amount=None,
+            foreign_exchange_rate=None,
+            payment_account=None,
             categorized_line_items=[
                 CategorizedLineItem(
                     description="Paper",
                     amount=Decimal("25.00"),
                     quantity=3,  # 75.00 total
                     category="Office Supplies",
+                    account_mapping=None,
+                    business_rule_id=None,
                 ),
                 CategorizedLineItem(
                     description="Pens",
                     amount=Decimal("15.00"),
+                    account_mapping=None,
+                    business_rule_id=None,
                     quantity=5,  # 75.00 total
                     category="Office Supplies",
                 ),
@@ -386,9 +449,12 @@ class TestValidationEdgeCases:
     def test_currency_validation(self):
         """Test currency code validation."""
         # Valid currency
-        expense = MultiCategoryExpense(  # type: ignore[call-arg]
+        expense = MultiCategoryExpense(
             vendor_name="Test Vendor",
             date=date(2025, 1, 15),
+            total_deductible_amount=None,
+            foreign_exchange_rate=None,
+            payment_account=None,
             total_amount=Decimal("100.00"),
             currency="USD",
             categorized_line_items=[
@@ -396,6 +462,8 @@ class TestValidationEdgeCases:
                     description="Test",
                     amount=Decimal("100.00"),
                     category="Test",
+                    account_mapping=None,
+                    business_rule_id=None,
                 )
             ],
         )
@@ -403,16 +471,21 @@ class TestValidationEdgeCases:
 
         # Invalid currency (too long)
         with pytest.raises(ValidationError):
-            MultiCategoryExpense(  # type: ignore[call-arg]
+            MultiCategoryExpense(
                 vendor_name="Test Vendor",
                 date=date(2025, 1, 15),
                 total_amount=Decimal("100.00"),
                 currency="INVALID",  # Too long
+                total_deductible_amount=None,
+                foreign_exchange_rate=None,
+                payment_account=None,
                 categorized_line_items=[
                     CategorizedLineItem(
                         description="Test",
                         amount=Decimal("100.00"),
                         category="Test",
+                        account_mapping=None,
+                        business_rule_id=None,
                     )
                 ],
             )

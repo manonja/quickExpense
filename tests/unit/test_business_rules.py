@@ -77,6 +77,9 @@ class TestRuleActions:
             deductibility_percentage=100,
             qb_account="Travel - Lodging",
             tax_treatment=TaxTreatment.STANDARD,
+            compliance_note=None,
+            account_mapping=None,
+            business_rule_id=None,
             confidence_boost=0.1,
         )
 
@@ -88,18 +91,28 @@ class TestRuleActions:
 
     def test_deductibility_percentage_validation(self):
         """Test that deductibility percentage is validated."""
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError, match="ensure this value is less than or equal to 100"
+        ):
             RuleActions(
                 category="Test",
                 deductibility_percentage=150,  # Invalid: > 100
                 qb_account="Test Account",
+                compliance_note=None,
+                account_mapping=None,
+                business_rule_id=None,
             )
 
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError, match="ensure this value is greater than or equal to 0"
+        ):
             RuleActions(
                 category="Test",
                 deductibility_percentage=-10,  # Invalid: < 0
                 qb_account="Test Account",
+                compliance_note=None,
+                account_mapping=None,
+                business_rule_id=None,
             )
 
 
@@ -128,6 +141,9 @@ class TestBusinessRule:
                 category="Travel-Lodging",
                 deductibility_percentage=100,
                 qb_account="Travel - Lodging",
+                compliance_note=None,
+                account_mapping=None,
+                business_rule_id=None,
                 confidence_boost=0.2,
             ),
         )
@@ -155,6 +171,9 @@ class TestBusinessRule:
                 deductibility_percentage=50,
                 qb_account="Travel - Meals & Entertainment",
                 tax_treatment=TaxTreatment.MEALS_LIMITATION,
+                compliance_note=None,
+                account_mapping=None,
+                business_rule_id=None,
             ),
         )
 
@@ -555,8 +574,8 @@ class TestMarriottHotelBillScenario:
             for item, result in zip(marriott_line_items, results, strict=False)
         )
 
-        # Expected: Room(175) + Meal(40.70*0.5) + Marketing(5.25) + GST(9.01) + Tourism(7.21)
-        # = 175 + 20.35 + 5.25 + 9.01 + 7.21 = 216.82
+        # Expected: Room(175) + Meal(40.70*0.5) + Marketing(5.25) +
+        # GST(9.01) + Tourism(7.21) = 175 + 20.35 + 5.25 + 9.01 + 7.21 = 216.82
         expected_deductible = Decimal("216.82")
         assert abs(total_deductible - expected_deductible) < Decimal("0.01")
 

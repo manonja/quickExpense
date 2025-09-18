@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -18,6 +18,9 @@ from quickexpense.models.business_rules import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Constants
+RULE_HISTORY_LIMIT = 1000
 
 
 class BusinessRuleEngineError(Exception):
@@ -137,9 +140,9 @@ class BusinessRuleEngine:
     def apply_rule(
         self,
         rule: BusinessRule,
-        description: str,
-        vendor_name: str | None = None,
-        amount: Decimal | None = None,
+        description: str,  # noqa: ARG002
+        vendor_name: str | None = None,  # noqa: ARG002
+        amount: Decimal | None = None,  # noqa: ARG002
     ) -> RuleResult:
         """Apply a specific rule to generate categorization result."""
         # Calculate confidence score
@@ -151,7 +154,7 @@ class BusinessRuleEngine:
         actions = rule.actions.model_copy()
         actions.business_rule_id = rule.id
 
-        result = RuleResult(
+        return RuleResult(
             rule_applied=rule,
             category=actions.category,
             deductibility_percentage=actions.deductibility_percentage,
@@ -165,13 +168,11 @@ class BusinessRuleEngine:
             is_fallback=False,
         )
 
-        return result
-
     def apply_fallback_rule(
         self,
         description: str,
-        vendor_name: str | None = None,
-        amount: Decimal | None = None,
+        vendor_name: str | None = None,  # noqa: ARG002
+        amount: Decimal | None = None,  # noqa: ARG002
     ) -> RuleResult:
         """Apply fallback rule for unmatched items."""
         if not self.config:
@@ -206,7 +207,7 @@ class BusinessRuleEngine:
         description: str,
         vendor_name: str | None = None,
         amount: Decimal | None = None,
-        context: ExpenseContext | None = None,
+        context: ExpenseContext | None = None,  # noqa: ARG002
     ) -> RuleResult:
         """Categorize a line item using business rules."""
         try:
@@ -232,7 +233,7 @@ class BusinessRuleEngine:
 
             return result
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Failed to categorize line item '%s': %s", description, e)
             # Return fallback on error
             return self.apply_fallback_rule(description, vendor_name, amount)
@@ -308,16 +309,16 @@ class BusinessRuleEngine:
             line_item_description=description,
             vendor_name=vendor_name,
             amount=amount,
-            applied_at=datetime.now(),
+            applied_at=datetime.now(tz=UTC),
             confidence_score=result.confidence_score,
             actions_applied=actions_applied,
         )
 
         self.rule_history.append(application)
 
-        # Keep only last 1000 applications to prevent memory issues
-        if len(self.rule_history) > 1000:
-            self.rule_history = self.rule_history[-1000:]
+        # Keep only last RULE_HISTORY_LIMIT applications to prevent memory issues
+        if len(self.rule_history) > RULE_HISTORY_LIMIT:
+            self.rule_history = self.rule_history[-RULE_HISTORY_LIMIT:]
 
     def get_rule_statistics(self) -> dict[str, Any]:
         """Get statistics about rule usage."""
