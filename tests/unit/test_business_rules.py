@@ -612,3 +612,427 @@ class TestMarriottHotelBillScenario:
             if "Restaurant" in app.line_item_description
         )
         assert meal_app.rule_id == "room_service_meals"
+
+
+class TestVendorAwareBusinessRules:
+    """Tests for vendor-aware business rules functionality."""
+
+    def test_hotel_marketing_fee_categorization(self):
+        """Test that marketing fees from hotels are categorized as Travel-Lodging."""
+        # Create test configuration with hotel marketing fee rule
+        config_data = {
+            "version": "1.0",
+            "metadata": {
+                "description": "Test vendor-aware business rules",
+                "jurisdiction": "Canada",
+            },
+            "rules": [
+                {
+                    "id": "hotel_marketing_fees",
+                    "priority": 110,
+                    "name": "Hotel Marketing and Service Fees",
+                    "description": "Marketing fees from hotels - categorize as lodging",
+                    "conditions": {
+                        "description_keywords": ["marketing fee"],
+                        "vendor_patterns": ["*marriott*", "*hotel*"],
+                        "amount_min": 1.0,
+                        "amount_max": 100.0,
+                    },
+                    "actions": {
+                        "category": "Travel-Lodging",
+                        "deductibility_percentage": 100,
+                        "qb_account": "Travel - Lodging",
+                        "tax_treatment": "standard",
+                        "confidence_boost": 0.2,
+                    },
+                    "enabled": True,
+                },
+                {
+                    "id": "generic_marketing_fees",
+                    "priority": 75,
+                    "name": "Marketing and Service Fees (Non-Hotel)",
+                    "description": (
+                        "Generic marketing fees - categorize as professional services"
+                    ),
+                    "conditions": {
+                        "description_keywords": ["marketing fee"],
+                        "amount_min": 1.0,
+                        "amount_max": 100.0,
+                    },
+                    "actions": {
+                        "category": "Professional Services",
+                        "deductibility_percentage": 100,
+                        "qb_account": "Professional Fees",
+                        "tax_treatment": "standard",
+                        "confidence_boost": 0.02,
+                    },
+                    "enabled": True,
+                },
+            ],
+            "fallback_rules": {
+                "unknown_expense": {
+                    "category": "General Business Expense",
+                    "deductibility_percentage": 100,
+                    "qb_account": "Other Business Expenses",
+                    "tax_treatment": "standard",
+                }
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            engine = BusinessRuleEngine(config_path)
+
+            # Test hotel marketing fee
+            result = engine.categorize_line_item(
+                description="Marketing Fee",
+                vendor_name="Courtyard by Marriott",
+                amount=Decimal("5.25"),
+            )
+
+            assert result.category == "Travel-Lodging"
+            assert result.qb_account == "Travel - Lodging"
+            assert result.rule_applied.id == "hotel_marketing_fees"
+            assert result.confidence_score > 0.9  # Should be high confidence
+
+            # Test non-hotel marketing fee
+            result = engine.categorize_line_item(
+                description="Marketing Fee",
+                vendor_name="Generic Company",
+                amount=Decimal("5.25"),
+            )
+
+            assert result.category == "Professional Services"
+            assert result.qb_account == "Professional Fees"
+            assert result.rule_applied.id == "generic_marketing_fees"
+            assert result.confidence_score < 0.85  # Should be lower confidence
+
+        finally:
+            Path(config_path).unlink()
+
+    def test_vendor_context_rule_selection(self):
+        """Test that vendor-specific rules are preferred over generic rules."""
+        config_data = {
+            "version": "1.0",
+            "metadata": {"description": "Test vendor context rule selection"},
+            "rules": [
+                {
+                    "id": "vendor_specific_rule",
+                    "priority": 80,
+                    "name": "Vendor Specific Rule",
+                    "description": "Specific rule for certain vendors",
+                    "conditions": {
+                        "description_keywords": ["service fee"],
+                        "vendor_patterns": ["*specific*"],
+                    },
+                    "actions": {
+                        "category": "Vendor-Specific",
+                        "deductibility_percentage": 100,
+                        "qb_account": "Vendor Specific Account",
+                        "tax_treatment": "standard",
+                        "confidence_boost": 0.15,
+                    },
+                    "enabled": True,
+                },
+                {
+                    "id": "generic_rule",
+                    "priority": 90,  # Higher priority but no vendor patterns
+                    "name": "Generic Rule",
+                    "description": "Generic rule for service fees",
+                    "conditions": {
+                        "description_keywords": ["service fee"],
+                    },
+                    "actions": {
+                        "category": "Generic",
+                        "deductibility_percentage": 100,
+                        "qb_account": "Generic Account",
+                        "tax_treatment": "standard",
+                        "confidence_boost": 0.05,
+                    },
+                    "enabled": True,
+                },
+            ],
+            "fallback_rules": {
+                "unknown_expense": {
+                    "category": "General Business Expense",
+                    "deductibility_percentage": 100,
+                    "qb_account": "Other Business Expenses",
+                    "tax_treatment": "standard",
+                }
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            engine = BusinessRuleEngine(config_path)
+
+            # Test with matching vendor - should select vendor-specific rule
+            result = engine.categorize_line_item(
+                description="Service Fee",
+                vendor_name="Specific Company",
+                amount=Decimal("10.00"),
+            )
+
+            assert result.category == "Vendor-Specific"
+            assert result.rule_applied.id == "vendor_specific_rule"
+
+            # Test with non-matching vendor - should select generic rule
+            result = engine.categorize_line_item(
+                description="Service Fee",
+                vendor_name="Other Company",
+                amount=Decimal("10.00"),
+            )
+
+            assert result.category == "Generic"
+            assert result.rule_applied.id == "generic_rule"
+
+        finally:
+            Path(config_path).unlink()
+
+    def test_confidence_scoring_with_vendor_context(self):
+        """Test that confidence scores are adjusted based on vendor context."""
+        config_data = {
+            "version": "1.0",
+            "metadata": {"description": "Test confidence scoring"},
+            "rules": [
+                {
+                    "id": "vendor_rule",
+                    "priority": 100,
+                    "name": "Vendor Specific",
+                    "conditions": {
+                        "description_keywords": ["fee"],
+                        "vendor_patterns": ["*test*"],
+                    },
+                    "actions": {
+                        "category": "Test Category",
+                        "deductibility_percentage": 100,
+                        "qb_account": "Test Account",
+                        "tax_treatment": "standard",
+                        "confidence_boost": 0.1,
+                    },
+                    "enabled": True,
+                },
+            ],
+            "fallback_rules": {
+                "unknown_expense": {
+                    "category": "General Business Expense",
+                    "deductibility_percentage": 100,
+                    "qb_account": "Other Business Expenses",
+                    "tax_treatment": "standard",
+                }
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            engine = BusinessRuleEngine(config_path)
+
+            # Test with matching vendor - should get confidence boost
+            result_with_vendor = engine.categorize_line_item(
+                description="Test Fee",
+                vendor_name="Test Company",
+                amount=Decimal("10.00"),
+            )
+
+            # Test without vendor context - should have lower confidence
+            result_without_vendor = engine.categorize_line_item(
+                description="Test Fee",
+                vendor_name=None,
+                amount=Decimal("10.00"),
+            )
+
+            # Vendor context should provide additional confidence
+            assert (
+                result_with_vendor.confidence_score
+                > result_without_vendor.confidence_score
+            )
+
+        finally:
+            Path(config_path).unlink()
+
+    def test_vendor_category_alignment_validation(self):
+        """Test validation of vendor-category alignment."""
+        config_data = {
+            "version": "1.0",
+            "metadata": {"description": "Test vendor alignment validation"},
+            "rules": [
+                {
+                    "id": "misaligned_rule",
+                    "priority": 100,
+                    "name": "Potentially Misaligned Rule",
+                    "conditions": {
+                        "description_keywords": ["marketing fee"],
+                    },
+                    "actions": {
+                        "category": "Professional Services",
+                        "deductibility_percentage": 100,
+                        "qb_account": "Professional Fees",
+                        "tax_treatment": "standard",
+                        "confidence_boost": 0.1,
+                    },
+                    "enabled": True,
+                },
+            ],
+            "fallback_rules": {
+                "unknown_expense": {
+                    "category": "General Business Expense",
+                    "deductibility_percentage": 100,
+                    "qb_account": "Other Business Expenses",
+                    "tax_treatment": "standard",
+                }
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            engine = BusinessRuleEngine(config_path)
+
+            # This should trigger a vendor-category alignment warning
+            # (hotel vendor with professional services category)
+            result = engine.categorize_line_item(
+                description="Marketing Fee",
+                vendor_name="Marriott Hotel",
+                amount=Decimal("5.25"),
+            )
+
+            # Rule should still apply, but warning should be logged
+            assert result.category == "Professional Services"
+            assert result.rule_applied.id == "misaligned_rule"
+
+            # Test the validation method directly
+            is_aligned, warning = engine.validate_vendor_category_alignment(
+                result.rule_applied, "Marriott Hotel"
+            )
+            assert not is_aligned
+            assert warning is not None
+            assert "Hotel vendor" in warning
+            assert "consider Travel-Lodging" in warning
+
+        finally:
+            Path(config_path).unlink()
+
+    def test_marriott_receipt_scenario(self):
+        """Test the specific Marriott receipt scenario from user feedback."""
+        # Use the actual business rules configuration
+        config_path = (
+            Path(__file__).parent.parent.parent / "config" / "business_rules.json"
+        )
+        engine = BusinessRuleEngine(config_path)
+
+        # Test marketing fee from Marriott
+        result = engine.categorize_line_item(
+            description="Marketing Fee",
+            vendor_name="Courtyard by Marriott",
+            amount=Decimal("5.25"),
+        )
+
+        # Should now be categorized as Travel-Lodging (fixed!)
+        assert result.category == "Travel-Lodging"
+        assert result.qb_account == "Travel - Lodging"
+        assert result.rule_applied.id == "hotel_marketing_fees"
+        assert result.confidence_score > 0.9  # High confidence with vendor context
+
+        # Test that room service meals still work correctly
+        result = engine.categorize_line_item(
+            description="Restaurant Room Charge",
+            vendor_name="Courtyard by Marriott",
+            amount=Decimal("40.70"),
+        )
+
+        assert result.category == "Travel-Meals"
+        assert result.deductibility_percentage == 50
+        assert result.rule_applied.id == "room_service_meals"
+
+        # Test room charges
+        result = engine.categorize_line_item(
+            description="Room Charge",
+            vendor_name="Courtyard by Marriott",
+            amount=Decimal("175.00"),
+        )
+
+        assert result.category == "Travel-Lodging"
+        assert result.deductibility_percentage == 100
+        assert result.rule_applied.id == "hotel_accommodation"
+
+    def test_multiple_vendor_specific_rules(self):
+        """Test scenario with multiple vendor-specific rules matching."""
+        config_data = {
+            "version": "1.0",
+            "metadata": {"description": "Test multiple vendor rules"},
+            "rules": [
+                {
+                    "id": "high_priority_vendor_rule",
+                    "priority": 120,
+                    "name": "High Priority Vendor Rule",
+                    "conditions": {
+                        "description_keywords": ["fee"],
+                        "vendor_patterns": ["*test*"],
+                    },
+                    "actions": {
+                        "category": "High Priority",
+                        "deductibility_percentage": 100,
+                        "qb_account": "High Priority Account",
+                        "tax_treatment": "standard",
+                        "confidence_boost": 0.2,
+                    },
+                    "enabled": True,
+                },
+                {
+                    "id": "low_priority_vendor_rule",
+                    "priority": 100,
+                    "name": "Low Priority Vendor Rule",
+                    "conditions": {
+                        "description_keywords": ["fee"],
+                        "vendor_patterns": ["*test*"],
+                    },
+                    "actions": {
+                        "category": "Low Priority",
+                        "deductibility_percentage": 100,
+                        "qb_account": "Low Priority Account",
+                        "tax_treatment": "standard",
+                        "confidence_boost": 0.1,
+                    },
+                    "enabled": True,
+                },
+            ],
+            "fallback_rules": {
+                "unknown_expense": {
+                    "category": "General Business Expense",
+                    "deductibility_percentage": 100,
+                    "qb_account": "Other Business Expenses",
+                    "tax_treatment": "standard",
+                }
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            engine = BusinessRuleEngine(config_path)
+
+            result = engine.categorize_line_item(
+                description="Test Fee",
+                vendor_name="Test Company",
+                amount=Decimal("10.00"),
+            )
+
+            # Should select the higher priority rule
+            assert result.category == "High Priority"
+            assert result.rule_applied.id == "high_priority_vendor_rule"
+
+        finally:
+            Path(config_path).unlink()

@@ -290,10 +290,7 @@ class BusinessRuleEngine:
         warning_message = None
 
         if any(pattern in vendor_lower for pattern in hotel_patterns):
-            if (
-                "professional" in category
-                and "marketing" in rule.conditions.description_keywords
-            ):
+            if "professional" in category:
                 warning_message = (
                     f"Hotel vendor '{vendor_name}' categorized as "
                     f"'{rule.actions.category}' - consider Travel-Lodging "
