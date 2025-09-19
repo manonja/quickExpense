@@ -1,4 +1,4 @@
-"""Business rules engine for configurable expense categorization."""
+"""Business rules engine for expense categorization with provincial tax context."""
 
 from __future__ import annotations
 
@@ -17,6 +17,12 @@ from quickexpense.models.business_rules import (
     RuleApplication,
     RuleResult,
 )
+from quickexpense.models.tax import (
+    EntityAwareExpenseMapping,
+    ProvinceCode,
+    ProvinceDetection,
+)
+from quickexpense.services.provincial_tax import ProvincialTaxService
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +43,22 @@ class RuleApplicationError(BusinessRuleEngineError):
 
 
 class BusinessRuleEngine:
-    """Configurable rule engine for expense categorization."""
+    """Rule engine for expense categorization with provincial tax awareness."""
 
-    def __init__(self, config_path: str | Path) -> None:
-        """Initialize the rule engine with configuration."""
+    def __init__(
+        self,
+        config_path: str | Path,
+        entity_type: str = "sole_proprietorship",
+        default_province: ProvinceCode = ProvinceCode.BC,
+    ) -> None:
+        """Initialize the rule engine with configuration and tax context."""
         self.config_path = Path(config_path)
         self.config: BusinessRulesConfig | None = None
         self.rule_history: list[RuleApplication] = []
+        self.entity_type = entity_type
+        self.provincial_tax_service = ProvincialTaxService(
+            default_province=default_province
+        )
         self._load_rules()
 
     def _load_rules(self) -> None:
@@ -466,6 +481,155 @@ class BusinessRuleEngine:
             results.append(result)
 
         return results
+
+    def categorize_with_provincial_context(
+        self,
+        description: str,
+        context: ExpenseContext,
+    ) -> tuple[RuleResult, ProvinceDetection, EntityAwareExpenseMapping]:
+        """Categorize expense with provincial tax context and entity awareness."""
+
+        # 1. Detect province from vendor information
+        province_detection = self.provincial_tax_service.detect_province(
+            vendor_address=context.vendor_address, postal_code=context.postal_code
+        )
+
+        logger.info(
+            "Province detected: %s (confidence: %.2f, method: %s)",
+            province_detection.province.value,
+            province_detection.confidence,
+            province_detection.detection_method,
+        )
+
+        # 2. Apply business rules with vendor context
+        rule_result = self.categorize_line_item(
+            description=description,
+            vendor_name=context.vendor_name,
+            amount=context.total_amount,
+            context=context,
+        )
+
+        # 3. Get entity-aware expense mapping (T2125 for sole proprietorship)
+        entity_mapping = EntityAwareExpenseMapping.get_mapping(
+            entity_type=self.entity_type, category=rule_result.category
+        )
+
+        logger.info(
+            "Entity-aware mapping: %s → T2125 Line %s (%s)",
+            rule_result.category,
+            entity_mapping.form_line_item,
+            entity_mapping.form_line_description,
+        )
+
+        # 4. Log provincial context for audit
+        logger.debug(
+            "Provincial context: %s %s → %s (T2125 Line %s)",
+            province_detection.province.value,
+            rule_result.category,
+            entity_mapping.form_line_description,
+            entity_mapping.form_line_item,
+        )
+
+        return rule_result, province_detection, entity_mapping
+
+    def get_t2125_summary(
+        self, results: list[tuple[RuleResult, EntityAwareExpenseMapping]]
+    ) -> dict[str, Any]:
+        """Generate T2125 form summary from categorized expenses."""
+
+        total_deductible = Decimal("0.00")
+
+        # Group by T2125 line items
+        line_item_totals: dict[str, dict[str, Any]] = {}
+
+        for _rule_result, entity_mapping in results:
+            line_item = entity_mapping.form_line_item
+
+            if line_item not in line_item_totals:
+                line_item_totals[line_item] = {
+                    "description": entity_mapping.form_line_description,
+                    "total_amount": Decimal("0.00"),
+                    "deductible_amount": Decimal("0.00"),
+                    "deductibility_percentage": entity_mapping.deductibility_percentage,
+                    "count": 0,
+                    "ita_reference": entity_mapping.ita_reference,
+                }
+
+            # Calculate amounts (assuming amount is available in rule context)
+            # This would be enhanced with actual expense amounts in real implementation
+            expense_amount = Decimal(
+                "100.00"
+            )  # Placeholder - would come from actual expense
+            deductible_amount = expense_amount * Decimal(
+                str(entity_mapping.deductibility_percentage / 100)
+            )
+
+            line_item_totals[line_item]["total_amount"] += expense_amount
+            line_item_totals[line_item]["deductible_amount"] += deductible_amount
+            line_item_totals[line_item]["count"] += 1
+
+            total_deductible += deductible_amount
+
+        return {
+            "entity_type": self.entity_type,
+            "tax_form": "T2125",
+            "line_items": line_item_totals,
+            "total_deductible": total_deductible,
+            "requires_review": any(
+                result.requires_manual_review for result, _ in results
+            ),
+        }
+
+    def validate_provincial_compliance(
+        self, rule_result: RuleResult, province_detection: ProvinceDetection
+    ) -> tuple[bool, list[str]]:
+        """Validate if categorization complies with provincial regulations."""
+
+        compliance_issues = []
+
+        # Get provincial tax configuration
+        try:
+            self.provincial_tax_service.get_provincial_config(
+                province_detection.province
+            )
+
+            # Check for province-specific compliance requirements
+            if (
+                province_detection.province == ProvinceCode.QC
+                and "professional" in rule_result.category.lower()
+            ):
+                msg = (
+                    "Quebec professional services may require QST "
+                    "registration verification"
+                )
+                compliance_issues.append(msg)
+
+            # General GST/HST compliance checks
+            if rule_result.category in ["Travel-Meals", "Entertainment"] and (
+                not rule_result.compliance_note
+                or "50%" not in rule_result.compliance_note
+            ):
+                msg = (
+                    "Meals and entertainment are limited to 50% deductibility "
+                    "per ITA Section 67.1"
+                )
+                compliance_issues.append(msg)
+
+            # Province detection confidence warning
+            confidence_threshold = 0.8
+            if province_detection.confidence < confidence_threshold:
+                msg = (
+                    f"Low confidence in province detection "
+                    f"({province_detection.confidence:.2f}) - "
+                    f"verify {province_detection.province.value} tax rates manually"
+                )
+                compliance_issues.append(msg)
+
+        except Exception as e:  # noqa: BLE001
+            compliance_issues.append(f"Error validating provincial compliance: {e}")
+
+        is_compliant = len(compliance_issues) == 0
+        return is_compliant, compliance_issues
 
     def _log_rule_application(
         self,

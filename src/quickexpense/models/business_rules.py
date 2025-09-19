@@ -278,6 +278,8 @@ class ExpenseContext(BaseModel):
     """Context information for rule matching."""
 
     vendor_name: str | None = Field(None)
+    vendor_address: str | None = Field(None)
+    postal_code: str | None = Field(None)
     transaction_date: datetime | None = Field(None)
     total_amount: Decimal | None = Field(None)
     currency: str = Field(default="USD")
