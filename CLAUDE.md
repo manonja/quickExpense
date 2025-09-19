@@ -2,7 +2,7 @@
 
 # QuickExpense
 
-A modern FastAPI application for processing and submitting expenses directly into **QuickBooks Online** using Python 3.12 with full type safety and modern development practices.
+A modern FastAPI application for **Canadian small businesses and sole proprietors** to process and submit expenses directly into **QuickBooks Online** using Python 3.12 with full type safety, modern development practices, and **Canadian tax compliance** (CRA ITA Section 67.1, GST/HST).
 
 ## Current Implementation Status
 
@@ -16,6 +16,7 @@ The application has been successfully restructured with:
 - All pre-commit hooks passing
 - **Complete CLI interface for receipt processing**
 - **QuickBooks Purchase API integration fixed**
+- **Vendor-aware business rules engine with hotel-specific categorization**
 
 ## Design Principles
 
@@ -393,19 +394,58 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
 3. ✅ **Payment Account Support**: Added bank and credit card account selection
 4. ✅ **Enhanced Error Handling**: Clear user messages for authentication errors
 5. ✅ **Field Mapping Fix**: Corrected receipt-to-expense field mappings
+6. **Vendor-Aware Business Rules (PRE-115)**: Enhanced business rules engine with vendor context awareness for Canadian tax compliance
+   - Hotel marketing fees now correctly categorized as Travel-Lodging (not Professional Services)
+   - Vendor-specific rules take precedence over generic rules when vendor patterns match
+   - Enhanced confidence scoring based on vendor-category alignment
+   - Comprehensive validation and warning system for potential mismatches
+   - Backward compatible with existing categorization rules
+   - CRA ITA Section 67.1 compliance for meals & entertainment (50% deductible)
+   - GST/HST Input Tax Credit proper handling
+
+## Business Rules Configuration
+
+### Vendor-Aware Business Rules
+The business rules engine now supports vendor context awareness, enabling more accurate categorization based on vendor type:
+
+```json
+{
+  "id": "hotel_marketing_fees",
+  "priority": 110,  // Higher priority than generic rules
+  "name": "Hotel Marketing and Service Fees",
+  "conditions": {
+    "description_keywords": ["marketing fee", "resort fee", "destination fee"],
+    "vendor_patterns": ["*hotel*", "*marriott*", "*hilton*", "*courtyard*"]
+  },
+  "actions": {
+    "category": "Travel-Lodging",
+    "qb_account": "Travel - Lodging",
+    "confidence_boost": 0.2
+  }
+}
+```
+
+**Key Features:**
+- Vendor-specific rules take precedence over generic rules
+- Confidence scoring adjusts based on vendor-category alignment
+- Validation warnings for potential vendor-category mismatches
+- Backward compatible with existing single-category rules
+
+**Example:** Marketing fees from hotels are now correctly categorized as Travel-Lodging instead of Professional Services, based on vendor context.
 
 ## Next Steps
 
 1. ~~**Remove Legacy Files**: Delete old files in root directory~~ ✓
 2. ~~**Add OAuth Flow**: Implement proper OAuth2 flow for token refresh~~ ✓
 3. ~~**CLI Interface**: Add command-line interface for receipt processing~~ ✓
-4. **Add Logging**: Structured logging with appropriate levels
-5. **Add More Tests**: Increase coverage to >90%
-6. **API Documentation**: Enhance OpenAPI/Swagger docs
-7. **Rate Limiting**: Add rate limiting for API endpoints
-8. **Monitoring**: Add OpenTelemetry instrumentation
-9. **Batch Processing**: Add support for multiple receipt uploads
-10. **PDF Support**: Add PDF receipt extraction capability
+4. ~~**Vendor-Aware Business Rules**: Enhanced categorization with vendor context~~ ✓
+5. **Add Logging**: Structured logging with appropriate levels
+6. **Add More Tests**: Increase coverage to >90%
+7. **API Documentation**: Enhance OpenAPI/Swagger docs
+8. **Rate Limiting**: Add rate limiting for API endpoints
+9. **Monitoring**: Add OpenTelemetry instrumentation
+10. **Batch Processing**: Add support for multiple receipt uploads
+11. **PDF Support**: Add PDF receipt extraction capability
 
 ## Commit Discipline
 

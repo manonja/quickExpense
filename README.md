@@ -1,15 +1,20 @@
 # QuickExpense
 
-Modern expense management system with a powerful CLI and API that automatically creates QuickBooks expenses from receipts using AI-powered extraction and robust OAuth token management.
+Modern expense management system for **Canadian small businesses and sole proprietors** with a powerful CLI and API that automatically creates QuickBooks expenses from receipts using AI-powered extraction and robust OAuth token management with **Canadian tax compliance** (CRA ITA Section 67.1, GST/HST).
 
 ## Features
 
-- 🖥️ **CLI Interface** - Simple commands for receipt processing and expense management
-- 🤖 **AI Receipt Processing** - Extract expense data from receipt images using Google Gemini
-- 🔄 **Automatic Token Management** - Never worry about expired tokens
-- 📊 **Direct QuickBooks Integration** - Create vendors and expenses seamlessly
-- 🚀 **Modern Python Stack** - FastAPI, Pydantic v2, Python 3.12+
-- 🎯 **Smart Account Mapping** - Automatically selects appropriate payment and expense accounts
+- **CLI Interface** - Simple commands for receipt processing and expense management
+- **AI Receipt Processing** - Extract expense data from receipt images using Google Gemini
+- **Automatic Token Management** - Never worry about expired tokens
+- **Direct QuickBooks Integration** - Create vendors and expenses seamlessly
+- **Modern Python Stack** - FastAPI, Pydantic v2, Python 3.12+
+- **Smart Account Mapping** - Automatically selects appropriate payment and expense accounts
+- **Canadian Tax Compliance** - Business rules engine with CRA-compliant categorization
+  - Hotel marketing fees → Travel-Lodging (not Professional Services)
+  - Meals & Entertainment → 50% deductible (CRA ITA Section 67.1)
+  - GST/HST → 100% Input Tax Credit eligible
+  - Tourism levies → 100% deductible travel expenses
 
 ## Prerequisites
 
