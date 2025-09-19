@@ -414,6 +414,7 @@ class TestQuickBooksService:
             patch.object(service, "search_vendor") as mock_search,
             patch.object(service, "create_vendor") as mock_create_vendor,
             patch.object(service, "get_expense_accounts") as mock_get_accounts,
+            patch.object(service, "get_bank_accounts") as mock_get_banks,
             patch.object(client, "post") as mock_post,
         ):
             # No existing vendor
@@ -432,6 +433,16 @@ class TestQuickBooksService:
                     id="account_1",
                     name="Office Supplies",
                     account_type="Expense",
+                    active=True,
+                )
+            ]
+
+            # Mock bank accounts for payment
+            mock_get_banks.return_value = [
+                AccountInfo(
+                    id="bank_1",
+                    name="Chequing",
+                    account_type="Bank",
                     active=True,
                 )
             ]
@@ -462,6 +473,7 @@ class TestQuickBooksService:
         with (
             patch.object(service, "search_vendor") as mock_search,
             patch.object(service, "get_expense_accounts") as mock_get_accounts,
+            patch.object(service, "get_bank_accounts") as mock_get_banks,
             patch.object(client, "post") as mock_post,
         ):
             # Existing vendor found
@@ -479,6 +491,16 @@ class TestQuickBooksService:
                     id="account_1",
                     name="Office Supplies",
                     account_type="Expense",
+                    active=True,
+                )
+            ]
+
+            # Mock bank accounts for payment
+            mock_get_banks.return_value = [
+                AccountInfo(
+                    id="bank_1",
+                    name="Chequing",
+                    account_type="Bank",
                     active=True,
                 )
             ]
