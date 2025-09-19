@@ -134,8 +134,11 @@ Current system only handles single-category expenses, making it impossible to pr
 - ✅ **PRE-113:** CLI/API Interface
 - 🚧 **PRE-114:** Testing Framework (In Progress)
 
-### 🚧 Phase 4: Enhancement (Current)
-- 🚧 **PRE-115:** Vendor-Aware Business Rules (New - Addressing User Feedback)
+### ✅ Phase 4: Enhancement (COMPLETED)
+- ✅ **PRE-115:** Vendor-Aware Business Rules (Addressing User Feedback)
+
+### 🔄 Phase 5: Quality & Optimization (In Progress)
+- 🚧 **PRE-114:** Testing Framework (Comprehensive testing coverage)
 
 ## Success Criteria
 - ✅ Marriott hotel bills process correctly with 3-category split
@@ -143,6 +146,8 @@ Current system only handles single-category expenses, making it impossible to pr
 - ✅ >90% categorization accuracy for common expenses
 - ✅ Full CRA tax compliance
 - ✅ <5 seconds end-to-end processing time
+- ✅ Vendor-aware business rules with hotel marketing fee fix
+- ✅ Enhanced confidence scoring based on vendor context
 
 ## Key Benefits
 1. **Scalable Architecture:** Add new expense types via configuration

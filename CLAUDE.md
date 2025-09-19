@@ -2,7 +2,7 @@
 
 # QuickExpense
 
-A modern FastAPI application for processing and submitting expenses directly into **QuickBooks Online** using Python 3.12 with full type safety and modern development practices.
+A modern FastAPI application for **Canadian small businesses and sole proprietors** to process and submit expenses directly into **QuickBooks Online** using Python 3.12 with full type safety, modern development practices, and **Canadian tax compliance** (CRA ITA Section 67.1, GST/HST).
 
 ## Current Implementation Status
 
@@ -394,12 +394,14 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
 3. ✅ **Payment Account Support**: Added bank and credit card account selection
 4. ✅ **Enhanced Error Handling**: Clear user messages for authentication errors
 5. ✅ **Field Mapping Fix**: Corrected receipt-to-expense field mappings
-6. ✅ **Vendor-Aware Business Rules (PRE-115)**: Enhanced business rules engine with vendor context awareness
+6. **Vendor-Aware Business Rules (PRE-115)**: Enhanced business rules engine with vendor context awareness for Canadian tax compliance
    - Hotel marketing fees now correctly categorized as Travel-Lodging (not Professional Services)
    - Vendor-specific rules take precedence over generic rules when vendor patterns match
    - Enhanced confidence scoring based on vendor-category alignment
    - Comprehensive validation and warning system for potential mismatches
    - Backward compatible with existing categorization rules
+   - CRA ITA Section 67.1 compliance for meals & entertainment (50% deductible)
+   - GST/HST Input Tax Credit proper handling
 
 ## Business Rules Configuration
 
