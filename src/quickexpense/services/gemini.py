@@ -103,9 +103,23 @@ class GeminiService:
             # Parse JSON response
             try:
                 extracted_data = json.loads(response.text)
+                logger.debug("Gemini extracted data type: %s", type(extracted_data))
+                logger.debug("Gemini extracted data: %s", extracted_data)
             except json.JSONDecodeError as e:
                 msg = f"Failed to parse Gemini response as JSON: {response.text}"
                 raise ValueError(msg) from e
+
+            # Handle case where Gemini returns a list instead of dict
+            if isinstance(extracted_data, list):
+                if len(extracted_data) > 0 and isinstance(extracted_data[0], dict):
+                    logger.warning("Gemini returned list, using first item")
+                    extracted_data = extracted_data[0]
+                else:
+                    msg = f"Gemini returned invalid list format: {extracted_data}"
+                    raise ValueError(msg)
+            elif not isinstance(extracted_data, dict):
+                msg = f"Gemini returned invalid data type: {type(extracted_data)}"
+                raise TypeError(msg)
 
             # Validate and create ExtractedReceipt model
             receipt = ExtractedReceipt(**extracted_data)
@@ -159,12 +173,19 @@ class GeminiService:
             "Important instructions:\n"
             "1. Extract ALL line items visible on the receipt\n"
             "2. Ensure all monetary values are positive numbers\n"
-            "3. Verify that subtotal + tax_amount + tip_amount = total_amount\n"
-            "4. Use the most appropriate payment_method based on receipt content\n"
-            "5. Set confidence_score based on image clarity and extraction certainty\n"
-            "6. If any required field cannot be determined, use reasonable defaults\n"
-            "7. For dates, use today's date if not visible on receipt\n"
-            "8. Currency should be a 3-letter ISO code (USD, EUR, GBP, etc.)"
+            "3. For HOTEL RECEIPTS: Use the actual amount charged to the credit card, "
+            "NOT the balance\n"
+            "   - If you see 'Balance: 0.00' and a credit card charge amount, "
+            "use the charge amount\n"
+            "   - Look for 'Amount:', 'Card charged:', or 'Total charged:' values\n"
+            "4. Verify that subtotal + tax_amount + tip_amount = total_amount\n"
+            "5. Use the most appropriate payment_method based on receipt content\n"
+            "6. Set confidence_score based on image clarity and extraction certainty\n"
+            "7. If any required field cannot be determined, use reasonable defaults\n"
+            "8. For dates, use today's date if not visible on receipt\n"
+            "9. Currency should be a 3-letter ISO code (USD, EUR, GBP, etc.)\n"
+            "10. For multi-day hotel stays, include each day's charges as "
+            "separate line items"
         )
 
         if additional_context:

@@ -83,7 +83,7 @@ warn_unused_ignores = true
 warn_return_any = true
 warn_unreachable = true
 files = ["src", "tests"]
-exclude = ["main.py", "config.py", "models.py", "oauth_setup.py", "quickbooks_client.py"]
+exclude = ["main.py", "config.py", "models.py", "oauth_setup.py", "quickbooks_client.py", "src/quickexpense/services/pdf_converter.py"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"

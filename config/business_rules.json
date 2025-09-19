@@ -1,0 +1,268 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "description": "Default Canadian tax compliance business rules",
+    "jurisdiction": "Canada",
+    "tax_year": "2025",
+    "compliance_references": ["CRA ITA Section 67.1", "GST/HST Act"],
+    "last_updated": "2025-09-17"
+  },
+  "rules": [
+    {
+      "id": "hotel_accommodation",
+      "priority": 100,
+      "name": "Hotel Accommodation Charges",
+      "description": "Room charges and accommodation fees - 100% deductible",
+      "conditions": {
+        "description_keywords": ["room charge", "accommodation", "hotel fee", "lodging", "suite", "room tax", "resort fee"],
+        "vendor_patterns": ["*hotel*", "*inn*", "*resort*", "*motel*", "*lodge*", "*marriott*", "*hilton*", "*hyatt*", "*courtyard*"],
+        "amount_min": 30.00,
+        "amount_max": 2000.00
+      },
+      "actions": {
+        "category": "Travel-Lodging",
+        "deductibility_percentage": 100,
+        "qb_account": "Travel - Lodging",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.2,
+        "compliance_note": "Accommodation expenses fully deductible for business travel"
+      },
+      "enabled": true
+    },
+    {
+      "id": "restaurant_meals",
+      "priority": 90,
+      "name": "Restaurant and Meal Charges",
+      "description": "Restaurant meals and food - 50% deductible per CRA rules",
+      "conditions": {
+        "description_keywords": ["restaurant", "meal", "dining", "food", "coffee", "breakfast", "lunch", "dinner", "catering", "beverage"],
+        "vendor_patterns": ["*restaurant*", "*cafe*", "*bistro*", "*bar*", "*pub*", "*eatery*", "*kitchen*"]
+      },
+      "actions": {
+        "category": "Travel-Meals",
+        "deductibility_percentage": 50,
+        "qb_account": "Travel - Meals & Entertainment",
+        "tax_treatment": "meals_limitation",
+        "confidence_boost": 0.1,
+        "compliance_note": "CRA ITA Section 67.1 - 50% limitation applies to meal expenses"
+      },
+      "enabled": true
+    },
+    {
+      "id": "room_service_meals",
+      "priority": 105,
+      "name": "Hotel Room Service Meals",
+      "description": "Room service and in-room dining charges - 50% deductible",
+      "conditions": {
+        "description_keywords": ["room service", "restaurant room charge", "in-room dining", "minibar", "restaurant charge"],
+        "vendor_patterns": ["*hotel*", "*inn*", "*resort*", "*marriott*", "*hilton*", "*hyatt*", "*courtyard*"],
+        "amount_min": 5.00,
+        "amount_max": 500.00
+      },
+      "actions": {
+        "category": "Travel-Meals",
+        "deductibility_percentage": 50,
+        "qb_account": "Travel - Meals & Entertainment",
+        "tax_treatment": "meals_limitation",
+        "confidence_boost": 0.15,
+        "compliance_note": "Hotel room service treated as meal expense - 50% deductible"
+      },
+      "enabled": true
+    },
+    {
+      "id": "gst_hst_charges",
+      "priority": 85,
+      "name": "GST/HST Tax Charges",
+      "description": "Goods and Services Tax / Harmonized Sales Tax - Input Tax Credit eligible",
+      "conditions": {
+        "description_keywords": ["gst", "hst", "tax", "sales tax", "harmonized tax"],
+        "description_patterns": ["gst *", "hst *", "*tax*"]
+      },
+      "actions": {
+        "category": "Tax-GST/HST",
+        "deductibility_percentage": 100,
+        "qb_account": "GST/HST Paid on Purchases",
+        "tax_treatment": "input_tax_credit",
+        "confidence_boost": 0.3,
+        "compliance_note": "GST/HST eligible for Input Tax Credit"
+      },
+      "enabled": true
+    },
+    {
+      "id": "tourism_levy",
+      "priority": 80,
+      "name": "Tourism Levy and Municipal Taxes",
+      "description": "Tourism levies and municipal accommodation taxes - 100% deductible",
+      "conditions": {
+        "description_keywords": ["tourism levy", "destination fee", "city tax", "municipal tax", "tourism tax", "occupancy tax"],
+        "amount_min": 1.00,
+        "amount_max": 50.00
+      },
+      "actions": {
+        "category": "Travel-Taxes",
+        "deductibility_percentage": 100,
+        "qb_account": "Travel - Other",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.1,
+        "compliance_note": "Tourism and municipal taxes fully deductible"
+      },
+      "enabled": true
+    },
+    {
+      "id": "marketing_fees",
+      "priority": 75,
+      "name": "Marketing and Service Fees",
+      "description": "Marketing fees and service charges - typically 100% deductible",
+      "conditions": {
+        "description_keywords": ["marketing fee", "service fee", "administration fee", "booking fee", "processing fee"],
+        "amount_min": 1.00,
+        "amount_max": 100.00
+      },
+      "actions": {
+        "category": "Professional Services",
+        "deductibility_percentage": 100,
+        "qb_account": "Professional Fees",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.05,
+        "compliance_note": "Service and marketing fees fully deductible"
+      },
+      "enabled": true
+    },
+    {
+      "id": "transportation_taxi",
+      "priority": 70,
+      "name": "Taxi and Rideshare Transportation",
+      "description": "Taxi, Uber, Lyft and other transportation - 100% deductible",
+      "conditions": {
+        "description_keywords": ["taxi", "uber", "lyft", "cab", "transportation", "ride", "airport shuttle"],
+        "vendor_patterns": ["*taxi*", "*uber*", "*lyft*", "*cab*", "*transport*"],
+        "amount_min": 5.00,
+        "amount_max": 500.00
+      },
+      "actions": {
+        "category": "Travel-Transportation",
+        "deductibility_percentage": 100,
+        "qb_account": "Travel - Transportation",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.1,
+        "compliance_note": "Business transportation fully deductible"
+      },
+      "enabled": true
+    },
+    {
+      "id": "office_supplies",
+      "priority": 65,
+      "name": "Office Supplies and Stationery",
+      "description": "Office supplies, stationery, and business materials - 100% deductible",
+      "conditions": {
+        "description_keywords": ["office supplies", "stationery", "paper", "pens", "printer", "toner", "ink", "folders", "envelopes"],
+        "vendor_patterns": ["*office*", "*staples*", "*depot*", "*supply*"],
+        "amount_min": 5.00,
+        "amount_max": 1000.00
+      },
+      "actions": {
+        "category": "Office Supplies",
+        "deductibility_percentage": 100,
+        "qb_account": "Office Supplies & Software",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.1,
+        "compliance_note": "Office supplies fully deductible"
+      },
+      "enabled": true
+    },
+    {
+      "id": "fuel_gasoline",
+      "priority": 60,
+      "name": "Fuel and Gasoline",
+      "description": "Vehicle fuel and gasoline - 100% deductible for business use",
+      "conditions": {
+        "description_keywords": ["fuel", "gasoline", "gas", "diesel", "petrol"],
+        "vendor_patterns": ["*petro*", "*shell*", "*esso*", "*chevron*", "*gas*", "*fuel*"],
+        "amount_min": 10.00,
+        "amount_max": 300.00
+      },
+      "actions": {
+        "category": "Vehicle-Fuel",
+        "deductibility_percentage": 100,
+        "qb_account": "Automobile - Gas & Oil",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.15,
+        "compliance_note": "Business vehicle fuel fully deductible"
+      },
+      "enabled": true
+    },
+    {
+      "id": "software_subscriptions",
+      "priority": 55,
+      "name": "Software and Subscription Services",
+      "description": "Software licenses and subscription services - 100% deductible",
+      "conditions": {
+        "description_keywords": ["software", "subscription", "license", "saas", "cloud", "app", "service"],
+        "vendor_patterns": ["*microsoft*", "*adobe*", "*google*", "*amazon*", "*software*"],
+        "amount_min": 5.00,
+        "amount_max": 1000.00
+      },
+      "actions": {
+        "category": "Software",
+        "deductibility_percentage": 100,
+        "qb_account": "Office Supplies & Software",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.1,
+        "compliance_note": "Business software fully deductible"
+      },
+      "enabled": true
+    },
+    {
+      "id": "internet_telecommunications",
+      "priority": 50,
+      "name": "Internet and Telecommunications",
+      "description": "Internet, phone, and telecommunications - business portion deductible",
+      "conditions": {
+        "description_keywords": ["internet", "phone", "mobile", "cellular", "telecommunications", "wifi", "data"],
+        "vendor_patterns": ["*bell*", "*rogers*", "*telus*", "*shaw*", "*internet*", "*telecom*"],
+        "amount_min": 20.00,
+        "amount_max": 500.00
+      },
+      "actions": {
+        "category": "Telecommunications",
+        "deductibility_percentage": 100,
+        "qb_account": "Telephone & Internet",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.1,
+        "compliance_note": "Business telecommunications fully deductible",
+        "requires_manual_review": true
+      },
+      "enabled": true
+    },
+    {
+      "id": "parking_fees",
+      "priority": 45,
+      "name": "Parking Fees",
+      "description": "Parking fees and charges - 100% deductible for business",
+      "conditions": {
+        "description_keywords": ["parking", "park", "meter", "garage", "lot"],
+        "amount_min": 1.00,
+        "amount_max": 100.00
+      },
+      "actions": {
+        "category": "Travel-Parking",
+        "deductibility_percentage": 100,
+        "qb_account": "Travel - Other",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.1,
+        "compliance_note": "Business parking fees fully deductible"
+      },
+      "enabled": true
+    }
+  ],
+  "fallback_rules": {
+    "unknown_expense": {
+      "category": "General Business Expense",
+      "deductibility_percentage": 100,
+      "qb_account": "Other Business Expenses",
+      "tax_treatment": "standard",
+      "requires_manual_review": true,
+      "compliance_note": "Unknown expense type - requires manual review for proper categorization"
+    }
+  }
+}

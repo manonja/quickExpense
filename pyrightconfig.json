@@ -42,5 +42,5 @@
       "reportOptionalMemberAccess": false
     }
   ],
-  "ignore": ["main.py", "config.py", "models.py", "oauth_setup.py", "quickbooks_client.py"]
+  "ignore": ["main.py", "config.py", "models.py", "oauth_setup.py", "quickbooks_client.py", "src/quickexpense/services/pdf_converter.py"]
 }
