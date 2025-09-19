@@ -5,16 +5,22 @@ from __future__ import annotations
 import base64
 import io
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from PIL import Image
+
+if TYPE_CHECKING:
+    import fitz  # type: ignore[import-untyped]
 
 try:
     import fitz  # PyMuPDF
 
-    PDF_SUPPORT = True
+    _pdf_support = True
 except ImportError:
-    PDF_SUPPORT = False
+    fitz = None
+    _pdf_support = False
 
-from PIL import Image
+PDF_SUPPORT = _pdf_support
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +63,7 @@ class PDFConverterService:
             ImportError: If PyMuPDF not installed
         """
         self._ensure_pdf_support()
+        assert fitz is not None  # PDF support verified  # noqa: S101
 
         if dpi is None:
             dpi = self.DEFAULT_DPI
@@ -66,6 +73,9 @@ class PDFConverterService:
             pdf_bytes = base64.b64decode(pdf_base64)
 
             # Open PDF with PyMuPDF
+            if not PDF_SUPPORT:
+                msg = "PyMuPDF (fitz) is not available"
+                raise ImportError(msg)
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
             if len(doc) == 0:
@@ -85,7 +95,7 @@ class PDFConverterService:
             matrix = fitz.Matrix(scale, scale)
 
             # Render page to pixmap
-            pixmap = pdf_page.get_pixmap(matrix=matrix)
+            pixmap = pdf_page.get_pixmap(matrix=matrix)  # type: ignore[attr-defined]
 
             # Convert to PIL Image
             img_data = pixmap.tobytes("png")
@@ -122,6 +132,7 @@ class PDFConverterService:
             True if PDF is valid and readable
         """
         self._ensure_pdf_support()
+        assert fitz is not None  # PDF support verified  # noqa: S101
 
         try:
             pdf_bytes = base64.b64decode(pdf_base64)
@@ -156,6 +167,7 @@ class PDFConverterService:
             ValueError: If PDF is invalid
         """
         self._ensure_pdf_support()
+        assert fitz is not None  # PDF support verified  # noqa: S101
 
         try:
             pdf_bytes = base64.b64decode(pdf_base64)
@@ -177,13 +189,15 @@ class PDFConverterService:
             Dictionary containing PDF metadata
         """
         self._ensure_pdf_support()
+        assert fitz is not None  # PDF support verified  # noqa: S101
 
         try:
             pdf_bytes = base64.b64decode(pdf_base64)
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
             # Extract metadata
-            metadata = doc.metadata
+            raw_metadata = doc.metadata
+            metadata: dict[str, Any] = dict(raw_metadata) if raw_metadata else {}
             metadata["page_count"] = len(doc)
             metadata["is_encrypted"] = doc.is_encrypted
             metadata["needs_pass"] = doc.needs_pass

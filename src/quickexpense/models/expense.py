@@ -28,7 +28,10 @@ class LineItem(BaseModel):
         return Decimal(v) if not isinstance(v, Decimal) else v
 
     def to_categorized(
-        self, category: str, deductibility_percentage: int = 100, **kwargs: Any
+        self,
+        category: str,
+        deductibility_percentage: int = 100,
+        **kwargs: Any,  # noqa: ANN401
     ) -> CategorizedLineItem:
         """Convert basic line item to categorized line item."""
         from .enhanced_expense import CategorizedLineItem
@@ -39,7 +42,13 @@ class LineItem(BaseModel):
             quantity=self.quantity,
             category=category,
             deductibility_percentage=deductibility_percentage,
-            **kwargs,
+            account_mapping=kwargs.get("account_mapping"),
+            business_rule_id=kwargs.get("business_rule_id"),
+            **{
+                k: v
+                for k, v in kwargs.items()
+                if k not in {"account_mapping", "business_rule_id"}
+            },
         )
 
 
@@ -72,7 +81,9 @@ class Expense(BaseModel):
         return v
 
     def to_multi_category(
-        self, deductibility_percentage: int = 100, **kwargs: Any
+        self,
+        deductibility_percentage: int = 100,
+        **kwargs: Any,  # noqa: ANN401
     ) -> MultiCategoryExpense:
         """Convert single-category expense to multi-category format."""
         from .enhanced_expense import CategorizedLineItem, MultiCategoryExpense
@@ -96,6 +107,8 @@ class Expense(BaseModel):
                 category="Tax-GST",
                 deductibility_percentage=100,
                 tax_treatment="input_tax_credit",
+                account_mapping=None,
+                business_rule_id=None,
             )
             categorized_items.append(tax_item)
 
@@ -105,6 +118,9 @@ class Expense(BaseModel):
             total_amount=self.amount,
             currency=self.currency,
             categorized_line_items=categorized_items,
+            total_deductible_amount=None,
+            foreign_exchange_rate=None,
+            payment_account=None,
         )
 
     model_config = {

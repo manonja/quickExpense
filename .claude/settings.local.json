@@ -6,7 +6,9 @@
       "Bash(uv run pytest:*)",
       "Bash(git rm:*)",
       "Bash(uv run ruff check:*)",
-      "Bash(uv run pre-commit run:*)"
+      "Bash(uv run pre-commit run:*)",
+      "Bash(uv run black:*)",
+      "Bash(uv run ruff format:*)"
     ],
     "deny": []
   }
