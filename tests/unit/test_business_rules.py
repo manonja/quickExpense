@@ -400,6 +400,8 @@ class TestBusinessRuleEngine:
 
         context = ExpenseContext(
             vendor_name="Marriott Hotel",
+            vendor_address=None,
+            postal_code=None,
             transaction_date=None,
             total_amount=None,
             payment_method=None,
@@ -518,6 +520,8 @@ class TestMarriottHotelBillScenario:
         """Create expense context for Marriott hotel."""
         return ExpenseContext(
             vendor_name="Courtyard by Marriott",
+            vendor_address=None,
+            postal_code=None,
             transaction_date=None,
             total_amount=Decimal("237.17"),
             currency="CAD",

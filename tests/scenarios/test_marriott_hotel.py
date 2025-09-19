@@ -73,6 +73,8 @@ class TestMarriottHotelBusinessScenario:
 
         context = ExpenseContext(
             vendor_name="Courtyard by Marriott Edmonton",
+            vendor_address="Edmonton",
+            postal_code=None,
             business_purpose="consulting",
             transaction_date=datetime.fromisoformat("2024-04-24"),
             total_amount=Decimal("535.54"),
@@ -140,6 +142,8 @@ class TestMarriottHotelBusinessScenario:
 
         context = ExpenseContext(
             vendor_name="Courtyard by Marriott Edmonton",
+            vendor_address="Edmonton",
+            postal_code=None,
             transaction_date=datetime.fromisoformat("2024-04-24"),
             total_amount=Decimal("25.00"),
             payment_method="credit_card",

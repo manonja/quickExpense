@@ -317,6 +317,8 @@ class QuickExpenseCLI:
         # Create expense context
         expense_context = ExpenseContext(
             vendor_name=receipt_data.vendor_name,
+            vendor_address=receipt_data.vendor_address,
+            postal_code=getattr(receipt_data, "postal_code", None),
             transaction_date=datetime.combine(
                 receipt_data.transaction_date, datetime.min.time()
             ),

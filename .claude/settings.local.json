@@ -9,7 +9,8 @@
       "Bash(uv run pre-commit run:*)",
       "Bash(uv run black:*)",
       "Bash(uv run ruff format:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": []
   }
