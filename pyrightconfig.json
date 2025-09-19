@@ -35,7 +35,7 @@
     {
       "root": "tests",
       "pythonVersion": "3.12",
-      "extraPaths": ["src"],
+      "extraPaths": ["src", "."],
       "reportArgumentType": false,
       "reportPrivateUsage": false,
       "reportMissingParameterType": false,
