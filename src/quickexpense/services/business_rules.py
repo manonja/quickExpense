@@ -13,6 +13,7 @@ from quickexpense.models.business_rules import (
     BusinessRule,
     BusinessRulesConfig,
     ExpenseContext,
+    RuleActions,
     RuleApplication,
     RuleResult,
 )
@@ -137,18 +138,195 @@ class BusinessRuleEngine:
 
         return best_rule
 
+    def select_best_rule_with_vendor_context(
+        self, matching_rules: list[BusinessRule], vendor_name: str | None = None
+    ) -> BusinessRule | None:
+        """Select the best rule with vendor context awareness."""
+        if not matching_rules:
+            return None
+
+        # If no vendor context, fall back to standard selection
+        if not vendor_name:
+            return self.select_best_rule(matching_rules)
+
+        # Separate vendor-specific rules from generic rules
+        vendor_specific_rules = []
+        generic_rules = []
+
+        for rule in matching_rules:
+            if rule.conditions.vendor_patterns or rule.conditions.vendor_keywords:
+                # Check if this rule actually matches the vendor
+                if rule.matches_vendor(vendor_name):
+                    vendor_specific_rules.append(rule)
+                else:
+                    # Rule has vendor patterns but doesn't match this vendor
+                    continue
+            else:
+                generic_rules.append(rule)
+
+        # Prefer vendor-specific rules over generic rules
+        if vendor_specific_rules:
+            best_rule = vendor_specific_rules[0]  # Already sorted by priority
+            if len(vendor_specific_rules) > 1:
+                logger.info(
+                    (
+                        "Multiple vendor-specific rules matched for %s, "
+                        "selected: %s (priority %d)"
+                    ),
+                    vendor_name,
+                    best_rule.name,
+                    best_rule.priority,
+                )
+            else:
+                logger.info(
+                    "Selected vendor-specific rule for %s: %s",
+                    vendor_name,
+                    best_rule.name,
+                )
+            return best_rule
+
+        # Fall back to generic rules if no vendor-specific matches
+        if generic_rules:
+            best_rule = generic_rules[0]
+            logger.debug(
+                "No vendor-specific rules matched for %s, using generic rule: %s",
+                vendor_name,
+                best_rule.name,
+            )
+            return best_rule
+
+        return None
+
+    def _calculate_confidence_with_vendor_context(
+        self, rule: BusinessRule, vendor_name: str | None = None
+    ) -> float:
+        """Calculate confidence score considering vendor context."""
+        base_confidence = 0.8  # Base confidence for rule matches
+        confidence_boost = rule.actions.confidence_boost
+
+        # Start with base calculation
+        confidence_score = base_confidence + confidence_boost
+
+        # Apply vendor context adjustments
+        if vendor_name:
+            # Check if rule has vendor patterns
+            has_vendor_patterns = (
+                rule.conditions.vendor_patterns or rule.conditions.vendor_keywords
+            )
+
+            if has_vendor_patterns:
+                # Rule is vendor-specific and we have vendor context
+                if rule.matches_vendor(vendor_name):
+                    # Perfect match: vendor-specific rule matching the vendor
+                    confidence_score += 0.05  # Extra boost for vendor alignment
+                    logger.debug(
+                        "Vendor-specific rule %s matches vendor %s: +0.05 confidence",
+                        rule.name,
+                        vendor_name,
+                    )
+                else:
+                    # This shouldn't happen due to filtering, but just in case
+                    confidence_score -= 0.1  # Penalty for vendor mismatch
+                    logger.warning(
+                        (
+                            "Vendor-specific rule %s does not match vendor %s: "
+                            "-0.1 confidence"
+                        ),
+                        rule.name,
+                        vendor_name,
+                    )
+            else:
+                # Generic rule applied to vendor context
+                # No penalty, but also no bonus
+                logger.debug(
+                    (
+                        "Generic rule %s applied to vendor %s: "
+                        "no vendor context adjustment"
+                    ),
+                    rule.name,
+                    vendor_name,
+                )
+
+        # Ensure confidence stays within bounds
+        return max(0.0, min(1.0, confidence_score))
+
+    def validate_vendor_category_alignment(
+        self, rule: BusinessRule, vendor_name: str | None = None
+    ) -> tuple[bool, str | None]:
+        """Validate if the rule's category aligns with the vendor type."""
+        if not vendor_name:
+            return True, None
+
+        vendor_lower = vendor_name.lower()
+        category = rule.actions.category.lower()
+
+        # Known vendor type patterns and their expected categories
+        hotel_patterns = [
+            "hotel",
+            "inn",
+            "resort",
+            "motel",
+            "lodge",
+            "marriott",
+            "hilton",
+            "hyatt",
+            "courtyard",
+            "sheraton",
+            "westin",
+        ]
+        restaurant_patterns = [
+            "restaurant",
+            "cafe",
+            "bistro",
+            "bar",
+            "pub",
+            "eatery",
+            "kitchen",
+            "dining",
+        ]
+        transport_patterns = ["taxi", "uber", "lyft", "airline", "airport"]
+
+        # Check for potential misalignments
+        warning_message = None
+
+        if any(pattern in vendor_lower for pattern in hotel_patterns):
+            if "professional" in category:
+                warning_message = (
+                    f"Hotel vendor '{vendor_name}' categorized as "
+                    f"'{rule.actions.category}' - consider Travel-Lodging "
+                    f"for hotel fees"
+                )
+        elif (
+            any(pattern in vendor_lower for pattern in restaurant_patterns)
+            and "lodging" in category
+        ):
+            warning_message = (
+                f"Restaurant vendor '{vendor_name}' categorized as "
+                f"'{rule.actions.category}' - consider Travel-Meals category"
+            )
+        elif (
+            any(pattern in vendor_lower for pattern in transport_patterns)
+            and "professional" in category
+        ):
+            warning_message = (
+                f"Transportation vendor '{vendor_name}' categorized as "
+                f"'{rule.actions.category}' - consider Travel-Transportation category"
+            )
+
+        return warning_message is None, warning_message
+
     def apply_rule(
         self,
         rule: BusinessRule,
         description: str,  # noqa: ARG002
-        vendor_name: str | None = None,  # noqa: ARG002
+        vendor_name: str | None = None,
         amount: Decimal | None = None,  # noqa: ARG002
     ) -> RuleResult:
         """Apply a specific rule to generate categorization result."""
-        # Calculate confidence score
-        base_confidence = 0.8  # Base confidence for rule matches
-        confidence_boost = rule.actions.confidence_boost
-        confidence_score = max(0.0, min(1.0, base_confidence + confidence_boost))
+        # Calculate confidence score with vendor context
+        confidence_score = self._calculate_confidence_with_vendor_context(
+            rule, vendor_name
+        )
 
         # Set business_rule_id from the rule
         actions = rule.actions.model_copy()
@@ -209,17 +387,31 @@ class BusinessRuleEngine:
         amount: Decimal | None = None,
         context: ExpenseContext | None = None,  # noqa: ARG002
     ) -> RuleResult:
-        """Categorize a line item using business rules."""
+        """Categorize a line item using business rules with vendor context awareness."""
         try:
             # Find matching rules
             matching_rules = self.find_matching_rules(description, vendor_name, amount)
 
-            # Select best rule
-            best_rule = self.select_best_rule(matching_rules)
+            # Select best rule with vendor context awareness
+            best_rule = self.select_best_rule_with_vendor_context(
+                matching_rules, vendor_name
+            )
 
             # Apply rule or fallback
             if best_rule:
                 result = self.apply_rule(best_rule, description, vendor_name, amount)
+
+                # Validate vendor-category alignment and add warnings if needed
+                is_aligned, warning_message = self.validate_vendor_category_alignment(
+                    best_rule, vendor_name
+                )
+
+                if not is_aligned and warning_message:
+                    logger.warning(
+                        "Vendor-category alignment warning: %s", warning_message
+                    )
+                    # Could add warning to result if needed for CLI display
+
             else:
                 result = self.apply_fallback_rule(description, vendor_name, amount)
 
@@ -261,7 +453,7 @@ class BusinessRuleEngine:
                 # Fallback: try to extract amount from item
                 logger.warning("Unknown LineItem type, attempting fallback")
                 total_amount = getattr(
-                    item, "amount", getattr(item, "total_price", Decimal("0"))
+                    item, "amount", getattr(item, "total_price", Decimal(0))
                 )
 
             result = self.categorize_line_item(
@@ -288,8 +480,6 @@ class BusinessRuleEngine:
             actions_applied = result.rule_applied.actions
         else:
             # Create fallback actions
-            from quickexpense.models.business_rules import RuleActions
-
             actions_applied = RuleActions(
                 category=result.category,
                 deductibility_percentage=result.deductibility_percentage,

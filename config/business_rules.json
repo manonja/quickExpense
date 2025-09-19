@@ -70,6 +70,27 @@
       "enabled": true
     },
     {
+      "id": "hotel_marketing_fees",
+      "priority": 110,
+      "name": "Hotel Marketing and Service Fees",
+      "description": "Marketing and service fees from hotels - categorize as lodging expense",
+      "conditions": {
+        "description_keywords": ["marketing fee", "resort fee", "destination fee", "amenity fee", "facility fee", "service fee"],
+        "vendor_patterns": ["*hotel*", "*inn*", "*resort*", "*motel*", "*lodge*", "*marriott*", "*hilton*", "*hyatt*", "*courtyard*", "*sheraton*", "*westin*", "*doubletree*", "*hampton*", "*holiday inn*"],
+        "amount_min": 1.00,
+        "amount_max": 100.00
+      },
+      "actions": {
+        "category": "Travel-Lodging",
+        "deductibility_percentage": 100,
+        "qb_account": "Travel - Lodging",
+        "tax_treatment": "standard",
+        "confidence_boost": 0.2,
+        "compliance_note": "Hotel marketing and service fees categorized as accommodation costs"
+      },
+      "enabled": true
+    },
+    {
       "id": "gst_hst_charges",
       "priority": 85,
       "name": "GST/HST Tax Charges",
@@ -111,8 +132,8 @@
     {
       "id": "marketing_fees",
       "priority": 75,
-      "name": "Marketing and Service Fees",
-      "description": "Marketing fees and service charges - typically 100% deductible",
+      "name": "Marketing and Service Fees (Non-Hotel)",
+      "description": "Marketing fees and service charges from non-hotel vendors - typically 100% deductible",
       "conditions": {
         "description_keywords": ["marketing fee", "service fee", "administration fee", "booking fee", "processing fee"],
         "amount_min": 1.00,
@@ -123,8 +144,8 @@
         "deductibility_percentage": 100,
         "qb_account": "Professional Fees",
         "tax_treatment": "standard",
-        "confidence_boost": 0.05,
-        "compliance_note": "Service and marketing fees fully deductible"
+        "confidence_boost": 0.02,
+        "compliance_note": "Service and marketing fees fully deductible (non-hotel vendors)"
       },
       "enabled": true
     },
