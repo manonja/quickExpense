@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from quickexpense.models.business_rules import (
     BusinessRule,
@@ -92,7 +93,7 @@ class TestRuleActions:
     def test_deductibility_percentage_validation(self):
         """Test that deductibility percentage is validated."""
         with pytest.raises(
-            ValueError, match="ensure this value is less than or equal to 100"
+            ValidationError, match="Input should be less than or equal to 100"
         ):
             RuleActions(
                 category="Test",
@@ -104,7 +105,7 @@ class TestRuleActions:
             )
 
         with pytest.raises(
-            ValueError, match="ensure this value is greater than or equal to 0"
+            ValidationError, match="Input should be greater than or equal to 0"
         ):
             RuleActions(
                 category="Test",
@@ -551,9 +552,10 @@ class TestMarriottHotelBillScenario:
         assert meal_result.deductibility_percentage == 50
         assert meal_result.tax_treatment == TaxTreatment.MEALS_LIMITATION
 
-        # Marketing Fee: should be Professional Services, 100% deductible
+        # Marketing Fee: should be Travel-Lodging for hotels (vendor-aware)
+        # 100% deductible due to vendor context
         marketing_result = results[2]
-        assert marketing_result.category == "Professional Services"
+        assert marketing_result.category == "Travel-Lodging"
         assert marketing_result.deductibility_percentage == 100
 
         # GST: should be Tax-GST/HST, 100% deductible, Input Tax Credit
