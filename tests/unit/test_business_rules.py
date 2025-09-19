@@ -552,7 +552,8 @@ class TestMarriottHotelBillScenario:
         assert meal_result.deductibility_percentage == 50
         assert meal_result.tax_treatment == TaxTreatment.MEALS_LIMITATION
 
-        # Marketing Fee: should be Travel-Lodging for hotels (vendor-aware), 100% deductible
+        # Marketing Fee: should be Travel-Lodging for hotels (vendor-aware)
+        # 100% deductible due to vendor context
         marketing_result = results[2]
         assert marketing_result.category == "Travel-Lodging"
         assert marketing_result.deductibility_percentage == 100
