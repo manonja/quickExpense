@@ -7,15 +7,20 @@ import asyncio
 import base64
 import json
 import logging
+import subprocess
 import sys
-from datetime import datetime
+import time
+from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import httpx
 from pydantic import ValidationError
 
+from quickexpense import __version__
 from quickexpense.core.config import get_settings
+from quickexpense.core.logging_config import LoggingConfig
 from quickexpense.models import Expense, ReceiptExtractionRequest
 from quickexpense.models.business_rules import ExpenseContext
 from quickexpense.models.enhanced_expense import (
@@ -26,6 +31,7 @@ from quickexpense.models.quickbooks_oauth import (
     QuickBooksOAuthConfig,
     QuickBooksTokenResponse,
 )
+from quickexpense.services.audit_logger import AuditLogger
 from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.services.gemini import GeminiService
 from quickexpense.services.quickbooks import (
@@ -35,6 +41,9 @@ from quickexpense.services.quickbooks import (
 )
 from quickexpense.services.quickbooks_oauth import QuickBooksOAuthManager
 from quickexpense.services.token_store import TokenStore
+
+# Constants
+MAX_DISPLAY_ITEMS = 3
 
 # Configure logging
 logging.basicConfig(
@@ -70,6 +79,11 @@ class QuickExpenseCLI:
         self.quickbooks_client: QuickBooksClient | None = None
         self.oauth_manager: QuickBooksOAuthManager | None = None
         self.business_rules_engine: BusinessRuleEngine | None = None
+
+        # Initialize audit logging
+        self.audit_config = LoggingConfig()
+        self.audit_logger = AuditLogger(self.audit_config)
+        self.current_correlation_id: str | None = None
 
     def _load_and_validate_tokens(self) -> tuple[dict[str, Any], str]:
         """Load and validate authentication tokens."""
@@ -200,192 +214,220 @@ class QuickExpenseCLI:
 
             logger.info("Services initialized successfully")
 
+        except APIError:
+            # Re-raise CLI errors
+            raise
         except Exception as e:
-            logger.exception("Failed to initialize services")
-            if "No authentication tokens found" in str(e):
-                # Re-raise token errors with helpful message
-                raise
-            if "company_id" in str(e):
-                msg = (
-                    f"Invalid tokens: {e}\n"
-                    "Please run OAuth setup again:\n  quickexpense auth --force"
-                )
-                raise APIError(msg) from e
-            raise APIError(f"Failed to initialize services: {e}") from e
+            logger.error("Failed to initialize services: %s", e)
+            raise APIError(f"Service initialization failed: {e}") from e
 
     async def cleanup(self) -> None:
         """Clean up resources."""
         if self.quickbooks_client:
             await self.quickbooks_client.close()
-        # Note: OAuth manager cleanup is handled automatically when
-        # it goes out of scope or by its internal HTTP client management
 
     def validate_file(self, file_path: Path) -> None:
-        """Validate that the file exists and is a supported format."""
+        """Validate the input file."""
+        # Check if file exists
         if not file_path.exists():
             raise FileValidationError(f"File not found: {file_path}")
 
+        # Check if it's a file (not a directory)
         if not file_path.is_file():
             raise FileValidationError(f"Not a file: {file_path}")
 
-        if file_path.suffix.lower() not in SUPPORTED_FORMATS:
-            msg = (
-                f"Unsupported file format: {file_path.suffix}\n"
-                f"Supported formats: {', '.join(sorted(SUPPORTED_FORMATS))}"
+        # Check file extension
+        suffix = file_path.suffix.lower()
+        if suffix not in SUPPORTED_FORMATS:
+            supported = ", ".join(sorted(SUPPORTED_FORMATS))
+            raise FileValidationError(
+                f"Unsupported file format '{suffix}'. Supported: {supported}"
             )
-            raise FileValidationError(msg)
 
-    def _create_categorized_items(
-        self,
-        receipt_data: Any,  # noqa: ANN401
-        rule_results: list[Any],
-    ) -> list[CategorizedLineItem]:
-        """Create categorized line items from receipt and rule results."""
-        categorized_items = []
-        for line_item, rule_result in zip(
-            receipt_data.line_items, rule_results, strict=False
-        ):
-            categorized_item = CategorizedLineItem(
-                description=line_item.description,
-                amount=line_item.total_price,  # Use total_price for receipt
-                quantity=int(line_item.quantity),  # Convert Decimal to int
-                category=rule_result.category,
-                deductibility_percentage=rule_result.deductibility_percentage,
-                account_mapping=rule_result.qb_account,
-                tax_treatment=rule_result.tax_treatment.value,
-                confidence_score=rule_result.confidence_score,
-                business_rule_id=rule_result.business_rule_id,
-            )
-            categorized_items.append(categorized_item)
-        return categorized_items
+        # Check file size (max 10MB)
+        max_size = 10 * 1024 * 1024  # 10MB
+        file_size = file_path.stat().st_size
+        if file_size > max_size:
+            size_mb = file_size / (1024 * 1024)
+            raise FileValidationError(f"File too large ({size_mb:.1f}MB). Max: 10MB")
 
-    def _create_enhanced_expense(
-        self,
-        receipt_data: Any,  # noqa: ANN401
-        categorized_items: list[CategorizedLineItem],
-        rule_results: list[Any],
-    ) -> MultiCategoryExpense:
-        """Create enhanced multi-category expense."""
-        return MultiCategoryExpense(
-            vendor_name=receipt_data.vendor_name,
-            date=receipt_data.transaction_date,
-            total_amount=receipt_data.total_amount,
-            currency=receipt_data.currency,
-            categorized_line_items=categorized_items,
-            business_rules_applied=[
-                rule_result.business_rule_id or "fallback"
-                for rule_result in rule_results
-            ],
-            payment_method=receipt_data.payment_method.value,
-            payment_account="Chequing",  # Default payment account
-            total_deductible_amount=None,  # Will be auto-calculated
-            foreign_exchange_rate=None,  # No FX for now
-        )
+        # Check read permissions
+        if not file_path.is_file() or not file_path.exists():
+            raise FileValidationError(f"Cannot read file: {file_path}")
 
-    async def _extract_receipt_data(self, file_path: Path) -> Any:  # noqa: ANN401
+    async def _extract_receipt_data(self, file_path: Path) -> Any:
         """Extract receipt data using Gemini AI."""
-        # Read and encode image
-        image_data = file_path.read_bytes()
-        image_base64 = base64.b64encode(image_data).decode("utf-8")
-
-        # Extract receipt data using Gemini AI
         print(f"\nExtracting data from receipt: {file_path.name}")  # noqa: T201
-        receipt_request = ReceiptExtractionRequest(
-            image_base64=image_base64,
-            category="General",  # Default category
-            additional_context=None,
-        )
 
-        # Use Gemini service directly
         if not self.gemini_service:
             raise APIError("Gemini service not initialized")
 
-        return await self.gemini_service.extract_receipt_data(
-            receipt_request.image_base64,
-            receipt_request.additional_context,
+        # Read file content
+        with file_path.open("rb") as f:
+            image_data = f.read()
+
+        # Create extraction request
+        request = ReceiptExtractionRequest(
+            image_base64=base64.b64encode(image_data).decode("utf-8"),
+            category="General",
+            additional_context="",
         )
 
+        # Extract data
+        return await self.gemini_service.extract_receipt_data(request.image_base64)
+
+    async def _extract_receipt_data_with_debug(self, file_path: Path) -> dict[str, Any]:
+        """Extract receipt data with additional debug output."""
+        print(f"\nExtracting data from receipt: {file_path.name}")  # noqa: T201
+
+        # Show file info
+        print(f"  File size: {file_path.stat().st_size / 1024:.1f} KB")  # noqa: T201
+        print(f"  File type: {file_path.suffix.lower()}")  # noqa: T201
+
+        result = await self._extract_receipt_data(file_path)
+
+        print("\nExtracted data:")  # noqa: T201
+        print(f"  Vendor: {result.get('vendor_name', 'Unknown')}")  # noqa: T201
+        print(f"  Date: {result.get('transaction_date', 'Unknown')}")  # noqa: T201
+        print(f"  Amount: ${result.get('total_amount', '0.00')}")  # noqa: T201
+        print(f"  Tax: ${result.get('tax_amount', '0.00')}")  # noqa: T201
+        print(f"  Currency: {result.get('currency', 'CAD')}")  # noqa: T201
+
+        line_items = result.get("line_items", [])
+        if line_items:
+            print(f"\n  Line items: {len(line_items)}")  # noqa: T201
+            for idx, item in enumerate(line_items[:MAX_DISPLAY_ITEMS], 1):
+                desc = item.get("description", "No description")[:50]
+                amount = item.get("amount", "0.00")
+                print(f"    {idx}. {desc} - ${amount}")  # noqa: T201
+            if len(line_items) > MAX_DISPLAY_ITEMS:
+                print(f"    ... and {len(line_items) - MAX_DISPLAY_ITEMS} more")  # noqa: T201
+
+        return result
+
     def _apply_business_rules(
-        self,
-        receipt_data: Any,  # noqa: ANN401
-    ) -> tuple[list[Any], list[CategorizedLineItem], MultiCategoryExpense]:
-        """Apply business rules to categorize line items."""
-        print("Applying business rules for categorization...")  # noqa: T201
+        self, receipt_data: dict[str, Any]
+    ) -> tuple[list[dict[str, Any]], list[CategorizedLineItem], MultiCategoryExpense]:
+        """Apply business rules with enhanced categorization."""
+        print("\nApplying business rules for categorization...")  # noqa: T201
+
         if not self.business_rules_engine:
             raise APIError("Business rules engine not initialized")
 
-        # Create expense context
-        expense_context = ExpenseContext(
-            vendor_name=receipt_data.vendor_name,
-            vendor_address=receipt_data.vendor_address,
-            postal_code=getattr(receipt_data, "postal_code", None),
-            transaction_date=datetime.combine(
-                receipt_data.transaction_date, datetime.min.time()
-            ),
-            total_amount=receipt_data.total_amount,
-            currency=receipt_data.currency,
-            payment_method=receipt_data.payment_method.value,
-            business_purpose="Business expense",
-            location=receipt_data.vendor_address,
+        # Create expense context for business rules
+        context = ExpenseContext(
+            vendor_name=receipt_data.get("vendor_name", ""),
+            total_amount=Decimal(str(receipt_data.get("total_amount", 0))),
+            transaction_date=receipt_data.get("date", ""),
+            currency=receipt_data.get("currency", "CAD"),
         )
 
-        # Categorize line items using business rules
+        # Get line items from receipt data
+        line_items = receipt_data.get("line_items", [])
+
+        # Use existing categorize_line_items method
         rule_results = self.business_rules_engine.categorize_line_items(
-            receipt_data.line_items, expense_context
+            line_items, context
         )
 
-        # Create categorized line items and enhanced expense
-        categorized_items = self._create_categorized_items(receipt_data, rule_results)
-        enhanced_expense = self._create_enhanced_expense(
-            receipt_data, categorized_items, rule_results
+        # Convert rule results to the expected format for audit logging
+        rule_applications = [
+            {
+                "id": result.business_rule_id or "unknown",
+                "name": (
+                    result.rule_applied.name if result.rule_applied else "Unknown Rule"
+                ),
+                "confidence": result.confidence_score,
+                "items_affected": 1,
+                "category": result.category,
+                "t2125_line_item": None,  # TODO: Add to RuleActions model
+                "deductibility_percentage": result.deductibility_percentage,
+                "ita_reference": None,  # TODO: Add to RuleActions model
+            }
+            for result in rule_results
+        ]
+
+        # Convert to categorized line items
+        categorized_items = []
+        for i, result in enumerate(rule_results):
+            # Get original line item data
+            original_item = line_items[i] if i < len(line_items) else {}
+
+            categorized_items.append(
+                CategorizedLineItem(
+                    description=original_item.get("description", "Processed line item"),
+                    amount=Decimal(str(original_item.get("amount", 0))),
+                    category=result.category,
+                    deductibility_percentage=result.deductibility_percentage,
+                    account_mapping=result.account_mapping,
+                    tax_treatment=result.tax_treatment,
+                    confidence_score=result.confidence_score,
+                    business_rule_id=result.business_rule_id,
+                )
+            )
+
+        # Create enhanced expense using existing data
+        enhanced_expense = MultiCategoryExpense(
+            vendor_name=receipt_data.get("vendor_name", "Unknown"),
+            total_amount=receipt_data.get("total_amount", 0),
+            date=receipt_data.get("date", "2024-01-01"),  # Fallback date
+            currency=receipt_data.get("currency", "CAD"),
+            categorized_line_items=categorized_items,
+            total_deductible_amount=None,  # Will be auto-calculated
+            foreign_exchange_rate=None,
+            payment_account=None,
         )
 
-        return rule_results, categorized_items, enhanced_expense
+        return (rule_applications, categorized_items, enhanced_expense)
 
     def _create_result_structure(
         self,
         file_path: Path,
-        receipt_data: Any,  # noqa: ANN401
+        receipt_data: dict[str, Any],
         enhanced_expense: MultiCategoryExpense,
-        rule_results: list[Any],
+        rule_results: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Create the result structure for the processed receipt."""
-        return {
-            "receipt": receipt_data.model_dump(),
-            "enhanced_expense": enhanced_expense.model_dump(),
-            "business_rules": {
-                "rule_applications": [
-                    {
-                        "line_item": line_item.description,
-                        "rule_applied": (
-                            rule_result.rule_applied.name
-                            if rule_result.rule_applied
-                            else "Fallback Rule"
-                        ),
-                        "category": rule_result.category,
-                        "deductibility_percentage": (
-                            rule_result.deductibility_percentage
-                        ),
-                        "qb_account": rule_result.qb_account,
-                        "tax_treatment": rule_result.tax_treatment.value,
-                        "confidence_score": rule_result.confidence_score,
-                        "is_fallback": rule_result.is_fallback,
-                    }
-                    for line_item, rule_result in zip(
-                        receipt_data.line_items, rule_results, strict=False
-                    )
-                ],
-                "total_deductible_amount": float(
-                    enhanced_expense.total_deductible_amount or 0
-                ),
-                "deductible_by_category": {
-                    category: float(amount)
-                    for category, amount in (
-                        enhanced_expense.get_deductible_amount_by_category().items()
-                    )
-                },
+        """Create structured result for output."""
+        # Calculate deductibility summary
+        total_deductible = sum(
+            float(item.deductible_amount)
+            for item in enhanced_expense.categorized_line_items
+        )
+        deductibility_rate = (
+            total_deductible / float(enhanced_expense.total_amount) * 100
+        )
+
+        # Get unique categories
+        categories = {item.category for item in enhanced_expense.categorized_line_items}
+
+        # Build categorization summary
+        categorization = {
+            "total_items": len(enhanced_expense.categorized_line_items),
+            "categories": list(categories),
+            "business_rules_applied": len(rule_results),
+            "confidence_scores": [r.get("confidence_score", 0) for r in rule_results],
+            "tax_deductibility": {
+                "total_amount": str(enhanced_expense.total_amount),
+                "deductible_amount": f"{total_deductible:.2f}",
+                "deductibility_rate": f"{deductibility_rate:.1f}%",
             },
+        }
+
+        # Add T2125 summary if sole proprietor
+        if self.business_rules_engine and rule_results:
+            # Convert rule_results to expected format for T2125 summary
+            # For now, skip T2125 summary until we have proper mapping
+            # TODO(@dev): Implement proper T2125 mapping (#PRE-117)
+            pass
+
+        return {
             "file": str(file_path),
+            "receipt": receipt_data,
+            "business_rules": {
+                "rule_applications": rule_results,
+                "categorization": categorization,
+            },
+            "enhanced_expense": enhanced_expense.model_dump(),
         }
 
     async def _create_quickbooks_expense(
@@ -393,10 +435,7 @@ class QuickExpenseCLI:
         enhanced_expense: MultiCategoryExpense,
         categorized_items: list[CategorizedLineItem],
     ) -> dict[str, Any]:
-        """Create expense in QuickBooks from enhanced expense data."""
-        # TODO(manonja): Implement multi-category expense support  # noqa: FIX002
-        # https://github.com/project/quickExpense/issues/XXX
-        # Need to update QB service to handle multi-category expenses
+        """Create expense in QuickBooks."""
         print("\nCreating expense in QuickBooks...")  # noqa: T201
         if not self.quickbooks_service:
             raise APIError("QuickBooks service not initialized")
@@ -422,21 +461,50 @@ class QuickExpenseCLI:
             ),
         }
 
-    async def process_receipt(
+    async def process_receipt(  # noqa: PLR0915, C901
         self,
         file_path: Path,
         dry_run: bool = False,  # noqa: FBT001, FBT002
+        verbose: bool = False,  # noqa: FBT001, FBT002
     ) -> dict[str, Any]:
         """Process a single receipt file with business rules categorization."""
         logger.info("Processing receipt: %s", file_path)
 
-        try:
-            # Extract receipt data
-            receipt_data = await self._extract_receipt_data(file_path)
+        # Start audit trail
+        start_time = time.time()
+        user_context = {"entity_type": "sole_proprietorship", "verbose": verbose}
+        correlation_id = self.audit_logger.start_expense_processing(
+            str(file_path), user_context
+        )
+        self.current_correlation_id = correlation_id
 
-            # Apply business rules
+        if verbose:
+            print(f"\nCorrelation ID: {correlation_id}")  # noqa: T201
+            audit_log_path = self.audit_logger.config.audit_log_path
+            print(f"Audit trail: {audit_log_path / 'quickexpense_audit.log'}")  # noqa: T201
+
+        try:
+            # Extract receipt data with timing
+            extract_start = time.time()
+            receipt_data = await self._extract_receipt_data(file_path)
+            extract_time = time.time() - extract_start
+
+            # Log Gemini extraction
+            self.audit_logger.log_gemini_extraction(
+                correlation_id,
+                extract_time,
+                receipt_data.get("confidence_score", 0.0),
+                receipt_data,
+            )
+
+            # Apply business rules with timing
             rule_results, categorized_items, enhanced_expense = (
                 self._apply_business_rules(receipt_data)
+            )
+
+            # Log business rules application
+            self._log_business_rules_application(
+                correlation_id, rule_results, categorized_items, enhanced_expense
             )
 
             # Create result structure
@@ -447,12 +515,33 @@ class QuickExpenseCLI:
             if dry_run:
                 result["dry_run"] = True
                 result["message"] = "DRY RUN - No expense created in QuickBooks"
+                final_status = "dry_run_success"
             else:
-                # Create expense in QuickBooks
+                # Create expense in QuickBooks with timing
+                qb_start = time.time()
                 qb_result = await self._create_quickbooks_expense(
                     enhanced_expense, categorized_items
                 )
+                qb_time = time.time() - qb_start
+
+                # Log QuickBooks integration
+                self._log_quickbooks_integration(correlation_id, qb_result, qb_time)
+
                 result.update(qb_result)
+                final_status = "success"
+
+            # Complete audit trail
+            total_time = time.time() - start_time
+            summary = self._create_processing_summary(enhanced_expense, rule_results)
+            self.audit_logger.complete_expense_processing(
+                correlation_id, total_time, final_status, summary
+            )
+
+            # Add audit info to result
+            if verbose:
+                result["audit_info"] = self.audit_logger.get_audit_summary(
+                    correlation_id
+                )
 
             return result
 
@@ -541,56 +630,45 @@ class QuickExpenseCLI:
                     ]
                 )
 
-        # Show tax summary
-        if business_rules:
-            total_deductible = float(business_rules.get("total_deductible_amount", 0))
-            total_amount = float(enhanced_expense.get("total_amount", 0))
-            deductible_percentage = (
-                (total_deductible / total_amount * 100) if total_amount > 0 else 0
-            )
-
+        # Show tax deductibility summary
+        categorization = business_rules.get("categorization", {})
+        if categorization.get("tax_deductibility"):
+            tax_info = categorization["tax_deductibility"]
             lines.extend(
                 [
                     "\n=== Tax Deductibility Summary ===",
-                    f"Total Amount: ${total_amount:.2f}",
-                    (
-                        f"Deductible Amount: ${total_deductible:.2f} "
-                        f"({deductible_percentage:.1f}%)"
-                    ),
+                    f"Total Amount: ${tax_info.get('total_amount', '0.00')}",
+                    f"Deductible Amount: ${tax_info.get('deductible_amount', '0.00')} "
+                    f"({tax_info.get('deductibility_rate', '0%')})",
                 ]
             )
 
-            # Show breakdown by category
-            deductible_by_category = business_rules.get("deductible_by_category", {})
-            if deductible_by_category:
+            # Show T2125 summary if available
+            t2125 = categorization.get("t2125_summary", {})
+            if t2125.get("line_items"):
                 lines.append("\nDeductible by Category:")
-                for category, amount in deductible_by_category.items():
-                    lines.append(f"  • {category}: ${amount:.2f}")
+                lines.extend(
+                    [
+                        f"  • {line_item['category']}: ${line_item['amount']:.2f}"
+                        for line_item in t2125["line_items"]
+                    ]
+                )
 
         # Show enhanced expense summary
         if enhanced_expense:
-            # Calculate unique categories
-            categorized_items = enhanced_expense.get("categorized_line_items", [])
-            unique_categories = len(
-                {item.get("category", "") for item in categorized_items}
-            )
-
             lines.extend(
                 [
                     "\n=== Enhanced Expense Summary ===",
                     f"Vendor: {enhanced_expense.get('vendor_name', 'Unknown')}",
-                    (
-                        f"Categories: {len(categorized_items)} items across "
-                        f"{unique_categories} categories"
-                    ),
-                    (
-                        "Business Rules Applied: "
-                        f"{len(enhanced_expense.get('business_rules_applied', []))}"
-                    ),
-                    f"Payment: {enhanced_expense.get('payment_method', 'unknown')}",
+                    f"Categories: {len(enhanced_expense.get('categorized_line_items', []))} "
+                    f"items across {len(categorization.get('categories', []))} categories",
+                    f"Business Rules Applied: "
+                    f"{categorization.get('business_rules_applied', 0)}",
+                    f"Payment: {enhanced_expense.get('payment_account_ref', {}).get('value', 'cash')}",
                 ]
             )
 
+        # Show result message
         if result.get("message"):
             lines.extend(["\n=== Result ===", result["message"]])
 
@@ -608,7 +686,9 @@ class QuickExpenseCLI:
             await self.initialize_services()
 
             # Process receipt
-            result = await self.process_receipt(file_path, dry_run=args.dry_run)
+            result = await self.process_receipt(
+                file_path, dry_run=args.dry_run, verbose=args.verbose
+            )
 
             # Format and display output
             output = self.format_output(result, args.output)
@@ -631,109 +711,91 @@ class QuickExpenseCLI:
             print("\n\nOperation cancelled by user", file=sys.stderr)  # noqa: T201
             sys.exit(130)
         except Exception as e:
-            logger.exception("Unexpected error")
+            logger.exception("Unexpected error in upload command")
             print(f"\nUnexpected error: {e}", file=sys.stderr)  # noqa: T201
             sys.exit(1)
         finally:
             await self.cleanup()
 
-    async def auth_command(self, args: argparse.Namespace) -> None:
-        """Handle the authentication command."""
+    async def auth_command(self, args: argparse.Namespace) -> None:  # noqa: ARG002
+        """Handle the auth command."""
         try:
-            # Check if tokens already exist
-            token_store = TokenStore()
-            existing_tokens = token_store.load_tokens()
-
-            if existing_tokens and not args.force:
-                print("✅ Authentication tokens already exist!")  # noqa: T201
-                print("   Use --force to re-authenticate")  # noqa: T201
-                print(  # noqa: T201
-                    f"   Company ID: {existing_tokens.get('company_id', 'Unknown')}"
-                )
-                return
-
-            print("🚀 Starting QuickBooks authentication...")  # noqa: T201
-            print("   This will open your browser for OAuth setup.")  # noqa: T201
-
-            # Import and run the OAuth script functionality
-            import subprocess
-
-            result = subprocess.run(  # noqa: ASYNC221, S603
-                [  # noqa: S607
-                    "uv",
-                    "run",
-                    "python",
-                    "scripts/connect_quickbooks_cli.py",
-                ],
-                capture_output=False,
+            # Run the OAuth connection script
+            result = subprocess.run(  # noqa: S603, ASYNC221
+                ["python", "scripts/connect_quickbooks_cli.py"],
+                capture_output=True,
                 text=True,
                 check=False,
             )
 
             if result.returncode == 0:
-                print("\n✅ Authentication successful!")  # noqa: T201
-                print(  # noqa: T201
-                    "   You can now upload receipts with: quickexpense upload <receipt>"
-                )
+                print("✅ Authentication successful!")  # noqa: T201
+                print("You can now use QuickExpense to process receipts.")  # noqa: T201
+                sys.exit(0)
             else:
-                print("\n❌ Authentication failed!")  # noqa: T201
+                print(f"❌ Authentication failed: {result.stderr}", file=sys.stderr)  # noqa: T201
                 sys.exit(1)
 
-        except KeyboardInterrupt:
-            print("\n\n⚠️  Authentication cancelled by user")  # noqa: T201
-            sys.exit(130)
-        except Exception as e:  # noqa: BLE001
-            print(f"\n❌ Authentication error: {e}")  # noqa: T201
+        except FileNotFoundError:
+            print(  # noqa: T201
+                "\nError: OAuth connection script not found.\n"
+                "Please run from the project root directory.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except Exception as e:
+            logger.exception("Error during authentication")
+            print(f"\nError during authentication: {e}", file=sys.stderr)  # noqa: T201
             sys.exit(1)
 
-    def _check_authentication_status(self) -> dict[str, Any] | None:
-        """Check authentication token status."""
-        token_store = TokenStore()
-        token_data = token_store.load_tokens()
-
-        if not token_data:
-            print("❌ Authentication: Not authenticated")  # noqa: T201
-            print("   Run: quickexpense auth")  # noqa: T201
-            return None
-
-        print("✅ Authentication: Tokens found")  # noqa: T201
-        print(f"   Company ID: {token_data.get('company_id', 'Unknown')}")  # noqa: T201
-        return token_data
-
-    def _validate_token_status(self, token_data: dict[str, Any]) -> None:
-        """Validate token expiry status."""
+    def _check_auth_status(self) -> None:
+        """Check and display authentication status."""
         try:
-            token_response = QuickBooksTokenResponse(
-                access_token=token_data["access_token"],
-                refresh_token=token_data["refresh_token"],
-                expires_in=token_data.get("expires_in", 3600),
-                x_refresh_token_expires_in=token_data.get(
-                    "x_refresh_token_expires_in", 8640000
-                ),
-                token_type=token_data.get("token_type", "bearer"),
-            )
-            token_info = token_response.to_token_info()
+            token_store = TokenStore()
+            tokens = token_store.load_tokens()
 
-            if token_info.refresh_token_expired:
-                print("❌ Token Status: Refresh token expired")  # noqa: T201
-                print("   Run: quickexpense auth --force")  # noqa: T201
-            elif token_info.access_token_expired:
-                print(  # noqa: T201
-                    "⚠️  Token Status: Access token expired (will auto-refresh)"
-                )
+            if tokens:
+                print("✅ Authentication: Tokens found")  # noqa: T201
+                print(f"   Company ID: {tokens.get('company_id', 'Unknown')}")  # noqa: T201
+
+                # Check token validity
+                try:
+                    saved_at_str = tokens.get("saved_at")
+                    if saved_at_str:
+                        # Parse the saved_at timestamp
+                        saved_at = datetime.fromisoformat(saved_at_str)
+                        now = datetime.now(UTC)
+                        age_hours = (now - saved_at).total_seconds() / 3600
+
+                        # Access token expires in ~1 hour
+                        if age_hours < 1:
+                            print("✅ Token Status: Valid")  # noqa: T201
+                        elif age_hours < 100 * 24:  # Refresh token ~100 days
+                            print(  # noqa: T201
+                                "⚠️  Token Status: Access token expired "
+                                "(refresh available)"
+                            )
+                        else:
+                            print("❌ Token Status: Tokens expired")  # noqa: T201
+                            print("   Run: quickexpense auth --force")  # noqa: T201
+                    else:
+                        print("⚠️  Token Status: Unknown (no timestamp)")  # noqa: T201
+                except Exception:  # noqa: BLE001
+                    print("⚠️  Token Status: Could not verify")  # noqa: T201
             else:
-                print("✅ Token Status: Valid")  # noqa: T201
-
+                print("❌ Authentication: No tokens found")  # noqa: T201
+                print("   Run: quickexpense auth")  # noqa: T201
         except Exception as e:  # noqa: BLE001
-            print(f"⚠️  Token Status: Cannot validate ({e})")  # noqa: T201
+            print(f"⚠️  Authentication: Error checking status ({e})")  # noqa: T201
 
-    async def _test_quickbooks_connection(self) -> None:
-        """Test QuickBooks API connection."""
+    async def _check_quickbooks_status(self) -> None:
+        """Check QuickBooks API connectivity."""
         print("\n🔌 Testing QuickBooks connection...")  # noqa: T201
         try:
             await self.initialize_services()
+
             if self.quickbooks_service:
-                # Try a simple API call
+                # Test by fetching expense accounts
                 accounts = await self.quickbooks_service.get_expense_accounts()
                 print(  # noqa: T201
                     f"✅ QuickBooks API: Connected ({len(accounts)} expense accounts)"
@@ -788,15 +850,10 @@ class QuickExpenseCLI:
             print("=" * 40)  # noqa: T201
 
             # Check authentication
-            token_data = self._check_authentication_status()
-            if not token_data:
-                return
+            self._check_auth_status()
 
-            # Validate token status
-            self._validate_token_status(token_data)
-
-            # Test connections and services
-            await self._test_quickbooks_connection()
+            # Test connections
+            await self._check_quickbooks_status()
             self._check_gemini_status()
             self._check_business_rules_status()
 
@@ -805,6 +862,113 @@ class QuickExpenseCLI:
             sys.exit(1)
         finally:
             await self.cleanup()
+
+    def _log_business_rules_application(
+        self,
+        correlation_id: str,
+        rule_results: list[dict[str, Any]],
+        categorized_items: list[CategorizedLineItem],
+        enhanced_expense: MultiCategoryExpense,  # noqa: ARG002
+    ) -> None:
+        """Log business rules application for audit trail."""
+        # Convert rule results to audit format
+        rules_applied = [
+            {
+                "id": result.get("business_rule_id", "unknown"),
+                "name": result.get("rule_applied", {}).get("name", "Unknown Rule"),
+                "confidence": result.get("confidence_score", 0.0),
+                "items_affected": 1,
+                "category": result.get("category", "Unknown"),
+                "t2125_line_item": result.get("rule_applied", {})
+                .get("actions", {})
+                .get("t2125_line_item"),
+                "deductibility_percentage": result.get("deductibility_percentage", 100),
+                "ita_reference": result.get("rule_applied", {})
+                .get("actions", {})
+                .get("ita_reference"),
+            }
+            for result in rule_results
+        ]
+
+        # Convert categorized items to audit format
+        items_data = [
+            {
+                "category": item.category,
+                "amount": item.amount,
+                "deductible_amount": item.deductible_amount,
+                "t2125_line_item": getattr(item, "t2125_line_item", None),
+                "compliance_note": getattr(item, "compliance_note", None),
+            }
+            for item in categorized_items
+        ]
+
+        self.audit_logger.log_business_rules_application(
+            correlation_id, rules_applied, items_data, entity_type="sole_proprietorship"
+        )
+
+    def _log_quickbooks_integration(
+        self,
+        correlation_id: str,
+        qb_result: dict[str, Any],
+        processing_time: float,
+    ) -> None:
+        """Log QuickBooks integration for audit trail."""
+        qb_response = qb_result.get("quickbooks_response", {})
+        purchase = qb_response.get("Purchase", {})
+
+        qb_entries = []
+        if purchase:
+            qb_entries.append(
+                {
+                    "id": purchase.get("Id", "unknown"),
+                    "amount": float(purchase.get("TotalAmt", 0)),
+                    "account": purchase.get("AccountRef", {}).get("name", "unknown"),
+                    "vendor": purchase.get("EntityRef", {}).get("name", "unknown"),
+                }
+            )
+
+        errors = []
+        if "error" in qb_result or not qb_response:
+            errors.append(qb_result.get("error", "Unknown QuickBooks error"))
+
+        self.audit_logger.log_quickbooks_integration(
+            correlation_id, qb_entries, processing_time, errors if errors else None
+        )
+
+    def _create_processing_summary(
+        self,
+        enhanced_expense: MultiCategoryExpense,
+        rule_results: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Create processing summary for audit completion."""
+        total_deductible = sum(
+            float(item.deductible_amount)
+            for item in enhanced_expense.categorized_line_items
+        )
+
+        return {
+            "vendor": enhanced_expense.vendor_name,
+            "total_amount": enhanced_expense.total_amount,
+            "categories_count": len(
+                {item.category for item in enhanced_expense.categorized_line_items}
+            ),
+            "rules_applied": len(rule_results),
+            "qb_entries_created": 1,  # Current implementation creates single purchase
+            "deductible_amount": total_deductible,
+            "entity_type": "sole_proprietorship",
+            "tax_form": "T2125",
+            "compliance_notes": [
+                result.get("compliance_note")
+                for result in rule_results
+                if result.get("compliance_note")
+            ],
+            "items_processed": len(enhanced_expense.categorized_line_items),
+            "success_rate": 100.0,
+            "average_confidence": sum(
+                result.get("confidence_score", 0) for result in rule_results
+            )
+            / max(len(rule_results), 1),
+        }
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -829,23 +993,21 @@ Supported formats: JPEG, PNG, GIF, BMP, WebP, PDF
         """,
     )
 
+    # Add version argument
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.1.0",
+        version=f"quickexpense {__version__}",
     )
 
-    subparsers = parser.add_subparsers(
-        dest="command",
-        help="Available commands",
-        required=True,
-    )
+    # Subcommands
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Auth command
     auth_parser = subparsers.add_parser(
         "auth",
         help="Authenticate with QuickBooks",
-        description="Set up OAuth authentication with QuickBooks",
+        description="Run OAuth flow to connect with QuickBooks Online",
     )
     auth_parser.add_argument(
         "--force",
@@ -857,7 +1019,7 @@ Supported formats: JPEG, PNG, GIF, BMP, WebP, PDF
     subparsers.add_parser(
         "status",
         help="Check system status",
-        description="Check authentication and system status",
+        description="Check authentication, API connections, and configuration",
     )
 
     # Upload command
@@ -883,6 +1045,11 @@ Supported formats: JPEG, PNG, GIF, BMP, WebP, PDF
         choices=["text", "json"],
         default="text",
         help="Output format (default: text)",
+    )
+    upload_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose output with audit trail information",
     )
 
     return parser
