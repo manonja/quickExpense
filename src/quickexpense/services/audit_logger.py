@@ -72,12 +72,29 @@ class AuditLogger:
         correlation_id: str,
         processing_time: float,
         confidence_score: float,
-        extracted_data: dict[str, Any],
+        extracted_data: Any,  # Support both dict and Pydantic models  # noqa: ANN401
         api_cost: float | None = None,
         error: str | None = None,
     ) -> None:
         """Log Gemini AI extraction details and performance."""
-        line_items = extracted_data.get("line_items", [])
+        # Handle both dict and Pydantic model formats for backward compatibility
+        if hasattr(extracted_data, "line_items"):
+            # Pydantic model (ExtractedReceipt)
+            line_items = extracted_data.line_items
+            vendor_name = extracted_data.vendor_name
+            total_amount = str(extracted_data.total_amount)
+            currency = extracted_data.currency
+            date = str(extracted_data.transaction_date)
+            # Get field names from model
+            fields_extracted = list(extracted_data.model_fields.keys())
+        else:
+            # Dictionary format
+            line_items = extracted_data.get("line_items", [])
+            vendor_name = extracted_data.get("vendor_name")
+            total_amount = str(extracted_data.get("total_amount", "0"))
+            currency = extracted_data.get("currency", "CAD")
+            date = str(extracted_data.get("date", ""))
+            fields_extracted = list(extracted_data.keys())
 
         audit_record = {
             "event_type": "gemini_extraction",
@@ -88,12 +105,12 @@ class AuditLogger:
             "success": error is None,
             "error": error,
             "extraction_results": {
-                "vendor_name": extracted_data.get("vendor_name"),
-                "total_amount": str(extracted_data.get("total_amount", "0")),
-                "currency": extracted_data.get("currency", "CAD"),
-                "date": str(extracted_data.get("date", "")),
+                "vendor_name": vendor_name,
+                "total_amount": total_amount,
+                "currency": currency,
+                "date": date,
                 "line_item_count": len(line_items),
-                "fields_extracted": list(extracted_data.keys()),
+                "fields_extracted": fields_extracted,
             },
             "performance_metrics": {
                 "api_cost_usd": api_cost,

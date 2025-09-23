@@ -255,7 +255,9 @@ class QuickExpenseCLI:
         if not file_path.is_file() or not file_path.exists():
             raise FileValidationError(f"Cannot read file: {file_path}")
 
-    async def _extract_receipt_data(self, file_path: Path) -> Any:
+    async def _extract_receipt_data(
+        self, file_path: Path
+    ) -> Any:  # Support both ExtractedReceipt and dict  # noqa: ANN401
         """Extract receipt data using Gemini AI."""
         print(f"\nExtracting data from receipt: {file_path.name}")  # noqa: T201
 
@@ -306,7 +308,8 @@ class QuickExpenseCLI:
         return result
 
     def _apply_business_rules(
-        self, receipt_data: dict[str, Any]
+        self,
+        receipt_data: Any,  # Support both dict and Pydantic models  # noqa: ANN401
     ) -> tuple[list[dict[str, Any]], list[CategorizedLineItem], MultiCategoryExpense]:
         """Apply business rules with enhanced categorization."""
         print("\nApplying business rules for categorization...")  # noqa: T201
@@ -314,38 +317,79 @@ class QuickExpenseCLI:
         if not self.business_rules_engine:
             raise APIError("Business rules engine not initialized")
 
+        # Handle both dict and Pydantic model formats for backward compatibility
+        if hasattr(receipt_data, "vendor_name"):
+            # Pydantic model (ExtractedReceipt)
+            vendor_name = receipt_data.vendor_name
+            total_amount = receipt_data.total_amount
+            transaction_date = receipt_data.transaction_date
+            currency = receipt_data.currency
+            line_items = receipt_data.line_items
+        else:
+            # Dictionary format
+            vendor_name = receipt_data.get("vendor_name", "")
+            total_amount = Decimal(str(receipt_data.get("total_amount", 0)))
+            transaction_date = receipt_data.get("date", "")
+            currency = receipt_data.get("currency", "CAD")
+            line_items = receipt_data.get("line_items", [])
+
         # Create expense context for business rules
         context = ExpenseContext(
-            vendor_name=receipt_data.get("vendor_name", ""),
-            total_amount=Decimal(str(receipt_data.get("total_amount", 0))),
-            transaction_date=receipt_data.get("date", ""),
-            currency=receipt_data.get("currency", "CAD"),
+            vendor_name=vendor_name,
+            total_amount=total_amount,
+            transaction_date=transaction_date,
+            currency=currency,
+            vendor_address=None,
+            postal_code=None,
+            payment_method=None,
+            business_purpose=None,
+            location=None,
         )
-
-        # Get line items from receipt data
-        line_items = receipt_data.get("line_items", [])
 
         # Use existing categorize_line_items method
         rule_results = self.business_rules_engine.categorize_line_items(
             line_items, context
         )
 
-        # Convert rule results to the expected format for audit logging
-        rule_applications = [
-            {
-                "id": result.business_rule_id or "unknown",
-                "name": (
-                    result.rule_applied.name if result.rule_applied else "Unknown Rule"
-                ),
-                "confidence": result.confidence_score,
-                "items_affected": 1,
-                "category": result.category,
-                "t2125_line_item": None,  # TODO: Add to RuleActions model
-                "deductibility_percentage": result.deductibility_percentage,
-                "ita_reference": None,  # TODO: Add to RuleActions model
-            }
-            for result in rule_results
-        ]
+        # Convert rule results to the expected format for both audit logging and display
+        rule_applications = []
+        for i, result in enumerate(rule_results):
+            # Get original line item data for description
+            original_item = line_items[i] if i < len(line_items) else {}
+
+            # Handle line item description
+            if hasattr(original_item, "description"):
+                line_item_desc = original_item.description
+            else:
+                line_item_desc = original_item.get("description", "Unknown Item")
+
+            rule_applications.append(
+                {
+                    "id": result.business_rule_id or "unknown",
+                    "name": (
+                        result.rule_applied.name
+                        if result.rule_applied
+                        else "Unknown Rule"
+                    ),
+                    # Add fields for display formatter
+                    "line_item": line_item_desc,
+                    "rule_applied": (
+                        result.rule_applied.name if result.rule_applied else "Unknown"
+                    ),
+                    "confidence": result.confidence_score,
+                    "confidence_score": result.confidence_score,  # Both formats
+                    "items_affected": 1,
+                    "category": result.category,
+                    "qb_account": result.qb_account,
+                    "t2125_line_item": None,  # TODO @dev: Add to RuleActions model  # noqa: FIX002, E501
+                    # https://github.com/company/quickexpense/issues/PRE-118
+                    "deductibility_percentage": result.deductibility_percentage,
+                    "tax_treatment": result.tax_treatment,
+                    "ita_reference": None,  # TODO @dev: Add to RuleActions model  # noqa: FIX002, E501
+                    # https://github.com/company/quickexpense/issues/PRE-118
+                    "is_fallback": result.is_fallback,
+                }
+            )
 
         # Convert to categorized line items
         categorized_items = []
@@ -353,10 +397,27 @@ class QuickExpenseCLI:
             # Get original line item data
             original_item = line_items[i] if i < len(line_items) else {}
 
+            # Handle line item data (could be LineItem model or dict)
+            if hasattr(original_item, "description"):
+                # LineItem model
+                item_description = original_item.description
+                # Use total_price for LineItem models, fallback to unit_price
+                item_amount = getattr(
+                    original_item,
+                    "total_price",
+                    getattr(original_item, "unit_price", Decimal("0")),
+                )
+            else:
+                # Dictionary format
+                item_description = original_item.get(
+                    "description", "Processed line item"
+                )
+                item_amount = Decimal(str(original_item.get("amount", 0)))
+
             categorized_items.append(
                 CategorizedLineItem(
-                    description=original_item.get("description", "Processed line item"),
-                    amount=Decimal(str(original_item.get("amount", 0))),
+                    description=item_description,
+                    amount=item_amount,
                     category=result.category,
                     deductibility_percentage=result.deductibility_percentage,
                     account_mapping=result.account_mapping,
@@ -368,10 +429,10 @@ class QuickExpenseCLI:
 
         # Create enhanced expense using existing data
         enhanced_expense = MultiCategoryExpense(
-            vendor_name=receipt_data.get("vendor_name", "Unknown"),
-            total_amount=receipt_data.get("total_amount", 0),
-            date=receipt_data.get("date", "2024-01-01"),  # Fallback date
-            currency=receipt_data.get("currency", "CAD"),
+            vendor_name=vendor_name,
+            total_amount=total_amount,
+            date=transaction_date,
+            currency=currency,
             categorized_line_items=categorized_items,
             total_deductible_amount=None,  # Will be auto-calculated
             foreign_exchange_rate=None,
@@ -417,7 +478,8 @@ class QuickExpenseCLI:
         if self.business_rules_engine and rule_results:
             # Convert rule_results to expected format for T2125 summary
             # For now, skip T2125 summary until we have proper mapping
-            # TODO(@dev): Implement proper T2125 mapping (#PRE-117)
+            # TODO @dev: Implement proper T2125 mapping  # noqa: FIX002
+            # https://github.com/company/quickexpense/issues/PRE-117
             pass
 
         return {
@@ -461,7 +523,7 @@ class QuickExpenseCLI:
             ),
         }
 
-    async def process_receipt(  # noqa: PLR0915, C901
+    async def process_receipt(  # noqa: PLR0915, PLR0912, C901
         self,
         file_path: Path,
         dry_run: bool = False,  # noqa: FBT001, FBT002
@@ -490,10 +552,16 @@ class QuickExpenseCLI:
             extract_time = time.time() - extract_start
 
             # Log Gemini extraction
+            # Handle both ExtractedReceipt model and dict for backward compatibility
+            if hasattr(receipt_data, "confidence_score"):
+                confidence_score = receipt_data.confidence_score
+            else:
+                confidence_score = receipt_data.get("confidence_score", 0.0)
+
             self.audit_logger.log_gemini_extraction(
                 correlation_id,
                 extract_time,
-                receipt_data.get("confidence_score", 0.0),
+                confidence_score,
                 receipt_data,
             )
 
@@ -596,15 +664,31 @@ class QuickExpenseCLI:
         if result.get("dry_run"):
             lines.append("\n=== DRY RUN MODE ===")
 
+        # Handle both ExtractedReceipt model and dict for backward compatibility
+        if hasattr(receipt, "vendor_name"):
+            # ExtractedReceipt model
+            vendor_name = receipt.vendor_name
+            transaction_date = str(receipt.transaction_date)
+            total_amount = str(receipt.total_amount)
+            tax_amount = str(receipt.tax_amount)
+            currency = receipt.currency
+        else:
+            # Dictionary format
+            vendor_name = receipt.get("vendor_name", "Unknown")
+            transaction_date = receipt.get("transaction_date", "Unknown")
+            total_amount = str(receipt.get("total_amount", "0.00"))
+            tax_amount = str(receipt.get("tax_amount", "0.00"))
+            currency = receipt.get("currency", "CAD")
+
         lines.extend(
             [
                 "\n=== Receipt Data ===",
                 f"File: {result.get('file', 'Unknown')}",
-                f"Vendor: {receipt.get('vendor_name', 'Unknown')}",
-                f"Date: {receipt.get('transaction_date', 'Unknown')}",
-                f"Total Amount: ${receipt.get('total_amount', '0.00')}",
-                f"Tax: ${receipt.get('tax_amount', '0.00')}",
-                f"Currency: {receipt.get('currency', 'CAD')}",
+                f"Vendor: {vendor_name}",
+                f"Date: {transaction_date}",
+                f"Total Amount: ${total_amount}",
+                f"Tax: ${tax_amount}",
+                f"Currency: {currency}",
             ]
         )
 
@@ -620,7 +704,7 @@ class QuickExpenseCLI:
                         f"   Category: {app.get('category', 'Unknown')}",
                         f"   QuickBooks Account: {app.get('qb_account', 'Unknown')}",
                         f"   Tax Deductible: {app.get('deductibility_percentage', 0)}%",
-                        f"   Tax Treatment: {app.get('tax_treatment', 'standard')}",
+                        f"   Tax Treatment: {str(app.get('tax_treatment', 'standard')).replace('TaxTreatment.', '').lower()}",  # noqa: E501
                         f"   Confidence: {app.get('confidence_score', 0):.1%}",
                         (
                             "   ⚠️  Fallback Rule Applied"
@@ -660,11 +744,11 @@ class QuickExpenseCLI:
                 [
                     "\n=== Enhanced Expense Summary ===",
                     f"Vendor: {enhanced_expense.get('vendor_name', 'Unknown')}",
-                    f"Categories: {len(enhanced_expense.get('categorized_line_items', []))} "
-                    f"items across {len(categorization.get('categories', []))} categories",
+                    f"Categories: {len(enhanced_expense.get('categorized_line_items', []))} "  # noqa: E501
+                    f"items across {len(categorization.get('categories', []))} categories",  # noqa: E501
                     f"Business Rules Applied: "
                     f"{categorization.get('business_rules_applied', 0)}",
-                    f"Payment: {enhanced_expense.get('payment_account_ref', {}).get('value', 'cash')}",
+                    f"Payment: {enhanced_expense.get('payment_account_ref', {}).get('value', 'cash')}",  # noqa: E501
                 ]
             )
 
@@ -721,7 +805,7 @@ class QuickExpenseCLI:
         """Handle the auth command."""
         try:
             # Run the OAuth connection script
-            result = subprocess.run(  # noqa: S603, ASYNC221
+            result = subprocess.run(  # noqa: S603, S607, ASYNC221
                 ["python", "scripts/connect_quickbooks_cli.py"],
                 capture_output=True,
                 text=True,
@@ -874,18 +958,14 @@ class QuickExpenseCLI:
         # Convert rule results to audit format
         rules_applied = [
             {
-                "id": result.get("business_rule_id", "unknown"),
-                "name": result.get("rule_applied", {}).get("name", "Unknown Rule"),
-                "confidence": result.get("confidence_score", 0.0),
+                "id": result.get("id", "unknown"),
+                "name": result.get("name", "Unknown Rule"),
+                "confidence": result.get("confidence", 0.0),
                 "items_affected": 1,
                 "category": result.get("category", "Unknown"),
-                "t2125_line_item": result.get("rule_applied", {})
-                .get("actions", {})
-                .get("t2125_line_item"),
+                "t2125_line_item": result.get("t2125_line_item"),
                 "deductibility_percentage": result.get("deductibility_percentage", 100),
-                "ita_reference": result.get("rule_applied", {})
-                .get("actions", {})
-                .get("ita_reference"),
+                "ita_reference": result.get("ita_reference"),
             }
             for result in rule_results
         ]
