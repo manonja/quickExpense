@@ -9,6 +9,14 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
+try:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+    _heic_support = True
+except ImportError:
+    _heic_support = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,6 +30,8 @@ class FileType(str, Enum):
     BMP = "bmp"
     WEBP = "webp"
     PDF = "pdf"
+    HEIC = "heic"
+    HEIF = "heif"
     UNKNOWN = "unknown"
 
     @classmethod
@@ -35,6 +45,8 @@ class FileType(str, Enum):
             "image/bmp": cls.BMP,
             "image/webp": cls.WEBP,
             "application/pdf": cls.PDF,
+            "image/heic": cls.HEIC,
+            "image/heif": cls.HEIF,
         }
         return mime_mapping.get(mime_type.lower(), cls.UNKNOWN)
 
@@ -57,6 +69,8 @@ class FileType(str, Enum):
             self.GIF,
             self.BMP,
             self.WEBP,
+            self.HEIC,
+            self.HEIF,
         }
 
     @property
@@ -102,6 +116,7 @@ class FileProcessorService:
         b"BM": FileType.BMP,
         b"RIFF": FileType.WEBP,  # Needs additional check
         b"%PDF": FileType.PDF,
+        # HEIC files have variable ftyp box positions, handled separately
     }
 
     def __init__(self) -> None:
@@ -117,7 +132,7 @@ class FileProcessorService:
             self._pdf_converter = PDFConverterService()
         return self._pdf_converter
 
-    def detect_file_type(self, file_content: bytes | str) -> FileType:
+    def detect_file_type(self, file_content: bytes | str) -> FileType:  # noqa: C901, PLR0911
         """Detect file type from content using magic bytes."""
         if isinstance(file_content, str):
             # Assume base64 encoded
@@ -134,6 +149,21 @@ class FileProcessorService:
                 if magic == b"RIFF" and b"WEBP" in file_content[:20]:
                     return FileType.WEBP
                 return file_type
+
+        # Special check for HEIC/HEIF files
+        # HEIC files have 'ftyp' box with brand 'heic' or 'heix'
+        min_heic_size = 12
+        if len(file_content) >= min_heic_size:
+            # Check for 'ftyp' at offset 4
+            if file_content[4:8] == b"ftyp":
+                brand = file_content[8:12]
+                if brand in (b"heic", b"heix", b"hevc", b"hevx"):
+                    return FileType.HEIC
+                if brand in (b"heif", b"heim", b"heis", b"hevm", b"hevs"):
+                    return FileType.HEIF
+            # Some HEIC files have different box ordering
+            elif b"ftypheic" in file_content[:40] or b"ftypmif1" in file_content[:40]:
+                return FileType.HEIC
 
         return FileType.UNKNOWN
 
@@ -217,7 +247,7 @@ class FileProcessorService:
 
     def get_supported_extensions(self) -> set[str]:
         """Get set of supported file extensions."""
-        return {
+        extensions = {
             ".jpg",
             ".jpeg",
             ".png",
@@ -226,6 +256,9 @@ class FileProcessorService:
             ".webp",
             ".pdf",
         }
+        if _heic_support:
+            extensions.update({".heic", ".heif"})
+        return extensions
 
     def is_supported_file(self, filename: str) -> bool:
         """Check if file extension is supported."""

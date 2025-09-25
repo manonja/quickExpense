@@ -55,6 +55,16 @@ logger = logging.getLogger(__name__)
 # Supported file formats (images and PDFs)
 SUPPORTED_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".pdf"}
 
+# Add HEIC support if available
+try:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+    SUPPORTED_FORMATS.update({".heic", ".heif"})
+    _heic_available = True
+except ImportError:
+    _heic_available = False
+
 
 class CLIError(Exception):
     """Base exception for CLI errors."""
@@ -1094,7 +1104,7 @@ Features:
   • Multi-category expense support
   • PDF and image processing
 
-Supported formats: JPEG, PNG, GIF, BMP, WebP, PDF
+Supported formats: JPEG, PNG, GIF, BMP, WebP, PDF, HEIC/HEIF
         """,
     )
 
