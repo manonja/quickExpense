@@ -186,6 +186,7 @@ uv run quickexpense status
 # Process a receipt (images or PDFs)
 uv run quickexpense upload receipt.jpg
 uv run quickexpense upload receipt.pdf  # PDF support
+uv run quickexpense upload receipt.heic # HEIC support (iPhone photos)
 uv run quickexpense upload receipt.jpg --dry-run  # Preview only
 uv run quickexpense upload receipt.jpg --output json  # JSON output
 ```
@@ -409,6 +410,12 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
    - Sensitive data sanitization with performance preservation
    - Entity-aware logging with T2125 tax form context
    - Integration with CLI for verbose audit mode
+8. ✅ **HEIC/HEIF Support**: Native support for iPhone HEIC photos
+   - Seamless integration with pillow-heif library
+   - No conversion needed - preserves original image quality
+   - Auto-detection via magic bytes
+   - Supports all HEIC variants (heic, heix, hevc, hevx)
+   - Works with PhotoSync and AirDrop workflows
 
 ## Business Rules Configuration
 
@@ -453,6 +460,7 @@ The business rules engine now supports vendor context awareness, enabling more a
 9. **Monitoring**: Add OpenTelemetry instrumentation
 10. **Batch Processing**: Add support for multiple receipt uploads
 11. ✅ **PDF Support**: Add PDF receipt extraction capability
+12. ✅ **HEIC Support**: Add native iPhone HEIC photo support
 
 ## Commit Discipline
 
@@ -460,6 +468,8 @@ Use [Conventional Commits]:
 - `feat: add expense submission endpoint`
 - `fix: correct currency validation`
 - `chore: update ruff config`
+
+**Important**: Do not include "Co-Authored-By: Claude" in commit messages.
 
 
 [uv]: https://github.com/astral-sh/uv
