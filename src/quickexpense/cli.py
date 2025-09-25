@@ -287,15 +287,19 @@ class QuickExpenseCLI:
         print(f"  File type: {file_path.suffix.lower()}")  # noqa: T201
 
         result = await self._extract_receipt_data(file_path)
+        # Cast to dict for type checking - handles both dict and Pydantic models
+        result_dict: dict[str, Any] = (
+            result if isinstance(result, dict) else result.model_dump()
+        )
 
         print("\nExtracted data:")  # noqa: T201
-        print(f"  Vendor: {result.get('vendor_name', 'Unknown')}")  # noqa: T201
-        print(f"  Date: {result.get('transaction_date', 'Unknown')}")  # noqa: T201
-        print(f"  Amount: ${result.get('total_amount', '0.00')}")  # noqa: T201
-        print(f"  Tax: ${result.get('tax_amount', '0.00')}")  # noqa: T201
-        print(f"  Currency: {result.get('currency', 'CAD')}")  # noqa: T201
+        print(f"  Vendor: {result_dict.get('vendor_name', 'Unknown')}")  # noqa: T201
+        print(f"  Date: {result_dict.get('transaction_date', 'Unknown')}")  # noqa: T201
+        print(f"  Amount: ${result_dict.get('total_amount', '0.00')}")  # noqa: T201
+        print(f"  Tax: ${result_dict.get('tax_amount', '0.00')}")  # noqa: T201
+        print(f"  Currency: {result_dict.get('currency', 'CAD')}")  # noqa: T201
 
-        line_items = result.get("line_items", [])
+        line_items = result_dict.get("line_items", [])
         if line_items:
             print(f"\n  Line items: {len(line_items)}")  # noqa: T201
             for idx, item in enumerate(line_items[:MAX_DISPLAY_ITEMS], 1):
@@ -303,9 +307,11 @@ class QuickExpenseCLI:
                 amount = item.get("amount", "0.00")
                 print(f"    {idx}. {desc} - ${amount}")  # noqa: T201
             if len(line_items) > MAX_DISPLAY_ITEMS:
+                # fmt: off
                 print(f"    ... and {len(line_items) - MAX_DISPLAY_ITEMS} more")  # noqa: T201
+                # fmt: on
 
-        return result
+        return result_dict
 
     def _apply_business_rules(
         self,
@@ -357,11 +363,13 @@ class QuickExpenseCLI:
             # Get original line item data for description
             original_item = line_items[i] if i < len(line_items) else {}
 
-            # Handle line item description
+            # Handle line item description - support both Pydantic models and dicts
             if hasattr(original_item, "description"):
-                line_item_desc = original_item.description
-            else:
+                line_item_desc = getattr(original_item, "description", "Unknown Item")
+            elif isinstance(original_item, dict):
                 line_item_desc = original_item.get("description", "Unknown Item")
+            else:
+                line_item_desc = "Unknown Item"
 
             rule_applications.append(
                 {
@@ -400,19 +408,24 @@ class QuickExpenseCLI:
             # Handle line item data (could be LineItem model or dict)
             if hasattr(original_item, "description"):
                 # LineItem model
-                item_description = original_item.description
+                item_description = getattr(
+                    original_item, "description", "Processed line item"
+                )
                 # Use total_price for LineItem models, fallback to unit_price
                 item_amount = getattr(
                     original_item,
                     "total_price",
                     getattr(original_item, "unit_price", Decimal("0")),
                 )
-            else:
+            elif isinstance(original_item, dict):
                 # Dictionary format
                 item_description = original_item.get(
                     "description", "Processed line item"
                 )
                 item_amount = Decimal(str(original_item.get("amount", 0)))
+            else:
+                item_description = "Processed line item"
+                item_amount = Decimal("0")
 
             categorized_items.append(
                 CategorizedLineItem(
@@ -543,7 +556,9 @@ class QuickExpenseCLI:
         if verbose:
             print(f"\nCorrelation ID: {correlation_id}")  # noqa: T201
             audit_log_path = self.audit_logger.config.audit_log_path
+            # fmt: off
             print(f"Audit trail: {audit_log_path / 'quickexpense_audit.log'}")  # noqa: T201
+            # fmt: on
 
         try:
             # Extract receipt data with timing
@@ -718,12 +733,13 @@ class QuickExpenseCLI:
         categorization = business_rules.get("categorization", {})
         if categorization.get("tax_deductibility"):
             tax_info = categorization["tax_deductibility"]
+            deductible_amt = tax_info.get("deductible_amount", "0.00")
+            rate = tax_info.get("deductibility_rate", "0%")
             lines.extend(
                 [
                     "\n=== Tax Deductibility Summary ===",
                     f"Total Amount: ${tax_info.get('total_amount', '0.00')}",
-                    f"Deductible Amount: ${tax_info.get('deductible_amount', '0.00')} "
-                    f"({tax_info.get('deductibility_rate', '0%')})",
+                    f"Deductible Amount: ${deductible_amt} ({rate})",
                 ]
             )
 
@@ -740,15 +756,19 @@ class QuickExpenseCLI:
 
         # Show enhanced expense summary
         if enhanced_expense:
+            line_items = enhanced_expense.get("categorized_line_items", [])
+            categories = categorization.get("categories", [])
+            rules_applied = categorization.get("business_rules_applied", 0)
+            payment = enhanced_expense.get("payment_account_ref", {}).get(
+                "value", "cash"
+            )
             lines.extend(
                 [
                     "\n=== Enhanced Expense Summary ===",
                     f"Vendor: {enhanced_expense.get('vendor_name', 'Unknown')}",
-                    f"Categories: {len(enhanced_expense.get('categorized_line_items', []))} "  # noqa: E501
-                    f"items across {len(categorization.get('categories', []))} categories",  # noqa: E501
-                    f"Business Rules Applied: "
-                    f"{categorization.get('business_rules_applied', 0)}",
-                    f"Payment: {enhanced_expense.get('payment_account_ref', {}).get('value', 'cash')}",  # noqa: E501
+                    f"Items: {len(line_items)}, Categories: {len(categories)}",
+                    f"Business Rules Applied: {rules_applied}",
+                    f"Payment: {payment}",
                 ]
             )
 
@@ -805,8 +825,8 @@ class QuickExpenseCLI:
         """Handle the auth command."""
         try:
             # Run the OAuth connection script
-            result = subprocess.run(  # noqa: S603, S607, ASYNC221
-                ["python", "scripts/connect_quickbooks_cli.py"],
+            result = subprocess.run(  # noqa: S603, ASYNC221
+                ["python", "scripts/connect_quickbooks_cli.py"],  # noqa: S607
                 capture_output=True,
                 text=True,
                 check=False,
@@ -817,13 +837,17 @@ class QuickExpenseCLI:
                 print("You can now use QuickExpense to process receipts.")  # noqa: T201
                 sys.exit(0)
             else:
+                # fmt: off
                 print(f"❌ Authentication failed: {result.stderr}", file=sys.stderr)  # noqa: T201
+                # fmt: on
                 sys.exit(1)
 
         except FileNotFoundError:
             print(  # noqa: T201
-                "\nError: OAuth connection script not found.\n"
-                "Please run from the project root directory.",
+                (
+                    "\nError: OAuth connection script not found.\n"
+                    "Please run from the project root directory."
+                ),
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -840,7 +864,9 @@ class QuickExpenseCLI:
 
             if tokens:
                 print("✅ Authentication: Tokens found")  # noqa: T201
+                # fmt: off
                 print(f"   Company ID: {tokens.get('company_id', 'Unknown')}")  # noqa: T201
+                # fmt: on
 
                 # Check token validity
                 try:
@@ -855,10 +881,9 @@ class QuickExpenseCLI:
                         if age_hours < 1:
                             print("✅ Token Status: Valid")  # noqa: T201
                         elif age_hours < 100 * 24:  # Refresh token ~100 days
-                            print(  # noqa: T201
-                                "⚠️  Token Status: Access token expired "
-                                "(refresh available)"
-                            )
+                            # fmt: off
+                            print("⚠️  Token Status: Expired (refresh available)")  # noqa: T201
+                            # fmt: on
                         else:
                             print("❌ Token Status: Tokens expired")  # noqa: T201
                             print("   Run: quickexpense auth --force")  # noqa: T201
