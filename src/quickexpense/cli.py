@@ -44,6 +44,7 @@ from quickexpense.services.token_store import TokenStore
 
 # Constants
 MAX_DISPLAY_ITEMS = 3
+FOOD_ITEM_THRESHOLD = 0.5  # Minimum ratio of food items to classify as local meal
 
 # Configure logging
 logging.basicConfig(
@@ -323,6 +324,314 @@ class QuickExpenseCLI:
 
         return result_dict
 
+    def _is_local_meal(self, vendor_name: str, line_items: list[Any]) -> bool:
+        """Detect if receipt is local meal vs travel meal."""
+        # Early checks for travel context
+        if self._has_travel_indicators(vendor_name, line_items):
+            return False
+
+        # Check for restaurant indicators
+        if self._has_restaurant_indicators(vendor_name):
+            return True
+
+        # Check food item ratio
+        return self._has_sufficient_food_items(line_items)
+
+    def _has_travel_indicators(self, vendor_name: str, line_items: list[Any]) -> bool:
+        """Check if vendor or items indicate travel context."""
+        travel_keywords = [
+            "room",
+            "hotel",
+            "lodging",
+            "accommodation",
+            "resort",
+            "marriott",
+            "hilton",
+            "hyatt",
+            "courtyard",
+            "tourism levy",
+            "room service",
+            "room charge",
+            "hotel charge",
+        ]
+
+        vendor_lower = vendor_name.lower()
+        if any(keyword in vendor_lower for keyword in travel_keywords):
+            return True
+
+        # Check line item descriptions for travel indicators
+        for item in line_items:
+            description = self._get_item_description(item).lower()
+            if any(keyword in description for keyword in travel_keywords):
+                return True
+
+        return False
+
+    def _has_restaurant_indicators(self, vendor_name: str) -> bool:
+        """Check if vendor name indicates a restaurant."""
+        restaurant_keywords = [
+            "restaurant",
+            "cafe",
+            "bistro",
+            "bar",
+            "pub",
+            "eatery",
+            "kitchen",
+            "pho",
+            "pizza",
+            "burger",
+            "sushi",
+            "diner",
+            "grill",
+            "express",
+            "food",
+            "noodle",
+            "ramen",
+            "taco",
+            "sandwich",
+            "coffee",
+            "tea",
+        ]
+
+        vendor_lower = vendor_name.lower()
+        return any(keyword in vendor_lower for keyword in restaurant_keywords)
+
+    def _has_sufficient_food_items(self, line_items: list[Any]) -> bool:
+        """Check if sufficient line items are food-related."""
+        if not line_items:
+            return False
+
+        food_item_keywords = [
+            "sandwich",
+            "salad",
+            "rolls",
+            "burger",
+            "pizza",
+            "noodle",
+            "soup",
+            "chicken",
+            "beef",
+            "pork",
+            "shrimp",
+            "fish",
+            "rice",
+            "pasta",
+            "coffee",
+            "tea",
+            "drink",
+            "beverage",
+            "meal",
+            "lunch",
+            "dinner",
+        ]
+
+        food_item_count = sum(
+            1
+            for item in line_items
+            if any(
+                keyword in self._get_item_description(item).lower()
+                for keyword in food_item_keywords
+            )
+        )
+
+        return food_item_count / len(line_items) >= FOOD_ITEM_THRESHOLD
+
+    def _get_item_description(self, item: Any) -> str:  # noqa: ANN401
+        """Safely extract item description."""
+        if hasattr(item, "description"):
+            description = getattr(item, "description", "")
+            return str(description) if description is not None else ""
+        if isinstance(item, dict):
+            return str(item.get("description", ""))
+        return ""
+
+    def _process_tax_tip_allocation(
+        self,
+        categorized_items: list[CategorizedLineItem],
+        tax_amount: Decimal,
+        tip_amount: Decimal,
+        meal_context: dict[str, Any],
+        context: ExpenseContext,
+    ) -> list[CategorizedLineItem]:
+        """Process tax/tip allocation following accountant's 2-line format."""
+        # Calculate current line items total
+        line_items_total = sum(item.amount for item in categorized_items)
+        expected_total = context.total_amount or Decimal(0)
+
+        # Check if we have unallocated amounts (tax/tip)
+        unallocated = expected_total - line_items_total
+        tolerance = Decimal("0.01")
+
+        if abs(unallocated) <= tolerance:
+            # Already balanced, no tax/tip to process
+            return categorized_items
+
+        # Determine if this is a local meal based on vendor and categories
+        is_local_meal = self._is_local_meal(
+            meal_context["vendor_name"], meal_context["line_items"]
+        )
+
+        # Check if we have meal-related categories (indicates restaurant receipt)
+        meal_categories = [
+            item
+            for item in categorized_items
+            if any(
+                keyword in item.category.lower()
+                for keyword in ["meal", "food", "restaurant", "dining"]
+            )
+        ]
+
+        if is_local_meal:
+            # Local meal detected by vendor/items: combine food + tip, separate GST
+            return self._process_local_meal_format(
+                categorized_items, tax_amount, tip_amount
+            )
+        if meal_categories:
+            # Has meal categories but not detected as local meal (could be travel meal)
+            return self._add_missing_tax_tip_items(
+                categorized_items, tax_amount, tip_amount
+            )
+        # Travel or other: keep existing format, just add tax/tip if needed
+        return self._add_missing_tax_tip_items(
+            categorized_items, tax_amount, tip_amount
+        )
+
+    def _process_local_meal_format(
+        self,
+        categorized_items: list[CategorizedLineItem],
+        tax_amount: Decimal,
+        tip_amount: Decimal,
+    ) -> list[CategorizedLineItem]:
+        """Process local meal in accountant's 2-line format: food+tip, GST separate."""
+        # Food item keywords to detect food items even if not categorized as meals
+        food_item_keywords = [
+            "sandwich",
+            "salad",
+            "rolls",
+            "burger",
+            "pizza",
+            "noodle",
+            "soup",
+            "chicken",
+            "beef",
+            "pork",
+            "shrimp",
+            "fish",
+            "rice",
+            "pasta",
+            "coffee",
+            "tea",
+            "drink",
+            "beverage",
+            "meal",
+            "lunch",
+            "dinner",
+        ]
+
+        # Find food items (either categorized as meals or containing food keywords)
+        food_items = []
+        non_food_items = []
+
+        for item in categorized_items:
+            is_food_category = any(
+                keyword in item.category.lower()
+                for keyword in ["meal", "food", "restaurant", "dining"]
+            )
+
+            is_food_description = any(
+                keyword in item.description.lower() for keyword in food_item_keywords
+            )
+
+            # Skip tax-related items
+            is_tax_item = any(
+                keyword in item.category.lower() for keyword in ["tax", "gst", "hst"]
+            )
+
+            if (is_food_category or is_food_description) and not is_tax_item:
+                food_items.append(item)
+            else:
+                non_food_items.append(item)
+
+        if not food_items:
+            # No food items found, fall back to adding tax/tip separately
+            return self._add_missing_tax_tip_items(
+                categorized_items, tax_amount, tip_amount
+            )
+
+        # Combine all food items + tip into single line item
+        total_meal_amount = sum(item.amount for item in food_items) + tip_amount
+        food_descriptions = [item.description for item in food_items]
+        combined_description = f"Business meal - {', '.join(food_descriptions)}"
+
+        # Create combined meal item (food + tip)
+        combined_meal = CategorizedLineItem(
+            description=combined_description,
+            amount=total_meal_amount,
+            category="Meals & Entertainment",
+            deductibility_percentage=50,  # CRA 50% rule for meals
+            account_mapping="Travel - Meals & Entertainment",
+            tax_treatment="meals_limitation",
+            confidence_score=1.0,
+            business_rule_id="local_meal_combination",
+        )
+
+        result_items = [combined_meal, *non_food_items]
+
+        # Add GST as separate line item if present
+        if tax_amount > 0:
+            gst_item = CategorizedLineItem(
+                description="GST - Input Tax Credit",
+                amount=tax_amount,
+                category="Tax-GST/HST",
+                deductibility_percentage=100,
+                account_mapping="GST/HST Paid on Purchases",
+                tax_treatment="input_tax_credit",
+                confidence_score=1.0,
+                business_rule_id="gst_tax_credit",
+            )
+            result_items.append(gst_item)
+
+        return result_items
+
+    def _add_missing_tax_tip_items(
+        self,
+        categorized_items: list[CategorizedLineItem],
+        tax_amount: Decimal,
+        tip_amount: Decimal,
+    ) -> list[CategorizedLineItem]:
+        """Add tax/tip as separate line items for travel/other receipts."""
+        result_items = list(categorized_items)  # Copy existing items
+
+        # Add GST if present
+        if tax_amount > 0:
+            gst_item = CategorizedLineItem(
+                description="GST - Input Tax Credit",
+                amount=tax_amount,
+                category="Tax-GST/HST",
+                deductibility_percentage=100,
+                account_mapping="GST/HST Paid on Purchases",
+                tax_treatment="input_tax_credit",
+                confidence_score=1.0,
+                business_rule_id="gst_tax_credit",
+            )
+            result_items.append(gst_item)
+
+        # Add tip if present (for travel meals, tip is also 50% deductible)
+        if tip_amount > 0:
+            tip_item = CategorizedLineItem(
+                description="Service tip",
+                amount=tip_amount,
+                category="Travel-Meals",  # Assume travel context
+                deductibility_percentage=50,
+                account_mapping="Travel - Meals & Entertainment",
+                tax_treatment="meals_limitation",
+                confidence_score=1.0,
+                business_rule_id="service_tip",
+            )
+            result_items.append(tip_item)
+
+        return result_items
+
     def _apply_business_rules(
         self,
         receipt_data: Any,  # Support both dict and Pydantic models  # noqa: ANN401
@@ -341,6 +650,8 @@ class QuickExpenseCLI:
             transaction_date = receipt_data.transaction_date
             currency = receipt_data.currency
             line_items = receipt_data.line_items
+            tax_amount = getattr(receipt_data, "tax_amount", Decimal(0))
+            tip_amount = getattr(receipt_data, "tip_amount", Decimal(0))
         else:
             # Dictionary format
             vendor_name = receipt_data.get("vendor_name", "")
@@ -348,6 +659,8 @@ class QuickExpenseCLI:
             transaction_date = receipt_data.get("date", "")
             currency = receipt_data.get("currency", "CAD")
             line_items = receipt_data.get("line_items", [])
+            tax_amount = Decimal(str(receipt_data.get("tax_amount", 0)))
+            tip_amount = Decimal(str(receipt_data.get("tip_amount", 0)))
 
         # Create expense context for business rules
         context = ExpenseContext(
@@ -425,7 +738,7 @@ class QuickExpenseCLI:
                 item_amount = getattr(
                     original_item,
                     "total_price",
-                    getattr(original_item, "unit_price", Decimal("0")),
+                    getattr(original_item, "unit_price", Decimal(0)),
                 )
             elif isinstance(original_item, dict):
                 # Dictionary format
@@ -435,7 +748,7 @@ class QuickExpenseCLI:
                 item_amount = Decimal(str(original_item.get("amount", 0)))
             else:
                 item_description = "Processed line item"
-                item_amount = Decimal("0")
+                item_amount = Decimal(0)
 
             categorized_items.append(
                 CategorizedLineItem(
@@ -449,6 +762,12 @@ class QuickExpenseCLI:
                     business_rule_id=result.business_rule_id,
                 )
             )
+
+        # Process tax/tip allocation for local meals (accountant's 2-line format)
+        meal_context = {"vendor_name": vendor_name, "line_items": line_items}
+        categorized_items = self._process_tax_tip_allocation(
+            categorized_items, tax_amount, tip_amount, meal_context, context
+        )
 
         # Create enhanced expense using existing data
         enhanced_expense = MultiCategoryExpense(
