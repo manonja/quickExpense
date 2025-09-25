@@ -8,8 +8,9 @@ Modern expense management system for **Canadian small businesses and sole propri
 - **AI Receipt Processing** - Extract expense data from receipt images using Google Gemini
 - **Automatic Token Management** - Never worry about expired tokens
 - **Direct QuickBooks Integration** - Create vendors and expenses seamlessly
-- **Modern Python Stack** - FastAPI, Pydantic v2, Python 3.12+
+- **Modern Python Stack** - FastAPI, Pydantic v2, Python 3.12+ with strictest type safety
 - **Smart Account Mapping** - Automatically selects appropriate payment and expense accounts
+- **Structured Audit Logging** - Professional CRA-compliant audit trail with 7-year retention
 - **Canadian Tax Compliance** - Business rules engine with CRA-compliant categorization
   - Hotel marketing fees → Travel-Lodging (not Professional Services)
   - Meals & Entertainment → 50% deductible (CRA ITA Section 67.1)
@@ -91,6 +92,7 @@ uv run quickexpense upload <receipt-file> [--dry-run] [--output json]
 - GIF (.gif)
 - BMP (.bmp)
 - WebP (.webp)
+- PDF (.pdf)
 
 ### Example Output
 ```
@@ -193,7 +195,7 @@ quickExpense/
 - Zero downtime from token expiration
 
 ### Receipt Processing
-- Supports JPEG, PNG, GIF, BMP, WEBP formats
+- Supports JPEG, PNG, GIF, BMP, WEBP, PDF formats
 - AI-powered extraction of vendor, amount, date, tax
 - Automatic vendor creation if not found
 - Smart expense account categorization
@@ -230,11 +232,11 @@ uv run pytest --cov  # With coverage
 
 ### Code Quality
 ```bash
-# All checks
+# All checks (ALL Ruff rules enabled - strictest possible)
 uv run pre-commit run --all-files
 
 # Individual checks
-uv run ruff check src tests
+uv run ruff check src tests  # 600+ rules enabled
 uv run mypy src tests
 uv run black src tests
 ```

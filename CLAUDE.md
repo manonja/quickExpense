@@ -26,7 +26,7 @@ The application has been successfully restructured with:
 - **Stateless**: No database. Each session/expense is defined by request scope.
 - **Developer Discipline**:
   - Dependencies managed via [uv].
-  - Code correctness via [Ruff] with strictest settings.
+  - Code correctness via [Ruff] with ALL rules enabled (600+ rules).
   - Pre-commit gates for type-checking, linting, formatting, and commit style.
   - [Black] formatter for consistent code style.
   - [Conventional Commits] specification for history clarity.
@@ -183,8 +183,9 @@ uv run quickexpense auth
 # Check system status
 uv run quickexpense status
 
-# Process a receipt
+# Process a receipt (images or PDFs)
 uv run quickexpense upload receipt.jpg
+uv run quickexpense upload receipt.pdf  # PDF support
 uv run quickexpense upload receipt.jpg --dry-run  # Preview only
 uv run quickexpense upload receipt.jpg --output json  # JSON output
 ```
@@ -357,7 +358,7 @@ curl -X POST http://localhost:8000/api/v1/receipts/extract \
 }
 ```
 
-**Supported**: JPEG, PNG, GIF, BMP, WEBP (not PDF yet)
+**Supported**: JPEG, PNG, GIF, BMP, WEBP, PDF
 
 ## Token Storage Architecture
 
@@ -394,7 +395,7 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
 3. ✅ **Payment Account Support**: Added bank and credit card account selection
 4. ✅ **Enhanced Error Handling**: Clear user messages for authentication errors
 5. ✅ **Field Mapping Fix**: Corrected receipt-to-expense field mappings
-6. **Vendor-Aware Business Rules (PRE-115)**: Enhanced business rules engine with vendor context awareness for Canadian tax compliance
+6. ✅ **Vendor-Aware Business Rules (PRE-115)**: Enhanced business rules engine with vendor context awareness for Canadian tax compliance
    - Hotel marketing fees now correctly categorized as Travel-Lodging (not Professional Services)
    - Vendor-specific rules take precedence over generic rules when vendor patterns match
    - Enhanced confidence scoring based on vendor-category alignment
@@ -402,6 +403,12 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
    - Backward compatible with existing categorization rules
    - CRA ITA Section 67.1 compliance for meals & entertainment (50% deductible)
    - GST/HST Input Tax Credit proper handling
+7. ✅ **Structured Logging (PRE-117)**: Professional audit trail system for CRA compliance
+   - JSON structured logs with correlation ID tracking
+   - 7-year retention policy for business records
+   - Sensitive data sanitization with performance preservation
+   - Entity-aware logging with T2125 tax form context
+   - Integration with CLI for verbose audit mode
 
 ## Business Rules Configuration
 
@@ -439,13 +446,13 @@ The business rules engine now supports vendor context awareness, enabling more a
 2. ~~**Add OAuth Flow**: Implement proper OAuth2 flow for token refresh~~ ✓
 3. ~~**CLI Interface**: Add command-line interface for receipt processing~~ ✓
 4. ~~**Vendor-Aware Business Rules**: Enhanced categorization with vendor context~~ ✓
-5. **Add Logging**: Structured logging with appropriate levels
+5. ✅ **Add Logging**: Structured logging with appropriate levels
 6. **Add More Tests**: Increase coverage to >90%
 7. **API Documentation**: Enhance OpenAPI/Swagger docs
 8. **Rate Limiting**: Add rate limiting for API endpoints
 9. **Monitoring**: Add OpenTelemetry instrumentation
 10. **Batch Processing**: Add support for multiple receipt uploads
-11. **PDF Support**: Add PDF receipt extraction capability
+11. ✅ **PDF Support**: Add PDF receipt extraction capability
 
 ## Commit Discipline
 
