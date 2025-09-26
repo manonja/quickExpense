@@ -632,50 +632,171 @@ class QuickExpenseCLI:
 
         return result_items
 
-    def _apply_business_rules(
-        self,
-        receipt_data: Any,  # Support both dict and Pydantic models  # noqa: ANN401
-    ) -> tuple[list[dict[str, Any]], list[CategorizedLineItem], MultiCategoryExpense]:
-        """Apply business rules with enhanced categorization."""
-        print("\nApplying business rules for categorization...")  # noqa: T201
+    def _is_local_restaurant(self, vendor_name: str, line_items: list[Any]) -> bool:
+        """Check if this is a local restaurant using business rules patterns."""
+        # Check against local_restaurant_meal rule patterns
+        restaurant_patterns = [
+            "*pho*",
+            "*pizza*",
+            "*burger*",
+            "*sushi*",
+            "*grill*",
+            "*express*",
+            "*food*",
+            "*noodle*",
+            "*ramen*",
+            "*taco*",
+            "*sandwich*",
+            "*coffee*",
+            "*tea*",
+            "*restaurant*",
+            "*cafe*",
+            "*bistro*",
+            "*bar*",
+            "*pub*",
+            "*eatery*",
+            "*kitchen*",
+            "*diner*",
+        ]
 
-        if not self.business_rules_engine:
-            raise APIError("Business rules engine not initialized")
+        food_keywords = [
+            "sandwich",
+            "salad",
+            "rolls",
+            "burger",
+            "pizza",
+            "noodle",
+            "soup",
+            "chicken",
+            "beef",
+            "pork",
+            "shrimp",
+            "fish",
+            "rice",
+            "pasta",
+            "meal",
+            "lunch",
+            "dinner",
+            "breakfast",
+        ]
 
-        # Handle both dict and Pydantic model formats for backward compatibility
-        if hasattr(receipt_data, "vendor_name"):
-            # Pydantic model (ExtractedReceipt)
-            vendor_name = receipt_data.vendor_name
-            total_amount = receipt_data.total_amount
-            transaction_date = receipt_data.transaction_date
-            currency = receipt_data.currency
-            line_items = receipt_data.line_items
-            tax_amount = getattr(receipt_data, "tax_amount", Decimal(0))
-            tip_amount = getattr(receipt_data, "tip_amount", Decimal(0))
-        else:
-            # Dictionary format
-            vendor_name = receipt_data.get("vendor_name", "")
-            total_amount = Decimal(str(receipt_data.get("total_amount", 0)))
-            transaction_date = receipt_data.get("date", "")
-            currency = receipt_data.get("currency", "CAD")
-            line_items = receipt_data.get("line_items", [])
-            tax_amount = Decimal(str(receipt_data.get("tax_amount", 0)))
-            tip_amount = Decimal(str(receipt_data.get("tip_amount", 0)))
+        # Check vendor name against patterns
+        vendor_lower = vendor_name.lower()
+        for pattern in restaurant_patterns:
+            pattern_clean = pattern.strip("*")
+            if pattern_clean in vendor_lower:
+                return True
 
-        # Create expense context for business rules
-        context = ExpenseContext(
-            vendor_name=vendor_name,
-            total_amount=total_amount,
-            transaction_date=transaction_date,
-            currency=currency,
-            vendor_address=None,
-            postal_code=None,
-            payment_method=None,
-            business_purpose=None,
-            location=None,
+        # Check if line items contain food keywords
+        food_item_count = 0
+        for item in line_items:
+            description = self._get_item_description(item).lower()
+            if any(keyword in description for keyword in food_keywords):
+                food_item_count += 1
+
+        # If most items are food items, likely a restaurant
+        return (
+            len(line_items) > 0
+            and food_item_count / len(line_items) >= FOOD_ITEM_THRESHOLD
         )
 
+    def _process_restaurant_consolidated(
+        self,
+        line_items: list[Any],
+        tax_amount: Decimal,
+        tip_amount: Decimal,
+    ) -> tuple[list[dict[str, Any]], list[CategorizedLineItem]]:
+        """Process restaurant receipt with consolidated meal format."""
+        # Calculate food items total
+        food_total = sum(self._get_item_amount(item) for item in line_items)
+
+        # Create consolidated meal item
+        food_descriptions = [self._get_item_description(item) for item in line_items]
+        combined_description = f"Business meal - {', '.join(food_descriptions)}"
+
+        meal_item = CategorizedLineItem(
+            description=combined_description,
+            amount=food_total + tip_amount,  # Food + tip combined
+            category="Meals & Entertainment",
+            deductibility_percentage=50,
+            account_mapping="Travel - Meals & Entertainment",
+            tax_treatment="meals_limitation",
+            confidence_score=0.95,
+            business_rule_id="local_restaurant_meal",
+        )
+
+        categorized_items = [meal_item]
+
+        # Add GST as separate line item if present
+        if tax_amount > 0:
+            gst_item = CategorizedLineItem(
+                description="GST - Input Tax Credit",
+                amount=tax_amount,
+                category="Tax-GST/HST",
+                deductibility_percentage=100,
+                account_mapping="GST/HST Paid on Purchases",
+                tax_treatment="input_tax_credit",
+                confidence_score=1.0,
+                business_rule_id="gst_hst_charges",
+            )
+            categorized_items.append(gst_item)
+
+        # Create rule applications for reporting
+        rule_applications = [
+            {
+                "id": "local_restaurant_meal",
+                "name": "Local Restaurant Meal",
+                "line_item": "Restaurant meal consolidation",
+                "rule_applied": "Local Restaurant Detection",
+                "confidence": 0.95,
+                "confidence_score": 0.95,
+                "items_affected": len(line_items),
+                "category": "Meals & Entertainment",
+                "qb_account": "Travel - Meals & Entertainment",
+                "t2125_line_item": None,
+                "deductibility_percentage": 50,
+                "tax_treatment": "meals_limitation",
+                "ita_reference": "CRA ITA Section 67.1",
+                "is_fallback": False,
+            }
+        ]
+
+        if tax_amount > 0:
+            rule_applications.append(
+                {
+                    "id": "gst_hst_charges",
+                    "name": "GST/HST Tax Charges",
+                    "line_item": "GST - Input Tax Credit",
+                    "rule_applied": "GST/HST Tax Charges",
+                    "confidence": 1.0,
+                    "confidence_score": 1.0,
+                    "items_affected": 1,
+                    "category": "Tax-GST/HST",
+                    "qb_account": "GST/HST Paid on Purchases",
+                    "t2125_line_item": None,
+                    "deductibility_percentage": 100,
+                    "tax_treatment": "input_tax_credit",
+                    "ita_reference": None,
+                    "is_fallback": False,
+                }
+            )
+
+        return rule_applications, categorized_items
+
+    def _process_regular_receipt(
+        self,
+        line_items: list[Any],
+        tax_amount: Decimal,
+        tip_amount: Decimal,
+        vendor_name: str,
+        context: ExpenseContext,
+    ) -> tuple[list[dict[str, Any]], list[CategorizedLineItem]]:
+        """Process non-restaurant receipts with regular business rules."""
         # Use existing categorize_line_items method
+        if self.business_rules_engine is None:
+            msg = "Business rules engine not initialized"
+            raise RuntimeError(msg)
+
         rule_results = self.business_rules_engine.categorize_line_items(
             line_items, context
         )
@@ -763,11 +884,98 @@ class QuickExpenseCLI:
                 )
             )
 
-        # Process tax/tip allocation for local meals (accountant's 2-line format)
+        # Process tax/tip allocation for travel meals (existing logic)
         meal_context = {"vendor_name": vendor_name, "line_items": line_items}
         categorized_items = self._process_tax_tip_allocation(
             categorized_items, tax_amount, tip_amount, meal_context, context
         )
+
+        return rule_applications, categorized_items
+
+    def _get_item_amount(self, item: Any) -> Decimal:  # noqa: ANN401
+        """Safely extract amount from line item."""
+        if hasattr(item, "total_price"):
+            return getattr(item, "total_price", Decimal(0))
+        if hasattr(item, "unit_price"):
+            return getattr(item, "unit_price", Decimal(0))
+        if isinstance(item, dict):
+            amount = item.get(
+                "amount", item.get("total_price", item.get("unit_price", 0))
+            )
+            return Decimal(str(amount))
+        return Decimal(0)
+
+    def _apply_business_rules(
+        self,
+        receipt_data: Any,  # Support both dict and Pydantic models  # noqa: ANN401
+    ) -> tuple[list[dict[str, Any]], list[CategorizedLineItem], MultiCategoryExpense]:
+        """Apply business rules with enhanced categorization."""
+        print("\nApplying business rules for categorization...")  # noqa: T201
+
+        if not self.business_rules_engine:
+            raise APIError("Business rules engine not initialized")
+
+        # Handle both dict and Pydantic model formats for backward compatibility
+        if hasattr(receipt_data, "vendor_name"):
+            # Pydantic model (ExtractedReceipt)
+            vendor_name = receipt_data.vendor_name
+            total_amount = receipt_data.total_amount
+            transaction_date = receipt_data.transaction_date
+            currency = receipt_data.currency
+            line_items = receipt_data.line_items
+            tax_amount = getattr(receipt_data, "tax_amount", Decimal(0))
+            tip_amount = getattr(receipt_data, "tip_amount", Decimal(0))
+            payment_method = str(getattr(receipt_data, "payment_method", "unknown"))
+        else:
+            # Dictionary format
+            vendor_name = receipt_data.get("vendor_name", "")
+            total_amount = Decimal(str(receipt_data.get("total_amount", 0)))
+            transaction_date = receipt_data.get("date", "")
+            currency = receipt_data.get("currency", "CAD")
+            line_items = receipt_data.get("line_items", [])
+            tax_amount = Decimal(str(receipt_data.get("tax_amount", 0)))
+            tip_amount = Decimal(str(receipt_data.get("tip_amount", 0)))
+            payment_method = str(receipt_data.get("payment_method", "unknown"))
+
+        # Clean up payment method string (remove enum formatting if present)
+        if "PaymentMethod." in payment_method:
+            payment_method = payment_method.split(".")[-1].split(":")[0].lower()
+        elif (
+            payment_method.startswith("<")
+            and payment_method.endswith(">'")
+            and "'" in payment_method
+        ):
+            # Handle format like "<PaymentMethod.DEBIT_CARD: 'debit_card'>"
+            payment_method = payment_method.split("'")[-2]
+
+        # Create expense context for business rules
+        context = ExpenseContext(
+            vendor_name=vendor_name,
+            total_amount=total_amount,
+            transaction_date=transaction_date,
+            currency=currency,
+            vendor_address=None,
+            postal_code=None,
+            payment_method=payment_method,
+            business_purpose=None,
+            location=None,
+        )
+
+        # Check if this is a local restaurant - if so, use consolidated processing
+        is_local_restaurant = self._is_local_restaurant(vendor_name, line_items)
+
+        if is_local_restaurant:
+            # Restaurant detected - use consolidated processing
+            rule_applications, categorized_items = (
+                self._process_restaurant_consolidated(
+                    line_items, tax_amount, tip_amount
+                )
+            )
+        else:
+            # Regular processing for travel/other receipts
+            rule_applications, categorized_items = self._process_regular_receipt(
+                line_items, tax_amount, tip_amount, vendor_name, context
+            )
 
         # Create enhanced expense using existing data
         enhanced_expense = MultiCategoryExpense(
@@ -778,6 +986,7 @@ class QuickExpenseCLI:
             categorized_line_items=categorized_items,
             total_deductible_amount=None,  # Will be auto-calculated
             foreign_exchange_rate=None,
+            payment_method=payment_method,
             payment_account=None,
         )
 

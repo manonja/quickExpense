@@ -30,10 +30,31 @@
       "enabled": true
     },
     {
+      "id": "local_restaurant_meal",
+      "priority": 95,
+      "name": "Local Restaurant Meal",
+      "description": "Local restaurant and food establishment meals - 50% deductible, consolidated format",
+      "conditions": {
+        "description_keywords": ["sandwich", "salad", "rolls", "burger", "pizza", "noodle", "soup", "chicken", "beef", "pork", "shrimp", "fish", "rice", "pasta", "meal", "lunch", "dinner", "breakfast"],
+        "vendor_patterns": ["*pho*", "*pizza*", "*burger*", "*sushi*", "*grill*", "*express*", "*food*", "*noodle*", "*ramen*", "*taco*", "*sandwich*", "*coffee*", "*tea*", "*restaurant*", "*cafe*", "*bistro*", "*bar*", "*pub*", "*eatery*", "*kitchen*", "*diner*"]
+      },
+      "actions": {
+        "category": "Meals & Entertainment",
+        "deductibility_percentage": 50,
+        "qb_account": "Travel - Meals & Entertainment",
+        "tax_treatment": "meals_limitation",
+        "confidence_boost": 0.25,
+        "compliance_note": "CRA ITA Section 67.1 - 50% limitation applies to meal expenses",
+        "consolidate_food_items": true,
+        "requires_business_purpose": true
+      },
+      "enabled": true
+    },
+    {
       "id": "restaurant_meals",
       "priority": 90,
-      "name": "Restaurant and Meal Charges",
-      "description": "Restaurant meals and food - 50% deductible per CRA rules",
+      "name": "Restaurant and Meal Charges (Travel Context)",
+      "description": "Restaurant meals in travel context - 50% deductible per CRA rules",
       "conditions": {
         "description_keywords": ["restaurant", "meal", "dining", "food", "coffee", "breakfast", "lunch", "dinner", "catering", "beverage"],
         "vendor_patterns": ["*restaurant*", "*cafe*", "*bistro*", "*bar*", "*pub*", "*eatery*", "*kitchen*"]
