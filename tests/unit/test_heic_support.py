@@ -100,7 +100,10 @@ class TestHEICSupport:
 
         # Check if pillow-heif is available
         try:
-            import pillow_heif  # noqa: F401
+            import pillow_heif  # Check availability
+
+            # Explicitly reference the module to satisfy type checkers
+            _ = pillow_heif.__name__
 
             assert ".heic" in extensions
             assert ".heif" in extensions
@@ -112,7 +115,10 @@ class TestHEICSupport:
     def test_is_supported_file_heic(self, file_processor: FileProcessorService) -> None:
         """Test HEIC files are supported."""
         try:
-            import pillow_heif  # noqa: F401
+            import pillow_heif  # Check availability
+
+            # Explicitly reference the module to satisfy type checkers
+            _ = pillow_heif.__name__
 
             assert file_processor.is_supported_file("receipt.heic") is True
             assert file_processor.is_supported_file("photo.HEIC") is True
@@ -188,7 +194,10 @@ class TestHEICSupport:
         from quickexpense.cli import SUPPORTED_FORMATS
 
         try:
-            import pillow_heif  # noqa: F401
+            import pillow_heif  # Check availability
+
+            # Explicitly reference the module to satisfy type checkers
+            _ = pillow_heif.__name__
 
             assert ".heic" in SUPPORTED_FORMATS
             assert ".heif" in SUPPORTED_FORMATS
