@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import logging
 from enum import Enum
+from pathlib import Path
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
@@ -127,44 +128,69 @@ class FileProcessorService:
     def pdf_converter(self) -> Any:  # noqa: ANN401
         """Lazy load PDF converter to avoid circular imports."""
         if self._pdf_converter is None:
+            # Import here to avoid circular import issues
             from .pdf_converter import PDFConverterService
 
             self._pdf_converter = PDFConverterService()
         return self._pdf_converter
 
-    def detect_file_type(self, file_content: bytes | str) -> FileType:  # noqa: C901, PLR0911
+    def detect_file_type(self, file_content: bytes | str) -> FileType:
         """Detect file type from content using magic bytes."""
-        if isinstance(file_content, str):
-            # Assume base64 encoded
-            try:
-                file_content = base64.b64decode(file_content)
-            except Exception:  # noqa: BLE001
-                logger.warning("Failed to decode base64 content")
-                return FileType.UNKNOWN
+        # Convert string content to bytes
+        file_bytes = self._normalize_file_content(file_content)
+        if file_bytes is None:
+            return FileType.UNKNOWN
 
-        # Check magic bytes
+        # Check standard magic bytes
+        standard_type = self._check_magic_bytes(file_bytes)
+        if standard_type != FileType.UNKNOWN:
+            return standard_type
+
+        # Check HEIC/HEIF formats
+        return self._check_heic_heif_formats(file_bytes)
+
+    def _normalize_file_content(self, file_content: bytes | str) -> bytes | None:
+        """Convert file content to bytes format."""
+        if isinstance(file_content, bytes):
+            return file_content
+        try:
+            return base64.b64decode(file_content)
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to decode base64 content")
+            return None
+
+    def _check_magic_bytes(self, file_bytes: bytes) -> FileType:
+        """Check standard magic bytes for file type detection."""
         for magic, file_type in self.MAGIC_BYTES.items():
-            if file_content.startswith(magic):
+            if file_bytes.startswith(magic):
                 # Special case for WEBP
-                if magic == b"RIFF" and b"WEBP" in file_content[:20]:
+                if magic == b"RIFF" and b"WEBP" in file_bytes[:20]:
                     return FileType.WEBP
                 return file_type
+        return FileType.UNKNOWN
 
-        # Special check for HEIC/HEIF files
-        # HEIC files have 'ftyp' box with brand 'heic' or 'heix'
+    def _check_heic_heif_formats(self, file_bytes: bytes) -> FileType:
+        """Check for HEIC/HEIF format variations."""
         min_heic_size = 12
-        if len(file_content) >= min_heic_size:
-            # Check for 'ftyp' at offset 4
-            if file_content[4:8] == b"ftyp":
-                brand = file_content[8:12]
-                if brand in (b"heic", b"heix", b"hevc", b"hevx"):
-                    return FileType.HEIC
-                if brand in (b"heif", b"heim", b"heis", b"hevm", b"hevs"):
-                    return FileType.HEIF
-            # Some HEIC files have different box ordering
-            elif b"ftypheic" in file_content[:40] or b"ftypmif1" in file_content[:40]:
-                return FileType.HEIC
+        if len(file_bytes) < min_heic_size:
+            return FileType.UNKNOWN
 
+        # Check for 'ftyp' box at offset 4
+        if file_bytes[4:8] == b"ftyp":
+            return self._check_ftyp_brand(file_bytes[8:12])
+
+        # Check for alternative HEIC patterns
+        if b"ftypheic" in file_bytes[:40] or b"ftypmif1" in file_bytes[:40]:
+            return FileType.HEIC
+
+        return FileType.UNKNOWN
+
+    def _check_ftyp_brand(self, brand: bytes) -> FileType:
+        """Check the brand in ftyp box to determine HEIC/HEIF type."""
+        if brand in (b"heic", b"heix", b"hevc", b"hevx"):
+            return FileType.HEIC
+        if brand in (b"heif", b"heim", b"heis", b"hevm", b"hevs"):
+            return FileType.HEIF
         return FileType.UNKNOWN
 
     def validate_file(self, file_content: bytes | str, file_type: FileType) -> bool:
@@ -262,7 +288,5 @@ class FileProcessorService:
 
     def is_supported_file(self, filename: str) -> bool:
         """Check if file extension is supported."""
-        from pathlib import Path
-
         ext = Path(filename).suffix.lower()
         return ext in self.get_supported_extensions()
