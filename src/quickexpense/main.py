@@ -15,7 +15,8 @@ from quickexpense.api import health_router, main_router
 from quickexpense.api.web_endpoints import router as web_api_router
 from quickexpense.web.routes import router as web_ui_router
 from quickexpense.core.config import Settings, get_settings
-from quickexpense.core.dependencies import set_oauth_manager, set_quickbooks_client
+from quickexpense.core.dependencies import set_oauth_manager, set_quickbooks_client, set_business_rules_engine
+from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.models.quickbooks_oauth import (
     QuickBooksOAuthConfig,
     QuickBooksTokenInfo,
@@ -105,6 +106,12 @@ async def lifespan(app: FastAPIType) -> AsyncGenerator[None, None]:
 
     oauth_manager.add_token_update_callback(save_tokens_callback)
     set_oauth_manager(oauth_manager)
+
+    # Initialize Business Rules Engine
+    config_path = Path(__file__).parent.parent.parent / "config" / "business_rules.json"
+    business_rules_engine = BusinessRuleEngine(config_path)
+    set_business_rules_engine(business_rules_engine)
+    logger.info("Business rules engine initialized with %d rules", len(business_rules_engine.config.rules) if business_rules_engine.config else 0)
 
     # Initialize QuickBooks client with OAuth manager only if we have tokens
     async with oauth_manager:
@@ -202,12 +209,14 @@ def create_app() -> FastAPI:
     async def oauth_callback(
         code: str = Query(..., description="Authorization code from QuickBooks"),
         state: str = Query(..., description="State parameter for CSRF protection"),
-        realm_id: str = Query(..., description="QuickBooks company ID", alias="realmId"),
+        realm_id: str = Query(
+            ..., description="QuickBooks company ID", alias="realmId"
+        ),
     ) -> HTMLResponse:
         """Handle OAuth callback from QuickBooks at the registered redirect URI."""
         try:
             oauth_manager = get_oauth_manager()
-            
+
             # Exchange authorization code for tokens
             tokens = await oauth_manager.exchange_code_for_tokens(
                 authorization_code=code, realm_id=realm_id

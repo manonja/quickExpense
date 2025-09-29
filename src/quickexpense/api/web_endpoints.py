@@ -18,16 +18,16 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse
 
-from quickexpense.core.dependencies import get_oauth_manager
+from quickexpense.core.dependencies import (
+    BusinessRulesEngineDep,
+    GeminiServiceDep,
+    OAuthManagerDep,
+    QuickBooksServiceDep,
+    get_oauth_manager,
+)
+from quickexpense.models.business_rules import ExpenseContext
 from quickexpense.services.file_processor import FileProcessorService
 from quickexpense.services.quickbooks import QuickBooksError
-
-if TYPE_CHECKING:
-    from quickexpense.core.dependencies import (
-        GeminiServiceDep,
-        OAuthManagerDep,
-        QuickBooksServiceDep,
-    )
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/web", tags=["web"])
@@ -129,10 +129,10 @@ async def get_auth_url(oauth_manager: OAuthManagerDep) -> dict[str, str]:
 
 @router.get("/callback")
 async def oauth_callback(
+    oauth_manager: OAuthManagerDep,
     code: str = Query(..., description="Authorization code from QuickBooks"),
     _state: str = Query(..., description="State parameter for CSRF protection"),
     realm_id: str = Query(..., description="QuickBooks company ID", alias="realmId"),
-    oauth_manager: OAuthManagerDep = Depends(get_oauth_manager),  # noqa: B008
 ) -> HTMLResponse:
     """Handle OAuth callback from QuickBooks.
 
@@ -312,6 +312,7 @@ async def _process_file_content(file: UploadFile) -> str:
 async def upload_receipt(
     gemini_service: GeminiServiceDep,
     quickbooks_service: QuickBooksServiceDep,
+    business_rules_engine: BusinessRulesEngineDep,
     file: UploadFile = File(..., description="Receipt file (JPEG, PNG, PDF, HEIC)"),  # noqa: B008
     category: str = Form(default="", description="Optional expense category"),
     additional_context: str = Form(
@@ -349,20 +350,85 @@ async def upload_receipt(
         receipt = await gemini_service.extract_receipt_data(
             file_base64, additional_context
         )
-
-        # Apply business rules
-
-        # Mock business rules data for now
-        # Create simple expense for now
-        from quickexpense.models.expense import Expense
-
-        expense = Expense(
+        
+        # Apply business rules for categorization
+        logger.info("Applying business rules for categorization...")
+        
+        # Create expense context for business rules (matching CLI logic)
+        payment_method = str(getattr(receipt, "payment_method", "unknown"))
+        if "<" in payment_method and ">" in payment_method:
+            # Handle format like "<PaymentMethod.DEBIT_CARD: 'debit_card'>"
+            payment_method = payment_method.split("'")[-2]
+            
+        context = ExpenseContext(
             vendor_name=receipt.vendor_name,
-            amount=receipt.total_amount,
-            date=receipt.transaction_date,
+            total_amount=receipt.total_amount,
+            transaction_date=receipt.transaction_date,
             currency=receipt.currency,
-            category=category or "General",
+            vendor_address=getattr(receipt, "vendor_address", None),
+            postal_code=None,
+            payment_method=payment_method,
+            business_purpose=None,
+            location=None,
         )
+        
+        # Apply business rules to line items
+        rule_results = business_rules_engine.categorize_line_items(
+            receipt.line_items, context
+        )
+        
+        # Convert rule results to format needed for response and QuickBooks
+        rule_data = []
+        total_deductible = 0.0
+        categories_used = set()
+        
+        for i, result in enumerate(rule_results):
+            # Get original line item for description
+            original_item = receipt.line_items[i] if i < len(receipt.line_items) else {}
+            description = getattr(original_item, "description", f"Item {i+1}")
+            
+            rule_info = {
+                "description": description,
+                "rule_name": result.rule_applied.name if result.rule_applied else "Default",
+                "rule_applied": result.rule_applied.id if result.rule_applied else "default",
+                "category": result.category,
+                "qb_account": result.account_mapping,
+                "amount": float(result.amount),
+                "deductible_percentage": result.deductibility_percentage,
+                "tax_treatment": result.tax_treatment,
+                "confidence": result.confidence_score,
+            }
+            rule_data.append(rule_info)
+            
+            # Calculate deductible amount
+            deductible_amount = float(result.amount) * result.deductibility_percentage / 100.0
+            total_deductible += deductible_amount
+            categories_used.add(result.category)
+
+        # Create expenses for QuickBooks (use the first rule result for main expense)
+        if rule_results:
+            # Use the first categorized item as the primary expense
+            primary_result = rule_results[0]
+            from quickexpense.models.expense import Expense
+            
+            expense = Expense(
+                vendor_name=receipt.vendor_name,
+                amount=receipt.total_amount,  # Use total amount, not individual line item
+                date=receipt.transaction_date,
+                currency=receipt.currency,
+                category=primary_result.category,
+            )
+        else:
+            # Fallback if no rules applied
+            from quickexpense.models.expense import Expense
+            
+            expense = Expense(
+                vendor_name=receipt.vendor_name,
+                amount=receipt.total_amount,
+                date=receipt.transaction_date,
+                currency=receipt.currency,
+                category=category or "General",
+            )
 
         # Create in QuickBooks
         logger.info("Creating expense in QuickBooks...")
@@ -372,22 +438,9 @@ async def upload_receipt(
                 "id": qb_result.get("id"),
                 "category": expense.category,
                 "amount": float(expense.amount),
-                "deductible_percentage": 100,  # Default for now
-            }
-        ]
-
-        # Create mock business rules data for UI
-        rule_data = [
-            {
-                "description": f"{expense.category} expense",
-                "rule_name": expense.category,
-                "rule_applied": "Category Detection",
-                "category": expense.category,
-                "qb_account": expense.category,
-                "amount": float(expense.amount),
-                "deductible_percentage": 100,
-                "tax_treatment": "standard",
-                "confidence": 0.95,
+                "deductible_percentage": (
+                    rule_data[0]["deductible_percentage"] if rule_data else 100
+                ),
             }
         ]
 
@@ -396,12 +449,8 @@ async def upload_receipt(
 
         # Calculate tax deductibility summary
         total_amount = float(receipt.total_amount)
-        deductible_amount: float = sum(
-            float(rule["amount"]) * float(rule["deductible_percentage"]) / 100.0
-            for rule in rule_data
-        )
         deductibility_rate = (
-            (deductible_amount / total_amount * 100) if total_amount > 0 else 0
+            (total_deductible / total_amount * 100) if total_amount > 0 else 0
         )
 
         # Get payment account info
@@ -424,7 +473,7 @@ async def upload_receipt(
             },
             "tax_deductibility": {
                 "total_amount": f"{total_amount:.2f}",
-                "deductible_amount": f"{deductible_amount:.2f}",
+                "deductible_amount": f"{total_deductible:.2f}",
                 "deductibility_rate": f"{deductibility_rate:.1f}",
             },
             "enhanced_expense": {

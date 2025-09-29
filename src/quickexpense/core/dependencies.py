@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends
 
 from quickexpense.core.config import Settings, get_settings
+from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.services.gemini import GeminiService
 from quickexpense.services.quickbooks import QuickBooksService
 from quickexpense.services.quickbooks_oauth import QuickBooksOAuthManager
@@ -18,6 +20,7 @@ if TYPE_CHECKING:
 # Global instances that will be initialized on startup
 _quickbooks_client: QuickBooksClient | None = None
 _oauth_manager: QuickBooksOAuthManager | None = None
+_business_rules_engine: BusinessRuleEngine | None = None
 
 
 def set_quickbooks_client(client: QuickBooksClient | None) -> None:
@@ -32,6 +35,12 @@ def set_oauth_manager(manager: QuickBooksOAuthManager) -> None:
     _oauth_manager = manager
 
 
+def set_business_rules_engine(engine: BusinessRuleEngine) -> None:
+    """Set the global business rules engine instance."""
+    global _business_rules_engine  # noqa: PLW0603
+    _business_rules_engine = engine
+
+
 def get_quickbooks_client() -> QuickBooksClient | None:
     """Get the QuickBooks client instance."""
     return _quickbooks_client
@@ -43,6 +52,14 @@ def get_oauth_manager() -> QuickBooksOAuthManager:
         msg = "OAuth manager not initialized"
         raise RuntimeError(msg)
     return _oauth_manager
+
+
+def get_business_rules_engine() -> BusinessRuleEngine:
+    """Get the business rules engine instance."""
+    if _business_rules_engine is None:
+        msg = "Business rules engine not initialized"
+        raise RuntimeError(msg)
+    return _business_rules_engine
 
 
 def get_quickbooks_service() -> QuickBooksService | None:
@@ -85,3 +102,4 @@ QuickBooksServiceDep = Annotated[
 ]
 GeminiServiceDep = Annotated[GeminiService, Depends(get_gemini_service)]
 OAuthManagerDep = Annotated[QuickBooksOAuthManager, Depends(get_oauth_manager)]
+BusinessRulesEngineDep = Annotated[BusinessRuleEngine, Depends(get_business_rules_engine)]
