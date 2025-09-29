@@ -284,7 +284,7 @@ class QuickExpenseUI {
             formData.append('file', file);
             formData.append('category', '');
             formData.append('additional_context', '');
-            
+
             // Add dry-run option
             const dryRunCheckbox = document.getElementById('dryRunCheckbox');
             formData.append('dry_run', dryRunCheckbox ? dryRunCheckbox.checked : false);
@@ -292,25 +292,25 @@ class QuickExpenseUI {
             // Update processing message
             setTimeout(() => {
                 if (this.isProcessing) {
-                    this.elements.processingMessage.textContent = 'Analyzing receipt with AI...';
+                    this.elements.processingMessage.textContent = 'Analyzing receipt with AI... (this may take 2-3 minutes)';
                 }
-            }, 2000);
+            }, 5000);
 
             setTimeout(() => {
                 if (this.isProcessing) {
-                    this.elements.processingMessage.textContent = 'Applying business rules...';
+                    this.elements.processingMessage.textContent = 'AI processing complete. Applying business rules...';
                 }
-            }, 4000);
+            }, 90000); // After ~1.5 minutes
 
             setTimeout(() => {
                 if (this.isProcessing) {
                     this.elements.processingMessage.textContent = 'Creating expense in QuickBooks...';
                 }
-            }, 6000);
+            }, 120000); // After ~2 minutes
 
             // Upload and process with timeout
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout for Gemini AI processing
 
             let response;
             try {
@@ -324,7 +324,7 @@ class QuickExpenseUI {
                 clearTimeout(timeoutId);
 
                 if (fetchError.name === 'AbortError') {
-                    throw new Error('Upload timed out. Please try again with a smaller file or check your internet connection.');
+                    throw new Error('Processing timed out after 3 minutes. AI processing of large files can take time. Please try again.');
                 }
 
                 if (!navigator.onLine) {
@@ -363,6 +363,7 @@ class QuickExpenseUI {
             }
 
             const result = await response.json();
+            console.log('Response received:', result);
 
             // Validate response structure
             if (!result || typeof result !== 'object') {
@@ -373,6 +374,7 @@ class QuickExpenseUI {
                 throw new Error(result.message || 'Processing failed. Please try again.');
             }
 
+            console.log('About to show results with:', result);
             this.showResults(result);
 
         } catch (error) {
@@ -388,7 +390,7 @@ class QuickExpenseUI {
             } else if (userMessage.toLowerCase().includes('network') || userMessage.toLowerCase().includes('fetch')) {
                 userMessage = 'Network error. Please check your internet connection and try again.';
             } else if (userMessage.toLowerCase().includes('timeout')) {
-                userMessage = 'Upload timed out. Please try again with a smaller file.';
+                userMessage = 'Processing timed out. AI processing can take 2-3 minutes for large files.';
             } else if (userMessage.toLowerCase().includes('gemini') || userMessage.toLowerCase().includes('ai')) {
                 userMessage = 'AI processing error. Please try again or use a clearer receipt image.';
             } else if (userMessage.toLowerCase().includes('quickbooks')) {
@@ -483,16 +485,41 @@ class QuickExpenseUI {
     // ===== RESULTS DISPLAY =====
 
     populateResults(data) {
-        this.populateReceiptInfo(data.receipt_info);
-        this.populateBusinessRules(data.business_rules);
-        this.populateTaxSummary(data.tax_deductibility);
-        this.populateExpenseSummary(data.enhanced_expense);
-        this.populateQuickBooksResults(data.quickbooks, data.dry_run);
+        console.log('Populating results with data:', data);
+
+        try {
+            console.log('Populating receipt info...');
+            this.populateReceiptInfo(data.receipt_info);
+
+            console.log('Populating business rules...');
+            this.populateBusinessRules(data.business_rules);
+
+            console.log('Populating tax summary...');
+            this.populateTaxSummary(data.tax_deductibility);
+
+            console.log('Populating expense summary...');
+            this.populateExpenseSummary(data.enhanced_expense);
+
+            console.log('Populating QuickBooks results...');
+            this.populateQuickBooksResults(data.quickbooks, data.dry_run);
+
+            console.log('All populate methods completed successfully');
+        } catch (error) {
+            console.error('Error in populateResults:', error);
+            throw error; // Re-throw to be caught by main error handler
+        }
     }
 
     populateReceiptInfo(receiptInfo) {
+        console.log('Receipt info data:', receiptInfo);
         const container = this.elements.receiptInfo;
         container.innerHTML = '';
+
+        if (!receiptInfo) {
+            console.error('Receipt info is null/undefined');
+            container.textContent = 'Receipt information not available';
+            return;
+        }
 
         // Match CLI format exactly
         const items = [
@@ -511,8 +538,15 @@ class QuickExpenseUI {
     }
 
     populateBusinessRules(businessRules) {
+        console.log('Business rules data:', businessRules);
         const container = this.elements.businessRules;
         container.innerHTML = '';
+
+        if (!businessRules) {
+            console.error('Business rules data is null/undefined');
+            container.textContent = 'Business rules information not available';
+            return;
+        }
 
         if (businessRules.applied_rules && businessRules.applied_rules.length > 0) {
             businessRules.applied_rules.forEach((rule, index) => {
@@ -558,8 +592,15 @@ class QuickExpenseUI {
     }
 
     populateTaxSummary(taxData) {
+        console.log('Tax summary data:', taxData);
         const container = this.elements.taxSummary;
         container.innerHTML = '';
+
+        if (!taxData) {
+            console.error('Tax data is null/undefined');
+            container.textContent = 'Tax information not available';
+            return;
+        }
 
         if (taxData) {
             const items = [
@@ -575,8 +616,15 @@ class QuickExpenseUI {
     }
 
     populateExpenseSummary(expenseData) {
+        console.log('Expense summary data:', expenseData);
         const container = this.elements.expenseSummary;
         container.innerHTML = '';
+
+        if (!expenseData) {
+            console.error('Expense data is null/undefined');
+            container.textContent = 'Expense information not available';
+            return;
+        }
 
         if (expenseData) {
             const items = [
@@ -594,14 +642,21 @@ class QuickExpenseUI {
     }
 
     populateQuickBooksResults(qbResults, isDryRun = false) {
+        console.log('QuickBooks results data:', qbResults, 'isDryRun:', isDryRun);
         const container = this.elements.quickbooksResults;
         container.innerHTML = '';
+
+        if (!qbResults) {
+            console.error('QuickBooks results data is null/undefined');
+            container.textContent = 'QuickBooks results not available';
+            return;
+        }
 
         // Match CLI format exactly
         if (qbResults && qbResults.expense_ids && qbResults.expense_ids.length > 0) {
             const successMsg = document.createElement('div');
             successMsg.className = isDryRun ? 'qb-dry-run' : 'qb-success';
-            
+
             if (isDryRun) {
                 successMsg.textContent = 'DRY RUN - No expense created in QuickBooks (Preview only)';
             } else {
