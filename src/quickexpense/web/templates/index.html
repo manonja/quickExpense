@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuickExpense - Receipt Processing</title>
+
+    <!-- Google Fonts - Geist Family -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/static/css/app.css">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzQwNDA0MCIvPgo8cGF0aCBkPSJNOCAxMmg4djJIOFYxMnptMCA0aDEydjJIOFYxNnptMCA0aDZ2Mkg4VjIweiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+">
+</head>
+<body>
+    <!-- Header Section -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="32" height="32" rx="8" fill="var(--primary-dark)"/>
+                        <path d="M8 12h8v2H8V12zm0 4h12v2H8V16zm0 4h6v2H8V20z" fill="white"/>
+                    </svg>
+                    <h1>QuickExpense</h1>
+                </div>
+                <div class="header-subtitle">
+                    <p>Upload receipts and create QuickBooks expenses instantly</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Auth Status Section -->
+            <section class="auth-section">
+                <div class="card auth-card">
+                    <div class="auth-status">
+                        <div class="status-indicator" id="statusIndicator">
+                            <div class="status-dot" id="statusDot"></div>
+                            <span class="status-text" id="statusText">Checking connection...</span>
+                        </div>
+                        <div class="auth-details" id="authDetails"></div>
+                    </div>
+                    <button class="btn-primary" id="connectBtn" style="display: none;">
+                        Connect to QuickBooks
+                    </button>
+                </div>
+            </section>
+
+            <!-- Upload Zone Section -->
+            <section class="upload-section">
+                <div class="card upload-card">
+                    <div class="upload-zone" id="uploadZone">
+                        <div class="upload-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17,8 12,3 7,8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                        </div>
+                        <div class="upload-text">
+                            <h3>Drop your receipt here</h3>
+                            <p>Or click to select a file</p>
+                            <span class="supported-formats">Supports JPEG, PNG, PDF, HEIC (max 10MB)</span>
+                        </div>
+                        <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf,.heic,.heif" style="display: none;">
+                    </div>
+
+                    <!-- Processing State -->
+                    <div class="processing-state" id="processingState" style="display: none;">
+                        <div class="loading-spinner"></div>
+                        <h3>Processing Receipt</h3>
+                        <p id="processingMessage">Extracting data from your receipt...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <div class="card results-card">
+                    <h2>Receipt Processed Successfully</h2>
+
+                    <!-- CLI-Style Output Container -->
+                    <div class="cli-output" id="cliOutput">
+                        <!-- Receipt Data Section -->
+                        <div class="cli-section">
+                            <h3 class="cli-header">=== Receipt Data ===</h3>
+                            <div class="info-list" id="receiptInfo">
+                                <!-- Dynamic content -->
+                            </div>
+                        </div>
+
+                        <!-- Business Rules Categorization Section -->
+                        <div class="cli-section">
+                            <h3 class="cli-header">=== Business Rules Categorization ===</h3>
+                            <div class="rules-list" id="businessRules">
+                                <!-- Dynamic content -->
+                            </div>
+                        </div>
+
+                        <!-- Tax Deductibility Summary Section -->
+                        <div class="cli-section">
+                            <h3 class="cli-header">=== Tax Deductibility Summary ===</h3>
+                            <div class="info-list" id="taxSummary">
+                                <!-- Dynamic content -->
+                            </div>
+                        </div>
+
+                        <!-- Enhanced Expense Summary Section -->
+                        <div class="cli-section">
+                            <h3 class="cli-header">=== Enhanced Expense Summary ===</h3>
+                            <div class="info-list" id="expenseSummary">
+                                <!-- Dynamic content -->
+                            </div>
+                        </div>
+
+                        <!-- Result Section -->
+                        <div class="cli-section">
+                            <h3 class="cli-header">=== Result ===</h3>
+                            <div class="qb-results" id="quickbooksResults">
+                                <!-- Dynamic content -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="result-actions">
+                        <button class="btn-primary" id="processAnotherBtn">Process Another Receipt</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="card error-card">
+                    <div class="error-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                        </svg>
+                    </div>
+                    <h3>Processing Failed</h3>
+                    <p id="errorMessage">An error occurred while processing your receipt.</p>
+                    <button class="btn-primary" id="tryAgainBtn">Try Again</button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <p>&copy; 2024 QuickExpense. Professional expense management for Canadian businesses.</p>
+                <div class="footer-links">
+                    <span class="text-caption">Powered by QuickBooks Online & Gemini AI</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

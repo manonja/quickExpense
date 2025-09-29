@@ -9,8 +9,11 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from quickexpense.api import health_router, main_router
+from quickexpense.api.web_endpoints import router as web_api_router
+from quickexpense.web.routes import router as web_ui_router
 from quickexpense.core.config import Settings, get_settings
 from quickexpense.core.dependencies import set_oauth_manager, set_quickbooks_client
 from quickexpense.models.quickbooks_oauth import (
@@ -103,32 +106,43 @@ async def lifespan(app: FastAPIType) -> AsyncGenerator[None, None]:
     oauth_manager.add_token_update_callback(save_tokens_callback)
     set_oauth_manager(oauth_manager)
 
-    # Initialize QuickBooks client with OAuth manager
+    # Initialize QuickBooks client with OAuth manager only if we have tokens
     async with oauth_manager:
-        # Use company_id from tokens if available, otherwise from settings
-        qb_client = QuickBooksClient(
-            base_url=settings.qb_base_url,
-            company_id=company_id or settings.qb_company_id,
-            oauth_manager=oauth_manager,
-        )
-        set_quickbooks_client(qb_client)
-
-        logger.info("QuickBooks client initialized with OAuth manager")
-
-        # Background task for token refresh
+        qb_client = None
         refresh_task = None
-        if settings.qb_enable_background_refresh:
-            refresh_task = asyncio.create_task(
-                _background_token_refresh(oauth_manager, settings),
-            )
-            logger.info("Background token refresh task started")
 
-        try:
-            # Test connection on startup
-            await qb_client.test_connection()
-            logger.info("QuickBooks connection successful")
-        except Exception as e:
-            logger.warning("QuickBooks connection failed on startup: %s", e)
+        if initial_tokens and not initial_tokens.refresh_token_expired:
+            try:
+                # Use company_id from tokens if available, otherwise from settings
+                qb_client = QuickBooksClient(
+                    base_url=settings.qb_base_url,
+                    company_id=company_id or settings.qb_company_id,
+                    oauth_manager=oauth_manager,
+                )
+                set_quickbooks_client(qb_client)
+                logger.info("QuickBooks client initialized with OAuth manager")
+
+                # Background task for token refresh
+                if settings.qb_enable_background_refresh:
+                    refresh_task = asyncio.create_task(
+                        _background_token_refresh(oauth_manager, settings),
+                    )
+                    logger.info("Background token refresh task started")
+
+                # Test connection on startup
+                await qb_client.test_connection()
+                logger.info("QuickBooks connection successful")
+
+            except Exception as e:
+                logger.warning("QuickBooks connection failed on startup: %s", e)
+                # Don't fail startup - allow web UI to handle OAuth
+                if qb_client:
+                    await qb_client.close()
+                    qb_client = None
+        else:
+            logger.info(
+                "No valid tokens - QuickBooks client will be initialized after OAuth"
+            )
 
         yield
 
@@ -140,7 +154,8 @@ async def lifespan(app: FastAPIType) -> AsyncGenerator[None, None]:
                 await refresh_task
             except asyncio.CancelledError:
                 pass
-        await qb_client.close()
+        if qb_client:
+            await qb_client.close()
 
 
 def create_app() -> FastAPI:
@@ -164,9 +179,19 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Mount static files
+    from pathlib import Path
+
+    static_dir = Path(__file__).parent / "web" / "static"
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
     # Include routers
     app.include_router(health_router)
     app.include_router(main_router)
+    app.include_router(web_api_router)
+    app.include_router(web_ui_router)
+
+    # OAuth callback routes are handled by web_endpoints.py
 
     return app
 
