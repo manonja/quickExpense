@@ -191,7 +191,146 @@ def create_app() -> FastAPI:
     app.include_router(web_api_router)
     app.include_router(web_ui_router)
 
-    # OAuth callback routes are handled by web_endpoints.py
+    # Add OAuth callback route at the registered redirect URI
+    from fastapi import Query
+    from fastapi.responses import HTMLResponse
+    from quickexpense.core.dependencies import get_oauth_manager
+    from quickexpense.services.token_store import TokenStore
+    from quickexpense.core.dependencies import initialize_quickbooks_client_after_oauth
+
+    @app.get("/api/quickbooks/callback")
+    async def oauth_callback(
+        code: str = Query(..., description="Authorization code from QuickBooks"),
+        state: str = Query(..., description="State parameter for CSRF protection"),
+        realm_id: str = Query(..., description="QuickBooks company ID", alias="realmId"),
+    ) -> HTMLResponse:
+        """Handle OAuth callback from QuickBooks at the registered redirect URI."""
+        try:
+            oauth_manager = get_oauth_manager()
+            
+            # Exchange authorization code for tokens
+            tokens = await oauth_manager.exchange_code_for_tokens(
+                authorization_code=code, realm_id=realm_id
+            )
+
+            # Save tokens to JSON file
+            token_store = TokenStore("data/tokens.json")
+            token_data = {
+                "access_token": tokens.access_token,
+                "refresh_token": tokens.refresh_token,
+                "expires_in": 3600,
+                "x_refresh_token_expires_in": 8640000,
+                "token_type": "bearer",
+                "company_id": realm_id,
+                "created_at": tokens.access_token_expires_at.isoformat(),
+                "saved_at": tokens.access_token_expires_at.isoformat(),
+            }
+            token_store.save_tokens(token_data)
+
+            # Initialize QuickBooks client now that we have tokens and company ID
+            await initialize_quickbooks_client_after_oauth(realm_id)
+
+            logger.info(
+                "OAuth callback successful, tokens saved and QuickBooks client initialized"
+            )
+
+            # Return HTML that closes the popup and notifies parent window
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Authentication Successful</title>
+                <style>
+                    body {{
+                        font-family: 'Geist', system-ui, sans-serif;
+                        text-align: center;
+                        padding: 2rem;
+                        background: linear-gradient(
+                            135deg, #fdf2f8 30%, #fff7ed 20%, #fdf2f8 40%
+                        );
+                        color: #404040;
+                    }}
+                    .success {{
+                        background: white;
+                        padding: 2rem;
+                        border-radius: 1.5rem;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                        max-width: 400px;
+                        margin: 0 auto;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="success">
+                    <h2>✅ Connected to QuickBooks!</h2>
+                    <p>Authentication successful. This window will close automatically.</p>
+                </div>
+                <script>
+                    // Notify parent window and close popup
+                    if (window.opener) {{
+                        window.opener.postMessage({{
+                            type: 'oauth_success',
+                            authenticated: true,
+                            company_id: '{realm_id}'
+                        }}, '*');
+                    }}
+                    setTimeout(() => window.close(), 2000);
+                </script>
+            </body>
+            </html>
+            """
+
+            return HTMLResponse(content=html_content)
+
+        except Exception:
+            logger.exception("OAuth callback error")
+
+            # Return error HTML that notifies parent window
+            html_content = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Authentication Failed</title>
+                <style>
+                    body {
+                        font-family: 'Geist', system-ui, sans-serif;
+                        text-align: center;
+                        padding: 2rem;
+                        background: linear-gradient(
+                            135deg, #fdf2f8 30%, #fff7ed 20%, #fdf2f8 40%
+                        );
+                        color: #404040;
+                    }
+                    .error {
+                        background: white;
+                        padding: 2rem;
+                        border-radius: 1.5rem;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                        max-width: 400px;
+                        margin: 0 auto;
+                        border-left: 4px solid #ef4444;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="error">
+                    <h2>❌ Authentication Failed</h2>
+                    <p>Please try connecting again.</p>
+                </div>
+                <script>
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'oauth_error',
+                            error: 'Authentication failed'
+                        }, '*');
+                    }
+                    setTimeout(() => window.close(), 3000);
+                </script>
+            </body>
+            </html>
+            """
+
+            return HTMLResponse(content=html_content, status_code=400)
 
     return app
 
