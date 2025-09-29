@@ -318,6 +318,7 @@ async def upload_receipt(
     additional_context: str = Form(
         default="", description="Additional context for processing"
     ),
+    dry_run: bool = Form(default=False, description="Preview processing without creating expenses"),
 ) -> dict[str, Any]:
     """Upload and process a receipt file.
 
@@ -383,9 +384,27 @@ async def upload_receipt(
         categories_used = set()
         
         for i, result in enumerate(rule_results):
-            # Get original line item for description
+            # Get original line item for description and amount (matching CLI logic)
             original_item = receipt.line_items[i] if i < len(receipt.line_items) else {}
-            description = getattr(original_item, "description", f"Item {i+1}")
+            
+            # Get description from original item
+            if hasattr(original_item, "description"):
+                description = getattr(original_item, "description", f"Item {i+1}")
+            elif isinstance(original_item, dict):
+                description = original_item.get("description", f"Item {i+1}")
+            else:
+                description = f"Item {i+1}"
+            
+            # Get amount from original item (RuleResult doesn't have amount)
+            if hasattr(original_item, "total_price"):
+                # LineItem model - use total_price, fallback to unit_price
+                item_amount = float(getattr(original_item, "total_price", 
+                                          getattr(original_item, "unit_price", 0)))
+            elif isinstance(original_item, dict):
+                # Dictionary format
+                item_amount = float(original_item.get("amount", 0))
+            else:
+                item_amount = 0.0
             
             rule_info = {
                 "description": description,
@@ -393,7 +412,7 @@ async def upload_receipt(
                 "rule_applied": result.rule_applied.id if result.rule_applied else "default",
                 "category": result.category,
                 "qb_account": result.account_mapping,
-                "amount": float(result.amount),
+                "amount": item_amount,
                 "deductible_percentage": result.deductibility_percentage,
                 "tax_treatment": result.tax_treatment,
                 "confidence": result.confidence_score,
@@ -401,7 +420,7 @@ async def upload_receipt(
             rule_data.append(rule_info)
             
             # Calculate deductible amount
-            deductible_amount = float(result.amount) * result.deductibility_percentage / 100.0
+            deductible_amount = item_amount * result.deductibility_percentage / 100.0
             total_deductible += deductible_amount
             categories_used.add(result.category)
 
@@ -430,19 +449,32 @@ async def upload_receipt(
                 category=category or "General",
             )
 
-        # Create in QuickBooks
-        logger.info("Creating expense in QuickBooks...")
-        qb_result = await quickbooks_service.create_expense(expense)
-        qb_results = [
-            {
-                "id": qb_result.get("id"),
-                "category": expense.category,
-                "amount": float(expense.amount),
-                "deductible_percentage": (
-                    rule_data[0]["deductible_percentage"] if rule_data else 100
-                ),
-            }
-        ]
+        # Create in QuickBooks (or skip if dry-run)
+        if dry_run:
+            logger.info("DRY RUN - Skipping QuickBooks expense creation")
+            qb_results = [
+                {
+                    "id": "DRY_RUN",
+                    "category": expense.category,
+                    "amount": float(expense.amount),
+                    "deductible_percentage": (
+                        rule_data[0]["deductible_percentage"] if rule_data else 100
+                    ),
+                }
+            ]
+        else:
+            logger.info("Creating expense in QuickBooks...")
+            qb_result = await quickbooks_service.create_expense(expense)
+            qb_results = [
+                {
+                    "id": qb_result.get("id"),
+                    "category": expense.category,
+                    "amount": float(expense.amount),
+                    "deductible_percentage": (
+                        rule_data[0]["deductible_percentage"] if rule_data else 100
+                    ),
+                }
+            ]
 
         # Calculate processing time
         processing_time = time.time() - start_time
@@ -459,6 +491,8 @@ async def upload_receipt(
         # Format response to match CLI output
         response = {
             "status": "success",
+            "dry_run": dry_run,
+            "message": "DRY RUN - No expense created in QuickBooks" if dry_run else None,
             "receipt_info": {
                 "filename": file.filename,
                 "vendor_name": receipt.vendor_name,

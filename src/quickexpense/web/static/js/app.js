@@ -284,6 +284,10 @@ class QuickExpenseUI {
             formData.append('file', file);
             formData.append('category', '');
             formData.append('additional_context', '');
+            
+            // Add dry-run option
+            const dryRunCheckbox = document.getElementById('dryRunCheckbox');
+            formData.append('dry_run', dryRunCheckbox ? dryRunCheckbox.checked : false);
 
             // Update processing message
             setTimeout(() => {
@@ -418,6 +422,14 @@ class QuickExpenseUI {
         resultsSection.style.display = 'block';
         errorSection.style.display = 'none';
 
+        // Update title for dry-run mode
+        const resultsTitle = resultsSection.querySelector('h2');
+        if (data.dry_run) {
+            resultsTitle.textContent = 'Receipt Processed (Dry Run - Preview Only)';
+        } else {
+            resultsTitle.textContent = 'Receipt Processed Successfully';
+        }
+
         this.populateResults(data);
     }
 
@@ -475,7 +487,7 @@ class QuickExpenseUI {
         this.populateBusinessRules(data.business_rules);
         this.populateTaxSummary(data.tax_deductibility);
         this.populateExpenseSummary(data.enhanced_expense);
-        this.populateQuickBooksResults(data.quickbooks);
+        this.populateQuickBooksResults(data.quickbooks, data.dry_run);
     }
 
     populateReceiptInfo(receiptInfo) {
@@ -581,18 +593,23 @@ class QuickExpenseUI {
         }
     }
 
-    populateQuickBooksResults(qbResults) {
+    populateQuickBooksResults(qbResults, isDryRun = false) {
         const container = this.elements.quickbooksResults;
         container.innerHTML = '';
 
         // Match CLI format exactly
         if (qbResults && qbResults.expense_ids && qbResults.expense_ids.length > 0) {
             const successMsg = document.createElement('div');
-            successMsg.className = 'qb-success';
-            successMsg.textContent = `Successfully created expense in QuickBooks (ID: ${qbResults.expense_ids.join(', ')})`;
+            successMsg.className = isDryRun ? 'qb-dry-run' : 'qb-success';
+            
+            if (isDryRun) {
+                successMsg.textContent = 'DRY RUN - No expense created in QuickBooks (Preview only)';
+            } else {
+                successMsg.textContent = `Successfully created expense in QuickBooks (ID: ${qbResults.expense_ids.join(', ')})`;
+            }
             container.appendChild(successMsg);
         } else {
-            container.textContent = 'No expenses created';
+            container.textContent = isDryRun ? 'DRY RUN - No expenses would be created' : 'No expenses created';
         }
     }
 

@@ -72,6 +72,14 @@
                             <span class="supported-formats">Supports JPEG, PNG, PDF, HEIC (max 10MB)</span>
                         </div>
                         <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf,.heic,.heif" style="display: none;">
+                        
+                        <!-- Dry Run Option -->
+                        <div class="dry-run-option" style="margin-top: 1rem; text-align: center;">
+                            <label class="checkbox-container" style="display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="dryRunCheckbox" style="margin: 0;">
+                                <span class="checkbox-text" style="font-size: 0.9rem; color: #666;">Dry run (preview only - don't create expenses)</span>
+                            </label>
+                        </div>
                     </div>
 
                     <!-- Processing State -->
