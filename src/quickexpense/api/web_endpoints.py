@@ -313,7 +313,7 @@ async def upload_receipt(  # noqa: C901, PLR0913, PLR0912, PLR0915
     gemini_service: GeminiServiceDep,
     quickbooks_service: QuickBooksServiceDep,
     business_rules_engine: BusinessRulesEngineDep,
-    file: UploadFile = File(..., description="Receipt file (JPEG, PNG, PDF, HEIC)"),
+    file: UploadFile = File(..., description="Receipt file (JPEG, PNG, PDF, HEIC)"),  # noqa: B008
     category: str = Form(default="", description="Optional expense category"),
     additional_context: str = Form(
         default="", description="Additional context for processing"
@@ -378,8 +378,10 @@ async def upload_receipt(  # noqa: C901, PLR0913, PLR0912, PLR0915
         )
 
         # Check if this is a local restaurant (matching CLI logic)
-        is_local_restaurant = _is_local_restaurant(receipt.vendor_name, receipt.line_items)
-        
+        is_local_restaurant = _is_local_restaurant(
+            receipt.vendor_name, receipt.line_items
+        )
+
         if is_local_restaurant:
             # Use restaurant consolidation logic (matching CLI)
             rule_data, total_deductible = _process_restaurant_consolidated(
@@ -445,13 +447,15 @@ async def upload_receipt(  # noqa: C901, PLR0913, PLR0912, PLR0915
                 rule_data.append(rule_info)
 
                 # Calculate deductible amount
-                deductible_amount = item_amount * result.deductibility_percentage / 100.0
+                deductible_amount = (
+                    item_amount * result.deductibility_percentage / 100.0
+                )
                 total_deductible += deductible_amount
                 categories_used.add(result.category)
 
         # Create expenses for QuickBooks
         from quickexpense.models.expense import Expense
-        
+
         if rule_data:
             # Use the first rule for the primary expense category
             primary_category = rule_data[0]["category"]
@@ -578,16 +582,48 @@ def _is_local_restaurant(vendor_name: str, line_items: list[Any]) -> bool:
     """Check if this is a local restaurant using business rules patterns."""
     # Check against local_restaurant_meal rule patterns
     restaurant_patterns = [
-        "*pho*", "*pizza*", "*burger*", "*sushi*", "*grill*", "*express*",
-        "*food*", "*noodle*", "*ramen*", "*taco*", "*sandwich*", "*coffee*",
-        "*tea*", "*restaurant*", "*cafe*", "*bistro*", "*bar*", "*pub*",
-        "*eatery*", "*kitchen*", "*diner*"
+        "*pho*",
+        "*pizza*",
+        "*burger*",
+        "*sushi*",
+        "*grill*",
+        "*express*",
+        "*food*",
+        "*noodle*",
+        "*ramen*",
+        "*taco*",
+        "*sandwich*",
+        "*coffee*",
+        "*tea*",
+        "*restaurant*",
+        "*cafe*",
+        "*bistro*",
+        "*bar*",
+        "*pub*",
+        "*eatery*",
+        "*kitchen*",
+        "*diner*",
     ]
 
     food_keywords = [
-        "sandwich", "salad", "rolls", "burger", "pizza", "noodle", "soup",
-        "chicken", "beef", "pork", "shrimp", "fish", "rice", "pasta",
-        "meal", "lunch", "dinner", "breakfast"
+        "sandwich",
+        "salad",
+        "rolls",
+        "burger",
+        "pizza",
+        "noodle",
+        "soup",
+        "chicken",
+        "beef",
+        "pork",
+        "shrimp",
+        "fish",
+        "rice",
+        "pasta",
+        "meal",
+        "lunch",
+        "dinner",
+        "breakfast",
     ]
 
     # Check vendor name against patterns
@@ -606,10 +642,7 @@ def _is_local_restaurant(vendor_name: str, line_items: list[Any]) -> bool:
 
     # If most items are food items, likely a restaurant
     food_threshold = 0.6  # 60% of items must be food-related
-    return (
-        len(line_items) > 0
-        and food_item_count / len(line_items) >= food_threshold
-    )
+    return len(line_items) > 0 and food_item_count / len(line_items) >= food_threshold
 
 
 def _get_item_description(item: Any) -> str:  # noqa: ANN401
@@ -640,15 +673,10 @@ def _process_restaurant_consolidated(
     # Calculate food items total
     food_total = sum(_get_item_amount(item) for item in line_items)
 
-    # Create consolidated meal item (food + tip combined)
-    food_descriptions = [_get_item_description(item) for item in line_items]
-    combined_description = f"Business meal - {', '.join(food_descriptions)}"
-
+    # Calculate meal amount (food + tip combined)
     meal_amount = food_total + tip_amount
     meal_deductible = meal_amount * 0.5  # 50% deductible
-
-    # GST is 100% deductible
-    gst_deductible = tax_amount * 1.0
+    gst_deductible = tax_amount * 1.0  # GST is 100% deductible
 
     total_deductible = meal_deductible + gst_deductible
 
@@ -668,16 +696,18 @@ def _process_restaurant_consolidated(
     ]
 
     if tax_amount > 0:
-        rule_data.append({
-            "description": "GST - Input Tax Credit",
-            "rule_name": "GST/HST Tax Charges",
-            "rule_applied": "GST/HST Tax Charges",
-            "category": "Tax-GST/HST",
-            "qb_account": "GST/HST Paid on Purchases",
-            "amount": tax_amount,
-            "deductible_percentage": 100,
-            "tax_treatment": "input_tax_credit",
-            "confidence": 1.0,
-        })
+        rule_data.append(
+            {
+                "description": "GST - Input Tax Credit",
+                "rule_name": "GST/HST Tax Charges",
+                "rule_applied": "GST/HST Tax Charges",
+                "category": "Tax-GST/HST",
+                "qb_account": "GST/HST Paid on Purchases",
+                "amount": tax_amount,
+                "deductible_percentage": 100,
+                "tax_treatment": "input_tax_credit",
+                "confidence": 1.0,
+            }
+        )
 
     return rule_data, total_deductible
