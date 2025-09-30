@@ -5,14 +5,23 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from quickexpense.api import health_router, main_router
+from quickexpense.api.web_endpoints import router as web_api_router
+from quickexpense.web.routes import router as web_ui_router
 from quickexpense.core.config import Settings, get_settings
-from quickexpense.core.dependencies import set_oauth_manager, set_quickbooks_client
+from quickexpense.core.dependencies import (
+    set_oauth_manager,
+    set_quickbooks_client,
+    set_business_rules_engine,
+)
+from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.models.quickbooks_oauth import (
     QuickBooksOAuthConfig,
     QuickBooksTokenInfo,
@@ -103,32 +112,52 @@ async def lifespan(app: FastAPIType) -> AsyncGenerator[None, None]:
     oauth_manager.add_token_update_callback(save_tokens_callback)
     set_oauth_manager(oauth_manager)
 
-    # Initialize QuickBooks client with OAuth manager
+    # Initialize Business Rules Engine
+    config_path = Path(__file__).parent.parent.parent / "config" / "business_rules.json"
+    business_rules_engine = BusinessRuleEngine(config_path)
+    set_business_rules_engine(business_rules_engine)
+    logger.info(
+        "Business rules engine initialized with %d rules",
+        len(business_rules_engine.config.rules) if business_rules_engine.config else 0,
+    )
+
+    # Initialize QuickBooks client with OAuth manager only if we have tokens
     async with oauth_manager:
-        # Use company_id from tokens if available, otherwise from settings
-        qb_client = QuickBooksClient(
-            base_url=settings.qb_base_url,
-            company_id=company_id or settings.qb_company_id,
-            oauth_manager=oauth_manager,
-        )
-        set_quickbooks_client(qb_client)
-
-        logger.info("QuickBooks client initialized with OAuth manager")
-
-        # Background task for token refresh
+        qb_client = None
         refresh_task = None
-        if settings.qb_enable_background_refresh:
-            refresh_task = asyncio.create_task(
-                _background_token_refresh(oauth_manager, settings),
-            )
-            logger.info("Background token refresh task started")
 
-        try:
-            # Test connection on startup
-            await qb_client.test_connection()
-            logger.info("QuickBooks connection successful")
-        except Exception as e:
-            logger.warning("QuickBooks connection failed on startup: %s", e)
+        if initial_tokens and not initial_tokens.refresh_token_expired:
+            try:
+                # Use company_id from tokens if available, otherwise from settings
+                qb_client = QuickBooksClient(
+                    base_url=settings.qb_base_url,
+                    company_id=company_id or settings.qb_company_id,
+                    oauth_manager=oauth_manager,
+                )
+                set_quickbooks_client(qb_client)
+                logger.info("QuickBooks client initialized with OAuth manager")
+
+                # Background task for token refresh
+                if settings.qb_enable_background_refresh:
+                    refresh_task = asyncio.create_task(
+                        _background_token_refresh(oauth_manager, settings),
+                    )
+                    logger.info("Background token refresh task started")
+
+                # Test connection on startup
+                await qb_client.test_connection()
+                logger.info("QuickBooks connection successful")
+
+            except Exception as e:
+                logger.warning("QuickBooks connection failed on startup: %s", e)
+                # Don't fail startup - allow web UI to handle OAuth
+                if qb_client:
+                    await qb_client.close()
+                    qb_client = None
+        else:
+            logger.info(
+                "No valid tokens - QuickBooks client will be initialized after OAuth"
+            )
 
         yield
 
@@ -140,7 +169,8 @@ async def lifespan(app: FastAPIType) -> AsyncGenerator[None, None]:
                 await refresh_task
             except asyncio.CancelledError:
                 pass
-        await qb_client.close()
+        if qb_client:
+            await qb_client.close()
 
 
 def create_app() -> FastAPI:
@@ -164,9 +194,160 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Mount static files
+    from pathlib import Path
+
+    static_dir = Path(__file__).parent / "web" / "static"
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
     # Include routers
     app.include_router(health_router)
     app.include_router(main_router)
+    app.include_router(web_api_router)
+    app.include_router(web_ui_router)
+
+    # Add OAuth callback route at the registered redirect URI
+    from fastapi import Query
+    from fastapi.responses import HTMLResponse
+    from quickexpense.core.dependencies import get_oauth_manager
+    from quickexpense.services.token_store import TokenStore
+    from quickexpense.core.dependencies import initialize_quickbooks_client_after_oauth
+
+    @app.get("/api/quickbooks/callback")
+    async def oauth_callback(  # pyright: ignore[reportUnusedFunction]
+        code: str = Query(..., description="Authorization code from QuickBooks"),
+        state: str = Query(..., description="State parameter for CSRF protection"),
+        realm_id: str = Query(
+            ..., description="QuickBooks company ID", alias="realmId"
+        ),
+    ) -> HTMLResponse:
+        """Handle OAuth callback from QuickBooks at the registered redirect URI."""
+        try:
+            oauth_manager = get_oauth_manager()
+
+            # Exchange authorization code for tokens
+            tokens = await oauth_manager.exchange_code_for_tokens(
+                authorization_code=code, realm_id=realm_id
+            )
+
+            # Save tokens to JSON file
+            token_store = TokenStore("data/tokens.json")
+            token_data = {
+                "access_token": tokens.access_token,
+                "refresh_token": tokens.refresh_token,
+                "expires_in": 3600,
+                "x_refresh_token_expires_in": 8640000,
+                "token_type": "bearer",
+                "company_id": realm_id,
+                "created_at": tokens.access_token_expires_at.isoformat(),
+                "saved_at": tokens.access_token_expires_at.isoformat(),
+            }
+            token_store.save_tokens(token_data)
+
+            # Initialize QuickBooks client now that we have tokens and company ID
+            await initialize_quickbooks_client_after_oauth(realm_id)
+
+            logger.info(
+                "OAuth callback successful, tokens saved and QuickBooks client initialized"
+            )
+
+            # Return HTML that closes the popup and notifies parent window
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Authentication Successful</title>
+                <style>
+                    body {{
+                        font-family: 'Geist', system-ui, sans-serif;
+                        text-align: center;
+                        padding: 2rem;
+                        background: linear-gradient(
+                            135deg, #fdf2f8 30%, #fff7ed 20%, #fdf2f8 40%
+                        );
+                        color: #404040;
+                    }}
+                    .success {{
+                        background: white;
+                        padding: 2rem;
+                        border-radius: 1.5rem;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                        max-width: 400px;
+                        margin: 0 auto;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="success">
+                    <h2>✅ Connected to QuickBooks!</h2>
+                    <p>Authentication successful. This window will close automatically.</p>
+                </div>
+                <script>
+                    // Notify parent window and close popup
+                    if (window.opener) {{
+                        window.opener.postMessage({{
+                            type: 'oauth_success',
+                            authenticated: true,
+                            company_id: '{realm_id}'
+                        }}, '*');
+                    }}
+                    setTimeout(() => window.close(), 2000);
+                </script>
+            </body>
+            </html>
+            """
+
+            return HTMLResponse(content=html_content)
+
+        except Exception:
+            logger.exception("OAuth callback error")
+
+            # Return error HTML that notifies parent window
+            html_content = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Authentication Failed</title>
+                <style>
+                    body {
+                        font-family: 'Geist', system-ui, sans-serif;
+                        text-align: center;
+                        padding: 2rem;
+                        background: linear-gradient(
+                            135deg, #fdf2f8 30%, #fff7ed 20%, #fdf2f8 40%
+                        );
+                        color: #404040;
+                    }
+                    .error {
+                        background: white;
+                        padding: 2rem;
+                        border-radius: 1.5rem;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                        max-width: 400px;
+                        margin: 0 auto;
+                        border-left: 4px solid #ef4444;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="error">
+                    <h2>❌ Authentication Failed</h2>
+                    <p>Please try connecting again.</p>
+                </div>
+                <script>
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'oauth_error',
+                            error: 'Authentication failed'
+                        }, '*');
+                    }
+                    setTimeout(() => window.close(), 3000);
+                </script>
+            </body>
+            </html>
+            """
+
+            return HTMLResponse(content=html_content, status_code=400)
 
     return app
 

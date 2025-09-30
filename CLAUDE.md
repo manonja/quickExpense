@@ -15,6 +15,7 @@ The application has been successfully restructured with:
 - Comprehensive test structure
 - All pre-commit hooks passing
 - **Complete CLI interface for receipt processing**
+- **Modern web UI with essentials-only grid design**
 - **QuickBooks Purchase API integration fixed**
 - **Vendor-aware business rules engine with hotel-specific categorization**
 
@@ -44,10 +45,12 @@ quickexpense/
 │   └── quickexpense/
 │       ├── __init__.py
 │       ├── main.py        # FastAPI app with lifespan events
+│       ├── cli.py         # CLI interface implementation
 │       ├── api/
 │       │   ├── __init__.py
-│       │   ├── health.py  # Health check endpoints
-│       │   └── routes.py  # API endpoint definitions
+│       │   ├── health.py     # Health check endpoints
+│       │   ├── routes.py     # API endpoint definitions
+│       │   └── web_endpoints.py # Web UI endpoints
 │       ├── core/
 │       │   ├── __init__.py
 │       │   ├── config.py      # Pydantic settings
@@ -55,9 +58,15 @@ quickexpense/
 │       ├── models/
 │       │   ├── __init__.py
 │       │   └── expense.py # Pydantic v2 models
-│       └── services/
-│           ├── __init__.py
-│           └── quickbooks.py # QuickBooks client & service
+│       ├── services/
+│       │   ├── __init__.py
+│       │   └── quickbooks.py # QuickBooks client & service
+│       └── web/
+│           ├── templates/
+│           │   └── index.html # Web UI template
+│           └── static/
+│               ├── css/app.css # Grid-based styles
+│               └── js/app.js   # Vanilla JavaScript
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py        # Pytest fixtures
@@ -191,11 +200,12 @@ uv run quickexpense upload receipt.jpg --dry-run  # Preview only
 uv run quickexpense upload receipt.jpg --output json  # JSON output
 ```
 
-### Running the API Server
+### Running the Web UI Server
 ```bash
-# Development mode (with auto-reload)
+# Development mode (with auto-reload and web UI)
 uv run fastapi dev src/quickexpense/main.py
 
+# Access the web interface at http://localhost:8000
 # Production mode
 uv run uvicorn src.quickexpense.main:app --host 0.0.0.0 --port 8000
 ```
@@ -204,6 +214,7 @@ The application will:
 - Load tokens from `data/tokens.json` on startup
 - Automatically refresh tokens before they expire
 - Save updated tokens back to `data/tokens.json`
+- Serve the web UI at the root path (`/`)
 
 ### Testing
 ```bash
@@ -245,6 +256,24 @@ uv run mypy src tests
 - `python scripts/search_vendor_expenses.py <vendor>` - Find expenses by vendor
 - `python scripts/list_recent_expenses.py [days]` - List recent expenses
 
+## Web UI
+
+### Quick Start
+1. **Start the server**: `uv run fastapi dev src/quickexpense/main.py`
+2. **Open browser**: Navigate to http://localhost:8000
+3. **Authenticate**: Click "Connect to QuickBooks" if not authenticated
+4. **Upload receipt**: Drag and drop or click to select receipt file
+5. **Review results**: View essential information in clean grid layout
+
+### Web UI Features
+- **Essentials-Only Grid**: Three-column layout showing Receipt, Tax Analysis, and Status
+- **Expandable Details**: Optional advanced information section
+- **Real-time Processing**: Visual feedback with progress indicators
+- **Responsive Design**: Works on mobile and desktop devices
+- **Drag & Drop Upload**: Support for JPEG, PNG, PDF, HEIC files
+- **OAuth Integration**: Seamless QuickBooks authentication with popup flow
+- **Dry Run Mode**: Preview processing without creating expenses
+
 ## API Endpoints
 
 ### Health Checks
@@ -258,6 +287,13 @@ uv run mypy src tests
 - `POST /api/v1/vendors?vendor_name=...` - Create vendor
 - `GET /api/v1/accounts/expense` - List expense accounts
 - `GET /api/v1/test-connection` - Test QuickBooks connection
+
+### Web UI Endpoints
+- `GET /` - Web UI home page
+- `GET /api/web/auth-status` - Check QuickBooks authentication status
+- `GET /api/web/auth-url` - Get OAuth authorization URL
+- `GET /api/web/callback` - OAuth callback handler
+- `POST /api/web/upload-receipt` - Upload and process receipt file
 
 
 
@@ -416,6 +452,14 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
    - Auto-detection via magic bytes
    - Supports all HEIC variants (heic, heix, hevc, hevx)
    - Works with PhotoSync and AirDrop workflows
+9. ✅ **Modern Web UI**: Professional essentials-only interface
+   - Clean grid-based design utilizing horizontal space
+   - Three-column essentials view: Receipt, Tax Analysis, Status
+   - Expandable details section for advanced information
+   - Responsive design for mobile and desktop
+   - Real-time processing with visual feedback
+   - Drag-and-drop file upload with validation
+   - Seamless QuickBooks OAuth integration with popup flow
 
 ## Business Rules Configuration
 
@@ -461,6 +505,7 @@ The business rules engine now supports vendor context awareness, enabling more a
 10. **Batch Processing**: Add support for multiple receipt uploads
 11. ✅ **PDF Support**: Add PDF receipt extraction capability
 12. ✅ **HEIC Support**: Add native iPhone HEIC photo support
+13. ✅ **Web UI Implementation**: Modern essentials-only interface
 
 ## Commit Discipline
 

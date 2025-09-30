@@ -40,6 +40,11 @@ async def create_expense(
     service: QuickBooksServiceDep,
 ) -> dict[str, Any]:
     """Create a new expense in QuickBooks."""
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="QuickBooks service not available. Please authenticate first.",
+        )
     try:
         result = await service.create_expense(expense)
         return {
@@ -60,6 +65,11 @@ async def search_vendor(
     service: QuickBooksServiceDep,
 ) -> list[VendorSearchResult]:
     """Search for vendors by name."""
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="QuickBooks service not available. Please authenticate first.",
+        )
     try:
         return await service.search_vendor(vendor_name)
     except QuickBooksError as e:
@@ -75,6 +85,11 @@ async def create_vendor(
     service: QuickBooksServiceDep,
 ) -> VendorSearchResult:
     """Create a new vendor."""
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="QuickBooks service not available. Please authenticate first.",
+        )
     try:
         return await service.create_vendor(vendor_name)
     except QuickBooksError as e:
@@ -89,6 +104,11 @@ async def get_expense_accounts(
     service: QuickBooksServiceDep,
 ) -> list[AccountInfo]:
     """Get all expense accounts."""
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="QuickBooks service not available. Please authenticate first.",
+        )
     try:
         return await service.get_expense_accounts()
     except QuickBooksError as e:
@@ -103,6 +123,11 @@ async def test_connection(
     service: QuickBooksServiceDep,
 ) -> dict[str, Any]:
     """Test QuickBooks connection."""
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="QuickBooks service not available. Please authenticate first.",
+        )
     try:
         result = await service.test_connection()
         return {"status": "connected", "company": result}
