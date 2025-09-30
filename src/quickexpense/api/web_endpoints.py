@@ -1,5 +1,7 @@
 """Web UI API endpoints for QuickExpense."""
 
+# ruff: noqa: B008
+
 from __future__ import annotations
 
 import logging
@@ -313,7 +315,7 @@ async def upload_receipt(  # noqa: C901, PLR0913, PLR0912, PLR0915
     gemini_service: GeminiServiceDep,
     quickbooks_service: QuickBooksServiceDep,
     business_rules_engine: BusinessRulesEngineDep,
-    file: UploadFile = File(..., description="Receipt file (JPEG, PNG, PDF, HEIC)"),  # noqa: B008
+    file: UploadFile = File(..., description="Receipt file (JPEG, PNG, PDF, HEIC)"),
     category: str = Form(default="", description="Optional expense category"),
     additional_context: str = Form(
         default="", description="Additional context for processing"
