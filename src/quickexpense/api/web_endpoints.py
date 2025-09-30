@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from datetime import datetime
+from typing import Any
 
 from fastapi import (
     APIRouter,
-    Depends,
     File,
     Form,
     HTTPException,
@@ -18,12 +18,12 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse
 
-from quickexpense.core.dependencies import (
+# Import actual dependencies for runtime
+from quickexpense.core.dependencies import (  # noqa: TCH001
     BusinessRulesEngineDep,
     GeminiServiceDep,
     OAuthManagerDep,
     QuickBooksServiceDep,
-    get_oauth_manager,
 )
 from quickexpense.models.business_rules import ExpenseContext
 from quickexpense.services.file_processor import FileProcessorService
@@ -309,7 +309,7 @@ async def _process_file_content(file: UploadFile) -> str:
 
 
 @router.post("/upload-receipt")
-async def upload_receipt(
+async def upload_receipt(  # noqa: C901, PLR0913, PLR0912, PLR0915
     gemini_service: GeminiServiceDep,
     quickbooks_service: QuickBooksServiceDep,
     business_rules_engine: BusinessRulesEngineDep,
@@ -318,7 +318,9 @@ async def upload_receipt(
     additional_context: str = Form(
         default="", description="Additional context for processing"
     ),
-    dry_run: bool = Form(default=False, description="Preview processing without creating expenses"),
+    dry_run: bool = Form(  # noqa: FBT001
+        default=False, description="Preview processing without creating expenses"
+    ),
 ) -> dict[str, Any]:
     """Upload and process a receipt file.
 
@@ -351,20 +353,22 @@ async def upload_receipt(
         receipt = await gemini_service.extract_receipt_data(
             file_base64, additional_context
         )
-        
+
         # Apply business rules for categorization
         logger.info("Applying business rules for categorization...")
-        
+
         # Create expense context for business rules (matching CLI logic)
         payment_method = str(getattr(receipt, "payment_method", "unknown"))
         if "<" in payment_method and ">" in payment_method:
             # Handle format like "<PaymentMethod.DEBIT_CARD: 'debit_card'>"
             payment_method = payment_method.split("'")[-2]
-            
+
         context = ExpenseContext(
             vendor_name=receipt.vendor_name,
             total_amount=receipt.total_amount,
-            transaction_date=receipt.transaction_date,
+            transaction_date=datetime.combine(
+                receipt.transaction_date, datetime.min.time()
+            ),
             currency=receipt.currency,
             vendor_address=getattr(receipt, "vendor_address", None),
             postal_code=None,
@@ -372,21 +376,23 @@ async def upload_receipt(
             business_purpose=None,
             location=None,
         )
-        
+
         # Apply business rules to line items
         rule_results = business_rules_engine.categorize_line_items(
             receipt.line_items, context
         )
-        
+
         # Convert rule results to format needed for response and QuickBooks
         rule_data = []
         total_deductible = 0.0
         categories_used = set()
-        
+
         for i, result in enumerate(rule_results):
             # Get original line item for description and amount (matching CLI logic)
-            original_item = receipt.line_items[i] if i < len(receipt.line_items) else {}
-            
+            original_item: Any = (
+                receipt.line_items[i] if i < len(receipt.line_items) else {}
+            )
+
             # Get description from original item
             if hasattr(original_item, "description"):
                 description = getattr(original_item, "description", f"Item {i+1}")
@@ -394,22 +400,31 @@ async def upload_receipt(
                 description = original_item.get("description", f"Item {i+1}")
             else:
                 description = f"Item {i+1}"
-            
+
             # Get amount from original item (RuleResult doesn't have amount)
             if hasattr(original_item, "total_price"):
                 # LineItem model - use total_price, fallback to unit_price
-                item_amount = float(getattr(original_item, "total_price", 
-                                          getattr(original_item, "unit_price", 0)))
+                item_amount = float(
+                    getattr(
+                        original_item,
+                        "total_price",
+                        getattr(original_item, "unit_price", 0),
+                    )
+                )
             elif isinstance(original_item, dict):
                 # Dictionary format
                 item_amount = float(original_item.get("amount", 0))
             else:
                 item_amount = 0.0
-            
+
             rule_info = {
                 "description": description,
-                "rule_name": result.rule_applied.name if result.rule_applied else "Default",
-                "rule_applied": result.rule_applied.id if result.rule_applied else "default",
+                "rule_name": (
+                    result.rule_applied.name if result.rule_applied else "Default"
+                ),
+                "rule_applied": (
+                    result.rule_applied.id if result.rule_applied else "default"
+                ),
                 "category": result.category,
                 "qb_account": result.account_mapping,
                 "amount": item_amount,
@@ -418,7 +433,7 @@ async def upload_receipt(
                 "confidence": result.confidence_score,
             }
             rule_data.append(rule_info)
-            
+
             # Calculate deductible amount
             deductible_amount = item_amount * result.deductibility_percentage / 100.0
             total_deductible += deductible_amount
@@ -429,10 +444,10 @@ async def upload_receipt(
             # Use the first categorized item as the primary expense
             primary_result = rule_results[0]
             from quickexpense.models.expense import Expense
-            
+
             expense = Expense(
                 vendor_name=receipt.vendor_name,
-                amount=receipt.total_amount,  # Use total amount, not individual line item
+                amount=receipt.total_amount,  # Use total amount, not individual line
                 date=receipt.transaction_date,
                 currency=receipt.currency,
                 category=primary_result.category,
@@ -440,7 +455,7 @@ async def upload_receipt(
         else:
             # Fallback if no rules applied
             from quickexpense.models.expense import Expense
-            
+
             expense = Expense(
                 vendor_name=receipt.vendor_name,
                 amount=receipt.total_amount,
@@ -492,7 +507,9 @@ async def upload_receipt(
         response = {
             "status": "success",
             "dry_run": dry_run,
-            "message": "DRY RUN - No expense created in QuickBooks" if dry_run else None,
+            "message": (
+                "DRY RUN - No expense created in QuickBooks" if dry_run else None
+            ),
             "receipt_info": {
                 "filename": file.filename,
                 "vendor_name": receipt.vendor_name,

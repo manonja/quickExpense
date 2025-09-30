@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends
@@ -102,4 +101,6 @@ QuickBooksServiceDep = Annotated[
 ]
 GeminiServiceDep = Annotated[GeminiService, Depends(get_gemini_service)]
 OAuthManagerDep = Annotated[QuickBooksOAuthManager, Depends(get_oauth_manager)]
-BusinessRulesEngineDep = Annotated[BusinessRuleEngine, Depends(get_business_rules_engine)]
+BusinessRulesEngineDep = Annotated[
+    BusinessRuleEngine, Depends(get_business_rules_engine)
+]

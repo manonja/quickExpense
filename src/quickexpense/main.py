@@ -16,7 +16,11 @@ from quickexpense.api import health_router, main_router
 from quickexpense.api.web_endpoints import router as web_api_router
 from quickexpense.web.routes import router as web_ui_router
 from quickexpense.core.config import Settings, get_settings
-from quickexpense.core.dependencies import set_oauth_manager, set_quickbooks_client, set_business_rules_engine
+from quickexpense.core.dependencies import (
+    set_oauth_manager,
+    set_quickbooks_client,
+    set_business_rules_engine,
+)
 from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.models.quickbooks_oauth import (
     QuickBooksOAuthConfig,
@@ -112,7 +116,10 @@ async def lifespan(app: FastAPIType) -> AsyncGenerator[None, None]:
     config_path = Path(__file__).parent.parent.parent / "config" / "business_rules.json"
     business_rules_engine = BusinessRuleEngine(config_path)
     set_business_rules_engine(business_rules_engine)
-    logger.info("Business rules engine initialized with %d rules", len(business_rules_engine.config.rules) if business_rules_engine.config else 0)
+    logger.info(
+        "Business rules engine initialized with %d rules",
+        len(business_rules_engine.config.rules) if business_rules_engine.config else 0,
+    )
 
     # Initialize QuickBooks client with OAuth manager only if we have tokens
     async with oauth_manager:
@@ -207,7 +214,7 @@ def create_app() -> FastAPI:
     from quickexpense.core.dependencies import initialize_quickbooks_client_after_oauth
 
     @app.get("/api/quickbooks/callback")
-    async def oauth_callback(
+    async def oauth_callback(  # pyright: ignore[reportUnusedFunction]
         code: str = Query(..., description="Authorization code from QuickBooks"),
         state: str = Query(..., description="State parameter for CSRF protection"),
         realm_id: str = Query(
