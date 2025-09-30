@@ -484,113 +484,189 @@ p {
   }
 }
 
-/* CLI-Style Output Formatting */
-.cli-output {
-  background: #f8f9fa;
-  border-radius: var(--radius-md);
-  padding: var(--space-6);
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  line-height: 1.6;
-  overflow-x: auto;
+/* ===== SIMPLIFIED RECEIPT OUTPUT ===== */
+
+/* Main receipt summary container */
+.receipt-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
-.cli-section {
+/* Essential information grid */
+.essential-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+/* Grid section styling */
+.receipt-overview,
+.tax-overview,
+.status-overview {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.essential-grid h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: var(--space-2);
+}
+
+/* Basic data display */
+.receipt-basic,
+.tax-basic,
+.status-basic {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.data-row:last-child {
+  border-bottom: none;
+}
+
+.data-label {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.data-value {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+}
+
+.data-value.highlight {
+  color: #059669;
+  font-size: 1rem;
+}
+
+.data-value.amount {
+  font-family: var(--font-mono);
+}
+
+/* Details toggle button */
+.details-toggle {
+  text-align: center;
+  margin: var(--space-4) 0;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-light);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.btn-secondary:hover {
+  border-color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* Detailed information section */
+.detailed-info {
+  border-top: 1px solid var(--border-light);
+  padding-top: var(--space-4);
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.detail-section {
   margin-bottom: var(--space-6);
 }
 
-.cli-section:last-child {
-  margin-bottom: 0;
-}
-
-.cli-header {
-  color: var(--primary);
-  font-family: var(--font-mono);
+.detail-section h4 {
   font-size: 0.875rem;
   font-weight: 600;
+  color: var(--text-primary);
   margin-bottom: var(--space-3);
-  letter-spacing: 0;
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: var(--space-1);
 }
 
-.cli-section .info-list,
-.cli-section .rules-list,
-.cli-section .qb-results {
-  font-family: var(--font-mono);
-  color: var(--text-dark);
+.rules-simple,
+.summary-simple {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-4);
 }
 
-.cli-section .info-item {
-  display: flex;
-  margin-bottom: var(--space-1);
+.rule-item-simple {
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.rule-title-simple {
   font-size: 0.875rem;
-}
-
-.cli-section .info-label {
-  color: var(--text-dark);
-  min-width: 120px;
-}
-
-.cli-section .info-value {
-  color: var(--text-dark);
-  font-weight: 400;
-}
-
-/* Business Rules Block in CLI style */
-.cli-section .rule-block {
-  margin-bottom: var(--space-4);
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-}
-
-.cli-section .rule-title {
-  color: var(--text-dark);
   font-weight: 600;
-  margin-bottom: var(--space-1);
-  font-size: 0.875rem;
-}
-
-.cli-section .rule-details {
-  margin-left: var(--space-3);
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  line-height: 1.6;
-}
-
-.cli-section .rule-indicator {
-  margin-left: var(--space-3);
-  margin-top: var(--space-1);
-  color: var(--status-success);
-  font-size: 0.875rem;
-}
-
-/* QuickBooks Results in CLI style */
-.cli-section .qb-success {
-  color: var(--status-success);
-  font-weight: 600;
+  color: var(--text-primary);
   margin-bottom: var(--space-2);
-  font-size: 0.875rem;
 }
 
-/* Dark mode adjustments for CLI output */
-@media (prefers-color-scheme: dark) {
-  .cli-output {
-    background: #1a1a1a;
-    color: #e0e0e0;
+.rule-details-simple {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Responsive grid layout */
+@media (max-width: 900px) {
+  .essential-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .essential-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
   }
 
-  .cli-header {
-    color: #ec4899;
+  .receipt-overview,
+  .tax-overview,
+  .status-overview {
+    padding: var(--space-4);
   }
 
-  .cli-section .info-label,
-  .cli-section .info-value,
-  .cli-section .rule-title {
-    color: #e0e0e0;
-  }
-
-  .cli-section .rule-details {
-    color: #a0a0a0;
+  .rules-simple,
+  .summary-simple {
+    grid-template-columns: 1fr;
   }
 }

@@ -21,11 +21,13 @@ class QuickExpenseUI {
             resultsSection: document.getElementById('resultsSection'),
             errorSection: document.getElementById('errorSection'),
             errorMessage: document.getElementById('errorMessage'),
-            receiptInfo: document.getElementById('receiptInfo'),
-            businessRules: document.getElementById('businessRules'),
-            quickbooksResults: document.getElementById('quickbooksResults'),
-            taxSummary: document.getElementById('taxSummary'),
-            expenseSummary: document.getElementById('expenseSummary'),
+            receiptBasic: document.getElementById('receiptBasic'),
+            taxBasic: document.getElementById('taxBasic'),
+            statusBasic: document.getElementById('statusBasic'),
+            toggleDetails: document.getElementById('toggleDetails'),
+            detailedInfo: document.getElementById('detailedInfo'),
+            businessRulesDetailed: document.getElementById('businessRulesDetailed'),
+            expenseSummaryDetailed: document.getElementById('expenseSummaryDetailed'),
             processAnotherBtn: document.getElementById('processAnotherBtn'),
             tryAgainBtn: document.getElementById('tryAgainBtn')
         };
@@ -37,6 +39,7 @@ class QuickExpenseUI {
         this.checkAuthStatus();
         this.setupEventListeners();
         this.setupDropZone();
+        this.setupDetailsToggle();
     }
 
     // ===== AUTH STATUS MANAGEMENT =====
@@ -488,20 +491,17 @@ class QuickExpenseUI {
         console.log('Populating results with data:', data);
 
         try {
-            console.log('Populating receipt info...');
-            this.populateReceiptInfo(data.receipt_info);
+            console.log('Populating basic receipt info...');
+            this.populateReceiptBasic(data.receipt_info);
 
-            console.log('Populating business rules...');
-            this.populateBusinessRules(data.business_rules);
+            console.log('Populating basic tax summary...');
+            this.populateTaxBasic(data.tax_deductibility);
 
-            console.log('Populating tax summary...');
-            this.populateTaxSummary(data.tax_deductibility);
+            console.log('Populating basic status...');
+            this.populateStatusBasic(data.quickbooks, data.dry_run);
 
-            console.log('Populating expense summary...');
-            this.populateExpenseSummary(data.enhanced_expense);
-
-            console.log('Populating QuickBooks results...');
-            this.populateQuickBooksResults(data.quickbooks, data.dry_run);
+            console.log('Populating detailed information...');
+            this.populateDetailedInfo(data);
 
             console.log('All populate methods completed successfully');
         } catch (error) {
@@ -510,181 +510,194 @@ class QuickExpenseUI {
         }
     }
 
-    populateReceiptInfo(receiptInfo) {
-        console.log('Receipt info data:', receiptInfo);
-        const container = this.elements.receiptInfo;
+    populateReceiptBasic(receiptInfo) {
+        const container = this.elements.receiptBasic;
         container.innerHTML = '';
 
         if (!receiptInfo) {
-            console.error('Receipt info is null/undefined');
-            container.textContent = 'Receipt information not available';
+            container.innerHTML = '<p>Receipt information not available</p>';
             return;
         }
 
-        // Match CLI format exactly
-        const items = [
-            { label: 'File:', value: receiptInfo.filename || 'Unknown' },
-            { label: 'Vendor:', value: receiptInfo.vendor_name || 'Unknown' },
-            { label: 'Date:', value: receiptInfo.date ? new Date(receiptInfo.date).toLocaleDateString('en-CA') : 'Unknown' },
-            { label: 'Total Amount:', value: `$${receiptInfo.total_amount?.toFixed(2) || '0.00'}` },
-            { label: 'Tax:', value: `$${receiptInfo.tax_amount?.toFixed(2) || '0.00'}` },
-            { label: 'Currency:', value: receiptInfo.currency || 'CAD' }
+        const data = [
+            { label: 'Vendor', value: receiptInfo.vendor_name || 'Unknown' },
+            { label: 'Date', value: receiptInfo.date ? new Date(receiptInfo.date).toLocaleDateString('en-CA') : 'Unknown' },
+            { label: 'Total', value: `$${receiptInfo.total_amount?.toFixed(2) || '0.00'}`, className: 'amount' },
+            { label: 'Currency', value: receiptInfo.currency || 'CAD' }
         ];
 
-        items.forEach(item => {
-            const element = this.createInfoItem(item.label, item.value);
-            container.appendChild(element);
+        data.forEach(item => {
+            const row = this.createDataRow(item.label, item.value, item.className);
+            container.appendChild(row);
         });
     }
 
-    populateBusinessRules(businessRules) {
-        console.log('Business rules data:', businessRules);
-        const container = this.elements.businessRules;
-        container.innerHTML = '';
-
-        if (!businessRules) {
-            console.error('Business rules data is null/undefined');
-            container.textContent = 'Business rules information not available';
-            return;
-        }
-
-        if (businessRules.applied_rules && businessRules.applied_rules.length > 0) {
-            businessRules.applied_rules.forEach((rule, index) => {
-                // Create a rule block matching CLI format
-                const ruleBlock = document.createElement('div');
-                ruleBlock.className = 'rule-block';
-
-                // Rule title (match CLI: "📄 Restaurant meal consolidation")
-                const title = document.createElement('div');
-                title.className = 'rule-title';
-                title.textContent = `📄 ${rule.description}`;
-                ruleBlock.appendChild(title);
-
-                // Rule details (match CLI format exactly)
-                const details = [
-                    `Rule Applied: ${rule.rule_applied}`,
-                    `Category: ${rule.category}`,
-                    `QuickBooks Account: ${rule.qb_account}`,
-                    `Tax Deductible: ${rule.deductible_percentage}%`,
-                    `Tax Treatment: ${rule.tax_treatment || 'standard'}`,
-                    `Confidence: ${((rule.confidence || 0) * 100).toFixed(0)}%`
-                ];
-
-                details.forEach(detail => {
-                    const detailDiv = document.createElement('div');
-                    detailDiv.className = 'rule-details';
-                    detailDiv.textContent = detail;
-                    ruleBlock.appendChild(detailDiv);
-                });
-
-                // Success indicator (match CLI: "✅ Matched Rule")
-                const indicator = document.createElement('div');
-                indicator.className = 'rule-indicator';
-                indicator.textContent = '✅ Matched Rule';
-                ruleBlock.appendChild(indicator);
-
-                container.appendChild(ruleBlock);
-            });
-        } else {
-            const element = this.createInfoItem('Rules Applied', 'None');
-            container.appendChild(element);
-        }
-    }
-
-    populateTaxSummary(taxData) {
-        console.log('Tax summary data:', taxData);
-        const container = this.elements.taxSummary;
+    populateTaxBasic(taxData) {
+        const container = this.elements.taxBasic;
         container.innerHTML = '';
 
         if (!taxData) {
-            console.error('Tax data is null/undefined');
-            container.textContent = 'Tax information not available';
+            container.innerHTML = '<p>Tax information not available</p>';
             return;
         }
 
-        if (taxData) {
-            const items = [
-                { label: 'Total Amount:', value: `$${taxData.total_amount}` },
-                { label: 'Deductible Amount:', value: `$${taxData.deductible_amount} (${taxData.deductibility_rate}%)` }
-            ];
+        const totalAmount = parseFloat(taxData.total_amount) || 0;
+        const deductibleAmount = parseFloat(taxData.deductible_amount) || 0;
+        const deductibilityRate = parseFloat(taxData.deductibility_rate) || 0;
 
-            items.forEach(item => {
-                const element = this.createInfoItem(item.label, item.value);
-                container.appendChild(element);
-            });
-        }
+        const data = [
+            { label: 'Total Amount', value: `$${totalAmount.toFixed(2)}`, className: 'amount' },
+            { label: 'Deductible', value: `$${deductibleAmount.toFixed(2)}`, className: 'amount highlight' },
+            { label: 'Rate', value: `${deductibilityRate.toFixed(1)}%`, className: 'highlight' }
+        ];
+
+        data.forEach(item => {
+            const row = this.createDataRow(item.label, item.value, item.className);
+            container.appendChild(row);
+        });
     }
 
-    populateExpenseSummary(expenseData) {
-        console.log('Expense summary data:', expenseData);
-        const container = this.elements.expenseSummary;
+    populateStatusBasic(qbResults, isDryRun = false) {
+        const container = this.elements.statusBasic;
+        container.innerHTML = '';
+
+        const data = [
+            { label: 'Mode', value: isDryRun ? 'Dry Run' : 'Live' },
+            {
+                label: 'Status',
+                value: isDryRun ? 'Preview Only' : 'Created',
+                className: isDryRun ? '' : 'highlight'
+            }
+        ];
+
+        if (!isDryRun && qbResults?.expense_ids?.length > 0) {
+            data.push({
+                label: 'Expense ID',
+                value: qbResults.expense_ids[0],
+                className: 'amount'
+            });
+        }
+
+        data.forEach(item => {
+            const row = this.createDataRow(item.label, item.value, item.className);
+            container.appendChild(row);
+        });
+    }
+
+    populateDetailedInfo(data) {
+        // Populate business rules details
+        this.populateBusinessRulesDetailed(data.business_rules);
+
+        // Populate expense summary details
+        this.populateExpenseSummaryDetailed(data.enhanced_expense);
+    }
+
+    populateBusinessRulesDetailed(businessRules) {
+        const container = this.elements.businessRulesDetailed;
+        container.innerHTML = '';
+
+        if (!businessRules?.applied_rules?.length) {
+            container.innerHTML = '<p>No business rules applied</p>';
+            return;
+        }
+
+        businessRules.applied_rules.forEach(rule => {
+            const ruleDiv = document.createElement('div');
+            ruleDiv.className = 'rule-item-simple';
+
+            const title = document.createElement('div');
+            title.className = 'rule-title-simple';
+            title.textContent = rule.description;
+
+            const details = document.createElement('div');
+            details.className = 'rule-details-simple';
+            details.innerHTML = `
+                <strong>Rule:</strong> ${rule.rule_applied}<br>
+                <strong>Category:</strong> ${rule.category}<br>
+                <strong>Account:</strong> ${rule.qb_account}<br>
+                <strong>Deductible:</strong> ${rule.deductible_percentage}%<br>
+                <strong>Amount:</strong> $${(rule.amount || 0).toFixed(2)}
+            `;
+
+            ruleDiv.appendChild(title);
+            ruleDiv.appendChild(details);
+            container.appendChild(ruleDiv);
+        });
+    }
+
+    populateExpenseSummaryDetailed(expenseData) {
+        const container = this.elements.expenseSummaryDetailed;
         container.innerHTML = '';
 
         if (!expenseData) {
-            console.error('Expense data is null/undefined');
-            container.textContent = 'Expense information not available';
+            container.innerHTML = '<p>Expense data not available</p>';
             return;
         }
 
-        if (expenseData) {
-            const items = [
-                { label: 'Vendor:', value: expenseData.vendor_name || 'Unknown' },
-                { label: 'Items:', value: `${expenseData.items_count}, Categories: ${expenseData.categories_count}` },
-                { label: 'Business Rules Applied:', value: expenseData.rules_applied || '0' },
-                { label: 'Payment:', value: expenseData.payment || 'cash' }
-            ];
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'rule-item-simple';
 
-            items.forEach(item => {
-                const element = this.createInfoItem(item.label, item.value);
-                container.appendChild(element);
-            });
-        }
+        const title = document.createElement('div');
+        title.className = 'rule-title-simple';
+        title.textContent = 'Processing Summary';
+
+        const details = document.createElement('div');
+        details.className = 'rule-details-simple';
+        details.innerHTML = `
+            <strong>Items Processed:</strong> ${expenseData.items_count || 0}<br>
+            <strong>Categories:</strong> ${expenseData.categories_count || 0}<br>
+            <strong>Rules Applied:</strong> ${expenseData.rules_applied || 0}<br>
+            <strong>Payment Method:</strong> ${expenseData.payment || 'cash'}
+        `;
+
+        summaryDiv.appendChild(title);
+        summaryDiv.appendChild(details);
+        container.appendChild(summaryDiv);
     }
 
-    populateQuickBooksResults(qbResults, isDryRun = false) {
-        console.log('QuickBooks results data:', qbResults, 'isDryRun:', isDryRun);
-        const container = this.elements.quickbooksResults;
-        container.innerHTML = '';
+    setupDetailsToggle() {
+        const toggleBtn = this.elements.toggleDetails;
+        const detailedInfo = this.elements.detailedInfo;
+        const toggleText = document.getElementById('toggleText');
+        const toggleIcon = document.getElementById('toggleIcon');
 
-        if (!qbResults) {
-            console.error('QuickBooks results data is null/undefined');
-            container.textContent = 'QuickBooks results not available';
-            return;
-        }
+        if (!toggleBtn) return;
 
-        // Match CLI format exactly
-        if (qbResults && qbResults.expense_ids && qbResults.expense_ids.length > 0) {
-            const successMsg = document.createElement('div');
-            successMsg.className = isDryRun ? 'qb-dry-run' : 'qb-success';
+        toggleBtn.addEventListener('click', () => {
+            const isHidden = detailedInfo.style.display === 'none';
 
-            if (isDryRun) {
-                successMsg.textContent = 'DRY RUN - No expense created in QuickBooks (Preview only)';
+            if (isHidden) {
+                detailedInfo.style.display = 'block';
+                toggleText.textContent = 'Hide Details';
+                toggleIcon.textContent = '▲';
             } else {
-                successMsg.textContent = `Successfully created expense in QuickBooks (ID: ${qbResults.expense_ids.join(', ')})`;
+                detailedInfo.style.display = 'none';
+                toggleText.textContent = 'Show Details';
+                toggleIcon.textContent = '▼';
             }
-            container.appendChild(successMsg);
-        } else {
-            container.textContent = isDryRun ? 'DRY RUN - No expenses would be created' : 'No expenses created';
-        }
+        });
     }
 
-    createInfoItem(label, value) {
-        const item = document.createElement('div');
-        item.className = 'info-item';
+    createDataRow(label, value, className = '') {
+        const row = document.createElement('div');
+        row.className = 'data-row';
 
         const labelSpan = document.createElement('span');
-        labelSpan.className = 'info-label';
+        labelSpan.className = 'data-label';
         labelSpan.textContent = label;
 
         const valueSpan = document.createElement('span');
-        valueSpan.className = 'info-value';
+        valueSpan.className = `data-value ${className}`.trim();
         valueSpan.textContent = value;
 
-        item.appendChild(labelSpan);
-        item.appendChild(valueSpan);
+        row.appendChild(labelSpan);
+        row.appendChild(valueSpan);
 
-        return item;
+        return row;
     }
+
+
+
 
     formatCurrency(amount) {
         if (amount === null || amount === undefined) return '$0.00';

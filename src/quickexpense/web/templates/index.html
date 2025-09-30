@@ -96,45 +96,59 @@
                 <div class="card results-card">
                     <h2>Receipt Processed Successfully</h2>
 
-                    <!-- CLI-Style Output Container -->
-                    <div class="cli-output" id="cliOutput">
-                        <!-- Receipt Data Section -->
-                        <div class="cli-section">
-                            <h3 class="cli-header">=== Receipt Data ===</h3>
-                            <div class="info-list" id="receiptInfo">
-                                <!-- Dynamic content -->
+                    <!-- Simplified Receipt Output -->
+                    <div class="receipt-summary" id="receiptOutput">
+                        <!-- Essential Information Grid -->
+                        <div class="essential-grid">
+                            <!-- Receipt Overview -->
+                            <div class="receipt-overview">
+                                <h3>Receipt</h3>
+                                <div class="receipt-basic" id="receiptBasic">
+                                    <!-- Dynamic receipt data -->
+                                </div>
+                            </div>
+
+                            <!-- Tax Analysis -->
+                            <div class="tax-overview">
+                                <h3>Tax Deductibility</h3>
+                                <div class="tax-basic" id="taxBasic">
+                                    <!-- Dynamic tax data -->
+                                </div>
+                            </div>
+
+                            <!-- Status -->
+                            <div class="status-overview">
+                                <h3>Status</h3>
+                                <div class="status-basic" id="statusBasic">
+                                    <!-- Dynamic status -->
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Business Rules Categorization Section -->
-                        <div class="cli-section">
-                            <h3 class="cli-header">=== Business Rules Categorization ===</h3>
-                            <div class="rules-list" id="businessRules">
-                                <!-- Dynamic content -->
-                            </div>
+                        <!-- Expand Details -->
+                        <div class="details-toggle">
+                            <button class="btn-secondary" id="toggleDetails">
+                                <span id="toggleText">Show Details</span>
+                                <span id="toggleIcon">▼</span>
+                            </button>
                         </div>
 
-                        <!-- Tax Deductibility Summary Section -->
-                        <div class="cli-section">
-                            <h3 class="cli-header">=== Tax Deductibility Summary ===</h3>
-                            <div class="info-list" id="taxSummary">
-                                <!-- Dynamic content -->
+                        <!-- Detailed Information (Hidden by default) -->
+                        <div class="detailed-info" id="detailedInfo" style="display: none;">
+                            <!-- Business Rules -->
+                            <div class="detail-section">
+                                <h4>Business Rules Applied</h4>
+                                <div class="rules-simple" id="businessRulesDetailed">
+                                    <!-- Dynamic detailed rules -->
+                                </div>
                             </div>
-                        </div>
 
-                        <!-- Enhanced Expense Summary Section -->
-                        <div class="cli-section">
-                            <h3 class="cli-header">=== Enhanced Expense Summary ===</h3>
-                            <div class="info-list" id="expenseSummary">
-                                <!-- Dynamic content -->
-                            </div>
-                        </div>
-
-                        <!-- Result Section -->
-                        <div class="cli-section">
-                            <h3 class="cli-header">=== Result ===</h3>
-                            <div class="qb-results" id="quickbooksResults">
-                                <!-- Dynamic content -->
+                            <!-- Expense Summary -->
+                            <div class="detail-section">
+                                <h4>Processing Summary</h4>
+                                <div class="summary-simple" id="expenseSummaryDetailed">
+                                    <!-- Dynamic detailed summary -->
+                                </div>
                             </div>
                         </div>
                     </div>
