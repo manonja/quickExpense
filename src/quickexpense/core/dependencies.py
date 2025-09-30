@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import Depends
 
 from quickexpense.core.config import Settings, get_settings
+from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.services.gemini import GeminiService
 from quickexpense.services.quickbooks import QuickBooksService
 from quickexpense.services.quickbooks_oauth import QuickBooksOAuthManager
@@ -18,9 +19,10 @@ if TYPE_CHECKING:
 # Global instances that will be initialized on startup
 _quickbooks_client: QuickBooksClient | None = None
 _oauth_manager: QuickBooksOAuthManager | None = None
+_business_rules_engine: BusinessRuleEngine | None = None
 
 
-def set_quickbooks_client(client: QuickBooksClient) -> None:
+def set_quickbooks_client(client: QuickBooksClient | None) -> None:
     """Set the global QuickBooks client instance."""
     global _quickbooks_client  # noqa: PLW0603
     _quickbooks_client = client
@@ -32,11 +34,14 @@ def set_oauth_manager(manager: QuickBooksOAuthManager) -> None:
     _oauth_manager = manager
 
 
-def get_quickbooks_client() -> QuickBooksClient:
+def set_business_rules_engine(engine: BusinessRuleEngine) -> None:
+    """Set the global business rules engine instance."""
+    global _business_rules_engine  # noqa: PLW0603
+    _business_rules_engine = engine
+
+
+def get_quickbooks_client() -> QuickBooksClient | None:
     """Get the QuickBooks client instance."""
-    if _quickbooks_client is None:
-        msg = "QuickBooks client not initialized"
-        raise RuntimeError(msg)
     return _quickbooks_client
 
 
@@ -48,9 +53,19 @@ def get_oauth_manager() -> QuickBooksOAuthManager:
     return _oauth_manager
 
 
-def get_quickbooks_service() -> QuickBooksService:
+def get_business_rules_engine() -> BusinessRuleEngine:
+    """Get the business rules engine instance."""
+    if _business_rules_engine is None:
+        msg = "Business rules engine not initialized"
+        raise RuntimeError(msg)
+    return _business_rules_engine
+
+
+def get_quickbooks_service() -> QuickBooksService | None:
     """Get QuickBooks service instance."""
     client = get_quickbooks_client()
+    if client is None:
+        return None
     return QuickBooksService(client)
 
 
@@ -61,8 +76,31 @@ def get_gemini_service(
     return GeminiService(settings)
 
 
+async def initialize_quickbooks_client_after_oauth(company_id: str) -> None:
+    """Initialize QuickBooks client after successful OAuth."""
+    from quickexpense.core.config import get_settings
+    from quickexpense.services.quickbooks import QuickBooksClient
+
+    settings = get_settings()
+    oauth_manager = get_oauth_manager()
+
+    # Create new QuickBooks client with the company ID from OAuth
+    qb_client = QuickBooksClient(
+        base_url=settings.qb_base_url,
+        company_id=company_id,
+        oauth_manager=oauth_manager,
+    )
+
+    set_quickbooks_client(qb_client)
+
+
 # Type aliases for dependency injection
 SettingsDep = Annotated[Settings, Depends(get_settings)]
-QuickBooksServiceDep = Annotated[QuickBooksService, Depends(get_quickbooks_service)]
+QuickBooksServiceDep = Annotated[
+    QuickBooksService | None, Depends(get_quickbooks_service)
+]
 GeminiServiceDep = Annotated[GeminiService, Depends(get_gemini_service)]
 OAuthManagerDep = Annotated[QuickBooksOAuthManager, Depends(get_oauth_manager)]
+BusinessRulesEngineDep = Annotated[
+    BusinessRuleEngine, Depends(get_business_rules_engine)
+]

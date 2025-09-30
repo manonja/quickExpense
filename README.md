@@ -4,6 +4,7 @@ Modern expense management system for **Canadian small businesses and sole propri
 
 ## Features
 
+- **Modern Web UI** - Clean, professional interface with essentials-only grid design
 - **CLI Interface** - Simple commands for receipt processing and expense management
 - **AI Receipt Processing** - Extract expense data from receipt images using Google Gemini
 - **Automatic Token Management** - Never worry about expired tokens
@@ -60,6 +61,17 @@ uv run quickexpense status
 
 ### 4. Process Your First Receipt
 
+**Option A: Web UI (Recommended)**
+```bash
+# Start the web server
+uv run fastapi dev src/quickexpense/main.py
+
+# Open browser to http://localhost:8000
+# Click "Connect to QuickBooks" if needed
+# Drag and drop receipt file or click to upload
+```
+
+**Option B: CLI**
 ```bash
 # Process a receipt and create expense in QuickBooks
 uv run quickexpense upload receipt.jpg
@@ -86,6 +98,18 @@ uv run quickexpense status
 uv run quickexpense upload <receipt-file> [--dry-run] [--output json]
 ```
 
+### Web UI
+
+Access the modern web interface at `http://localhost:8000` after starting the server.
+
+**Features:**
+- **Three-column essentials grid**: Receipt info, Tax analysis, Status
+- **Drag & drop upload**: Support for JPEG, PNG, PDF, HEIC files
+- **Real-time processing**: Visual feedback with progress indicators
+- **Expandable details**: Optional advanced information section
+- **Responsive design**: Works on mobile and desktop
+- **Dry run mode**: Preview processing without creating expenses
+
 ### Supported Receipt Formats
 - JPEG (.jpg, .jpeg)
 - PNG (.png)
@@ -93,6 +117,7 @@ uv run quickexpense upload <receipt-file> [--dry-run] [--output json]
 - BMP (.bmp)
 - WebP (.webp)
 - PDF (.pdf)
+- HEIC (.heic, .heif) - iPhone photos
 
 ### Example Output
 ```
@@ -166,9 +191,14 @@ curl -X POST http://localhost:8000/api/v1/expenses \
 quickExpense/
 ├── src/quickexpense/
 │   ├── api/           # API endpoints
+│   │   ├── routes.py     # Core API endpoints
+│   │   └── web_endpoints.py # Web UI endpoints
 │   ├── core/          # Configuration & dependencies
 │   ├── models/        # Pydantic models
 │   ├── services/      # Business logic & integrations
+│   ├── web/           # Web UI files
+│   │   ├── templates/    # HTML templates
+│   │   └── static/       # CSS, JavaScript
 │   ├── cli.py         # CLI interface
 │   └── main.py        # FastAPI app entry point
 ├── data/
@@ -180,6 +210,15 @@ quickExpense/
 ```
 
 ## Key Features Explained
+
+### Web UI Features
+- **Essentials-only design**: Focus on Receipt, Tax Analysis, and Status
+- **Grid-based layout**: Efficient use of horizontal space
+- **Responsive design**: Works on mobile and desktop devices
+- **Real-time processing**: Visual feedback and progress indicators
+- **Expandable details**: Optional advanced information section
+- **Drag & drop upload**: Intuitive file upload experience
+- **OAuth integration**: Seamless QuickBooks authentication with popup flow
 
 ### CLI Features
 - Simple command-line interface for all operations
@@ -274,6 +313,7 @@ For REST API usage, start the server with `uv run fastapi dev src/quickexpense/m
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/` | GET | Web UI home page |
 | `/api/v1/` | GET | API info |
 | `/api/v1/test-connection` | GET | Test QuickBooks connection |
 | `/api/v1/expenses` | POST | Create expense |
@@ -281,6 +321,8 @@ For REST API usage, start the server with `uv run fastapi dev src/quickexpense/m
 | `/api/v1/vendors` | POST | Create vendor |
 | `/api/v1/accounts/expense` | GET | List expense accounts |
 | `/api/v1/receipts/extract` | POST | Extract receipt data (AI) |
+| `/api/web/auth-status` | GET | Check QuickBooks authentication |
+| `/api/web/upload-receipt` | POST | Upload receipt via web UI |
 
 ## License
 
