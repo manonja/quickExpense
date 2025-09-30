@@ -313,7 +313,7 @@ async def upload_receipt(  # noqa: C901, PLR0913, PLR0912, PLR0915
     gemini_service: GeminiServiceDep,
     quickbooks_service: QuickBooksServiceDep,
     business_rules_engine: BusinessRulesEngineDep,
-    file: UploadFile = File(..., description="Receipt file (JPEG, PNG, PDF, HEIC)"),  # noqa: B008
+    file: UploadFile = File(..., description="Receipt file (JPEG, PNG, PDF, HEIC)"),
     category: str = Form(default="", description="Optional expense category"),
     additional_context: str = Form(
         default="", description="Additional context for processing"
@@ -377,85 +377,93 @@ async def upload_receipt(  # noqa: C901, PLR0913, PLR0912, PLR0915
             location=None,
         )
 
-        # Apply business rules to line items
-        rule_results = business_rules_engine.categorize_line_items(
-            receipt.line_items, context
-        )
-
-        # Convert rule results to format needed for response and QuickBooks
-        rule_data = []
-        total_deductible = 0.0
-        categories_used = set()
-
-        for i, result in enumerate(rule_results):
-            # Get original line item for description and amount (matching CLI logic)
-            original_item: Any = (
-                receipt.line_items[i] if i < len(receipt.line_items) else {}
+        # Check if this is a local restaurant (matching CLI logic)
+        is_local_restaurant = _is_local_restaurant(receipt.vendor_name, receipt.line_items)
+        
+        if is_local_restaurant:
+            # Use restaurant consolidation logic (matching CLI)
+            rule_data, total_deductible = _process_restaurant_consolidated(
+                receipt.line_items, float(receipt.tax_amount), float(receipt.tip_amount)
+            )
+            categories_used = {"Meals & Entertainment", "Tax-GST/HST"}
+        else:
+            # Apply regular business rules to line items
+            rule_results = business_rules_engine.categorize_line_items(
+                receipt.line_items, context
             )
 
-            # Get description from original item
-            if hasattr(original_item, "description"):
-                description = getattr(original_item, "description", f"Item {i+1}")
-            elif isinstance(original_item, dict):
-                description = original_item.get("description", f"Item {i+1}")
-            else:
-                description = f"Item {i+1}"
+            # Convert rule results to format needed for response and QuickBooks
+            rule_data = []
+            total_deductible = 0.0
+            categories_used = set()
 
-            # Get amount from original item (RuleResult doesn't have amount)
-            if hasattr(original_item, "total_price"):
-                # LineItem model - use total_price, fallback to unit_price
-                item_amount = float(
-                    getattr(
-                        original_item,
-                        "total_price",
-                        getattr(original_item, "unit_price", 0),
-                    )
+            for i, result in enumerate(rule_results):
+                # Get original line item for description and amount (matching CLI logic)
+                original_item: Any = (
+                    receipt.line_items[i] if i < len(receipt.line_items) else {}
                 )
-            elif isinstance(original_item, dict):
-                # Dictionary format
-                item_amount = float(original_item.get("amount", 0))
-            else:
-                item_amount = 0.0
 
-            rule_info = {
-                "description": description,
-                "rule_name": (
-                    result.rule_applied.name if result.rule_applied else "Default"
-                ),
-                "rule_applied": (
-                    result.rule_applied.id if result.rule_applied else "default"
-                ),
-                "category": result.category,
-                "qb_account": result.account_mapping,
-                "amount": item_amount,
-                "deductible_percentage": result.deductibility_percentage,
-                "tax_treatment": result.tax_treatment,
-                "confidence": result.confidence_score,
-            }
-            rule_data.append(rule_info)
+                # Get description from original item
+                if hasattr(original_item, "description"):
+                    description = getattr(original_item, "description", f"Item {i+1}")
+                elif isinstance(original_item, dict):
+                    description = original_item.get("description", f"Item {i+1}")
+                else:
+                    description = f"Item {i+1}"
 
-            # Calculate deductible amount
-            deductible_amount = item_amount * result.deductibility_percentage / 100.0
-            total_deductible += deductible_amount
-            categories_used.add(result.category)
+                # Get amount from original item (RuleResult doesn't have amount)
+                if hasattr(original_item, "total_price"):
+                    # LineItem model - use total_price, fallback to unit_price
+                    item_amount = float(
+                        getattr(
+                            original_item,
+                            "total_price",
+                            getattr(original_item, "unit_price", 0),
+                        )
+                    )
+                elif isinstance(original_item, dict):
+                    # Dictionary format
+                    item_amount = float(original_item.get("amount", 0))
+                else:
+                    item_amount = 0.0
 
-        # Create expenses for QuickBooks (use the first rule result for main expense)
-        if rule_results:
-            # Use the first categorized item as the primary expense
-            primary_result = rule_results[0]
-            from quickexpense.models.expense import Expense
+                rule_info = {
+                    "description": description,
+                    "rule_name": (
+                        result.rule_applied.name if result.rule_applied else "Default"
+                    ),
+                    "rule_applied": (
+                        result.rule_applied.id if result.rule_applied else "default"
+                    ),
+                    "category": result.category,
+                    "qb_account": result.account_mapping,
+                    "amount": item_amount,
+                    "deductible_percentage": result.deductibility_percentage,
+                    "tax_treatment": result.tax_treatment,
+                    "confidence": result.confidence_score,
+                }
+                rule_data.append(rule_info)
 
+                # Calculate deductible amount
+                deductible_amount = item_amount * result.deductibility_percentage / 100.0
+                total_deductible += deductible_amount
+                categories_used.add(result.category)
+
+        # Create expenses for QuickBooks
+        from quickexpense.models.expense import Expense
+        
+        if rule_data:
+            # Use the first rule for the primary expense category
+            primary_category = rule_data[0]["category"]
             expense = Expense(
                 vendor_name=receipt.vendor_name,
                 amount=receipt.total_amount,  # Use total amount, not individual line
                 date=receipt.transaction_date,
                 currency=receipt.currency,
-                category=primary_result.category,
+                category=primary_category,
             )
         else:
             # Fallback if no rules applied
-            from quickexpense.models.expense import Expense
-
             expense = Expense(
                 vendor_name=receipt.vendor_name,
                 amount=receipt.total_amount,
@@ -564,3 +572,112 @@ async def upload_receipt(  # noqa: C901, PLR0913, PLR0912, PLR0915
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred processing the receipt",
         ) from e
+
+
+def _is_local_restaurant(vendor_name: str, line_items: list[Any]) -> bool:
+    """Check if this is a local restaurant using business rules patterns."""
+    # Check against local_restaurant_meal rule patterns
+    restaurant_patterns = [
+        "*pho*", "*pizza*", "*burger*", "*sushi*", "*grill*", "*express*",
+        "*food*", "*noodle*", "*ramen*", "*taco*", "*sandwich*", "*coffee*",
+        "*tea*", "*restaurant*", "*cafe*", "*bistro*", "*bar*", "*pub*",
+        "*eatery*", "*kitchen*", "*diner*"
+    ]
+
+    food_keywords = [
+        "sandwich", "salad", "rolls", "burger", "pizza", "noodle", "soup",
+        "chicken", "beef", "pork", "shrimp", "fish", "rice", "pasta",
+        "meal", "lunch", "dinner", "breakfast"
+    ]
+
+    # Check vendor name against patterns
+    vendor_lower = vendor_name.lower()
+    for pattern in restaurant_patterns:
+        pattern_clean = pattern.strip("*")
+        if pattern_clean in vendor_lower:
+            return True
+
+    # Check if line items contain food keywords
+    food_item_count = 0
+    for item in line_items:
+        description = _get_item_description(item).lower()
+        if any(keyword in description for keyword in food_keywords):
+            food_item_count += 1
+
+    # If most items are food items, likely a restaurant
+    food_threshold = 0.6  # 60% of items must be food-related
+    return (
+        len(line_items) > 0
+        and food_item_count / len(line_items) >= food_threshold
+    )
+
+
+def _get_item_description(item: Any) -> str:  # noqa: ANN401
+    """Safely extract item description."""
+    if hasattr(item, "description"):
+        description = getattr(item, "description", "")
+        return str(description) if description is not None else ""
+    if isinstance(item, dict):
+        return str(item.get("description", ""))
+    return ""
+
+
+def _get_item_amount(item: Any) -> float:  # noqa: ANN401
+    """Safely extract item amount."""
+    if hasattr(item, "total_price"):
+        return float(getattr(item, "total_price", 0))
+    if hasattr(item, "unit_price"):
+        return float(getattr(item, "unit_price", 0))
+    if isinstance(item, dict):
+        return float(item.get("amount", 0))
+    return 0.0
+
+
+def _process_restaurant_consolidated(
+    line_items: list[Any], tax_amount: float, tip_amount: float
+) -> tuple[list[dict[str, Any]], float]:
+    """Process restaurant receipt with consolidated meal format."""
+    # Calculate food items total
+    food_total = sum(_get_item_amount(item) for item in line_items)
+
+    # Create consolidated meal item (food + tip combined)
+    food_descriptions = [_get_item_description(item) for item in line_items]
+    combined_description = f"Business meal - {', '.join(food_descriptions)}"
+
+    meal_amount = food_total + tip_amount
+    meal_deductible = meal_amount * 0.5  # 50% deductible
+
+    # GST is 100% deductible
+    gst_deductible = tax_amount * 1.0
+
+    total_deductible = meal_deductible + gst_deductible
+
+    # Create rule data matching CLI format
+    rule_data = [
+        {
+            "description": "Restaurant meal consolidation",
+            "rule_name": "Local Restaurant Meal",
+            "rule_applied": "Local Restaurant Detection",
+            "category": "Meals & Entertainment",
+            "qb_account": "Travel - Meals & Entertainment",
+            "amount": meal_amount,
+            "deductible_percentage": 50,
+            "tax_treatment": "meals_limitation",
+            "confidence": 0.95,
+        }
+    ]
+
+    if tax_amount > 0:
+        rule_data.append({
+            "description": "GST - Input Tax Credit",
+            "rule_name": "GST/HST Tax Charges",
+            "rule_applied": "GST/HST Tax Charges",
+            "category": "Tax-GST/HST",
+            "qb_account": "GST/HST Paid on Purchases",
+            "amount": tax_amount,
+            "deductible_percentage": 100,
+            "tax_treatment": "input_tax_credit",
+            "confidence": 1.0,
+        })
+
+    return rule_data, total_deductible
