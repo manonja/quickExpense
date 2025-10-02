@@ -44,3 +44,7 @@ data/*.json
 # Logs
 *.log
 server.log
+
+# Database files
+data/*.db
+data/conversation_history.db

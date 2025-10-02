@@ -19,6 +19,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_CONFIDENCE_SCORE = 0.8
+COMPLETENESS_BONUS = 0.02
+COMPLETENESS_VALIDATION_BONUS = 0.05
+TOTAL_TOLERANCE_CENTS = 0.02  # 2 cent tolerance for totals
+
 
 class DataExtractionAgent(BaseReceiptAgent):
     """Agent specialized in extracting structured data from receipt images."""
@@ -111,7 +117,8 @@ class DataExtractionAgent(BaseReceiptAgent):
     def _build_extraction_prompt(self, additional_context: str | None) -> str:
         """Build the extraction prompt for the agent."""
         base_prompt = """
-Extract all information from this receipt image and return it as a JSON object matching this exact schema:
+Extract all information from this receipt image and return it as a JSON object
+matching this exact schema:
 
 {
     "vendor_name": "string (required)",
@@ -206,7 +213,7 @@ Return ONLY the JSON object, no additional text or explanations.
     def _calculate_confidence(
         self,
         result_data: dict[str, Any],
-        receipt_data: dict[str, Any],
+        receipt_data: dict[str, Any],  # noqa: ARG002
     ) -> float:
         """Calculate confidence score for the extraction.
 
@@ -218,7 +225,7 @@ Return ONLY the JSON object, no additional text or explanations.
             Confidence score between 0.0 and 1.0
         """
         # Start with the model's own confidence score if available
-        base_confidence = result_data.get("confidence_score", 0.8)
+        base_confidence = result_data.get("confidence_score", DEFAULT_CONFIDENCE_SCORE)
 
         # Adjust based on data completeness
         completeness_bonus = 0.0
@@ -227,7 +234,7 @@ Return ONLY the JSON object, no additional text or explanations.
         if result_data.get("vendor_name"):
             completeness_bonus += 0.05
         if result_data.get("vendor_address"):
-            completeness_bonus += 0.02
+            completeness_bonus += COMPLETENESS_BONUS
 
         # Check for line items
         line_items = result_data.get("line_items", [])
@@ -241,11 +248,11 @@ Return ONLY the JSON object, no additional text or explanations.
             result_data.get("payment_method")
             and result_data["payment_method"] != "other"
         ):
-            completeness_bonus += 0.02
+            completeness_bonus += COMPLETENESS_BONUS
 
         # Check for receipt number
         if result_data.get("receipt_number"):
-            completeness_bonus += 0.02
+            completeness_bonus += COMPLETENESS_BONUS
 
         # Mathematical consistency check
         try:
@@ -255,8 +262,8 @@ Return ONLY the JSON object, no additional text or explanations.
             total_amount = float(result_data.get("total_amount", 0))
 
             calculated_total = subtotal + tax_amount + tip_amount
-            if abs(calculated_total - total_amount) < 0.02:  # Allow 2 cent tolerance
-                completeness_bonus += 0.05
+            if abs(calculated_total - total_amount) < TOTAL_TOLERANCE_CENTS:
+                completeness_bonus += COMPLETENESS_VALIDATION_BONUS
         except (ValueError, TypeError):
             # Mathematical inconsistency, reduce confidence
             completeness_bonus -= 0.1
@@ -267,7 +274,8 @@ Return ONLY the JSON object, no additional text or explanations.
     def _get_extraction_system_message(self) -> str:
         """Get the system message for the autogen agent."""
         return """
-You are a specialized receipt data extraction agent. Your only job is to analyze receipt images
+You are a specialized receipt data extraction agent. Your only job is to analyze
+receipt images
 and extract structured data with high accuracy. You must:
 
 1. Extract ALL visible information from receipts accurately

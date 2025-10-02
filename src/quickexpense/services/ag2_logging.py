@@ -103,6 +103,7 @@ class AG2StructuredLogger:
         self,
         audit_logger: AuditLogger | None = None,
         db_path: Path | None = None,
+        *,
         enable_ag2_native: bool = True,
         enable_runtime_logging: bool = True,
     ) -> None:
@@ -261,9 +262,10 @@ class AG2StructuredLogger:
         final_category: str,
         final_tax_treatment: str,
         individual_scores: dict[str, float],
-        requires_review: bool,
         review_flags: list[str],
         processing_time: float,
+        *,
+        requires_review: bool,
         decision_rationale: str = "",
     ) -> None:
         """Log the final consensus decision."""
@@ -443,6 +445,7 @@ class AG2StructuredLogger:
 # Factory function for easy creation
 def create_ag2_logger(
     audit_logger: AuditLogger | None = None,
+    *,
     enable_native_logging: bool = True,
 ) -> AG2StructuredLogger:
     """Create an AG2 structured logger instance."""

@@ -28,6 +28,7 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
         ag2_logger: AG2StructuredLogger | None = None,
         conversation_logger: ConversationLogger | None = None,
         audit_logger: AuditLogger | None = None,
+        *,
         enable_detailed_logging: bool = True,
     ) -> None:
         """Initialize enhanced agent with logging.

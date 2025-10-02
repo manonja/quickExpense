@@ -17,6 +17,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Constants
+TAX_DISCREPANCY_PASS_THRESHOLD = 5  # 5% or less is considered pass
+TAX_DISCREPANCY_WARNING_THRESHOLD = 15  # 5-15% is warning
+TOTAL_VALIDATION_TOLERANCE = 0.02  # 2 cent tolerance
+HIGH_TAX_RATE_THRESHOLD = 20  # 20% or higher is unusually high
+LOW_TAX_RATE_THRESHOLD = 3  # 3% or lower is unusually low
+CONFIDENCE_HIGH_DISCREPANCY_THRESHOLD = 2  # 2% or less gets confidence boost
+CONFIDENCE_LOW_DISCREPANCY_THRESHOLD = 10  # 10% or more gets confidence reduction
+
 
 class TaxCalculatorAgent(BaseReceiptAgent):
     """Agent specialized in tax calculations, GST/HST validation, and deductible amounts."""
@@ -271,10 +280,10 @@ Return ONLY the JSON object.
         deductible_tax_amount = (tax_amount * deductibility_percentage) / 100
 
         # Determine validation result
-        if discrepancy_percentage <= 5:
+        if discrepancy_percentage <= TAX_DISCREPANCY_PASS_THRESHOLD:
             validation_result = "PASS"
             validation_notes = "Tax calculation within acceptable range"
-        elif discrepancy_percentage <= 15:
+        elif discrepancy_percentage <= TAX_DISCREPANCY_WARNING_THRESHOLD:
             validation_result = "WARNING"
             validation_notes = (
                 f"Tax discrepancy of {discrepancy_percentage:.1f}% detected"
@@ -287,7 +296,7 @@ Return ONLY the JSON object.
 
         # Check mathematical consistency
         calculated_total = subtotal + tax_amount
-        if abs(calculated_total - total_amount) > 0.02:
+        if abs(calculated_total - total_amount) > TOTAL_VALIDATION_TOLERANCE:
             validation_result = "FAIL"
             validation_notes += "; Total amount doesn't match subtotal + tax"
 
@@ -369,9 +378,9 @@ Return ONLY the JSON object.
         calculated_tax = calculation_result.get("total_calculated_tax", 0)
         if subtotal > 0:
             effective_rate = (calculated_tax / subtotal) * 100
-            if effective_rate > 20:  # Very high tax rate
+            if effective_rate > HIGH_TAX_RATE_THRESHOLD:  # Very high tax rate
                 validation_flags.append("Unusually high effective tax rate")
-            elif effective_rate < 3:  # Very low tax rate
+            elif effective_rate < LOW_TAX_RATE_THRESHOLD:  # Very low tax rate
                 validation_flags.append("Unusually low effective tax rate")
 
         # Check deductible amount reasonableness
@@ -451,9 +460,9 @@ Return ONLY the JSON object.
 
         # Adjust based on tax discrepancy
         discrepancy_percentage = result_data.get("tax_discrepancy_percentage", 0)
-        if discrepancy_percentage <= 2:
+        if discrepancy_percentage <= CONFIDENCE_HIGH_DISCREPANCY_THRESHOLD:
             base_confidence += 0.05
-        elif discrepancy_percentage >= 10:
+        elif discrepancy_percentage >= CONFIDENCE_LOW_DISCREPANCY_THRESHOLD:
             base_confidence -= 0.1
 
         # Adjust based on mathematical consistency
@@ -462,7 +471,10 @@ Return ONLY the JSON object.
             tax_amount = float(receipt_data.get("tax_amount", 0))
             total_amount = float(receipt_data.get("total_amount", 0))
 
-            if abs((subtotal + tax_amount) - total_amount) <= 0.02:
+            if (
+                abs((subtotal + tax_amount) - total_amount)
+                <= TOTAL_VALIDATION_TOLERANCE
+            ):
                 base_confidence += 0.05
         except (ValueError, TypeError):
             base_confidence -= 0.05

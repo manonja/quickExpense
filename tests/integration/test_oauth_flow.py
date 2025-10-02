@@ -47,6 +47,7 @@ class TestOAuthFlowIntegration:
             qb_client_secret="test_secret",
             qb_company_id="",  # Will be loaded from tokens
             gemini_api_key="test_key",
+            together_api_key="test_together_key",
         )
 
     @pytest.mark.asyncio
