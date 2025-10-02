@@ -1,8 +1,8 @@
 {
   "receipt_file": "/Users/manonjacquin/Documents/receipts/IMG_7597.HEIC",
   "success": true,
-  "overall_confidence": 0.7166666666666667,
-  "processing_time": 21.234973907470703,
+  "overall_confidence": 0.8333333333333334,
+  "processing_time": 18.94142198562622,
   "final_data": {
     "vendor_name": "PHO GEORGIA EXPRESS",
     "vendor_address": "575 W GEORGIA ST\nVANCOUVER, BC V6B 2A3",
@@ -14,18 +14,18 @@
       {
         "description": "Shrimp Salad Rolls",
         "quantity": "1",
-        "unit_price": "11.00",
-        "total_price": "11.00"
+        "unit_price": "11.0",
+        "total_price": "11.0"
       },
       {
         "description": "Lemongrass Pork Sandwich",
         "quantity": "1",
-        "unit_price": "19.00",
-        "total_price": "19.00"
+        "unit_price": "19.0",
+        "total_price": "19.0"
       }
     ],
-    "subtotal": "30.00",
-    "tax_amount": "1.50",
+    "subtotal": "30.0",
+    "tax_amount": "1.5",
     "tip_amount": "4.73",
     "total_amount": "36.23",
     "currency": "CAD",
@@ -46,30 +46,30 @@
     "cra_rule_applied": "Meals & Entertainment: 50% deductible (ITA Section 67.1)",
     "calculated_gst_hst": 1.5,
     "deductible_amount": 15.0,
-    "tax_validation_result": "FAIL",
+    "tax_validation_result": "WARNING",
     "agent_confidence_scores": {
       "DataExtractionAgent": 1.0,
       "CRArulesAgent": 0.7,
-      "TaxCalculatorAgent": 0.44999999999999996
+      "TaxCalculatorAgent": 0.8
     }
   },
   "agent_metadata": {
     "DataExtractionAgent": {
       "success": true,
       "confidence": 1.0,
-      "time": 18.62698769569397,
+      "time": 16.342854976654053,
       "provider": "together"
     },
     "CRArulesAgent": {
       "success": true,
       "confidence": 0.7,
-      "time": 1.212265968322754,
+      "time": 1.2352018356323242,
       "provider": null
     },
     "TaxCalculatorAgent": {
       "success": true,
-      "confidence": 0.44999999999999996,
-      "time": 1.3950750827789307,
+      "confidence": 0.8,
+      "time": 1.3624989986419678,
       "provider": null
     }
   }

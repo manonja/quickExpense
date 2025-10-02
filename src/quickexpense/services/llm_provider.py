@@ -102,7 +102,7 @@ class LLMProviderFactory:
     """Factory for creating LLM providers with fallback support."""
 
     @staticmethod
-    def create(
+    def create(  # noqa: C901
         settings: Settings, provider_override: str | None = None
     ) -> BaseLLMProvider:
         """Create an LLM provider based on settings or override.
@@ -175,11 +175,11 @@ class LLMProviderFactory:
             Model name optimal for this agent type
         """
         if provider.provider_name == "together":
-            # TogetherAI model recommendations per agent
+            # TogetherAI model recommendations per agent based on optimal performance
             model_map = {
-                "data_extraction": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-                "cra_rules": "mistralai/Mixtral-8x22B-Instruct-v0.1",
-                "tax_calculator": "Qwen/Qwen2.5-72B-Instruct-Turbo",  # Good for math
+                "data_extraction": "microsoft/phi-2",  # Efficient for data extraction
+                "cra_rules": "meta-llama/Llama-3.3-70B-Instruct-Turbo",  # Legal reasoning
+                "tax_calculator": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",  # Default
             }
             return model_map.get(agent_type, settings.together_model)
         # Use default Gemini model for all agents
