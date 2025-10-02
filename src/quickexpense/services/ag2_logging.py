@@ -25,13 +25,14 @@ event_logger_name = "ag2.event"
 trace_logger_name = "ag2.trace"
 
 try:
-    from autogen import EVENT_LOGGER_NAME as AG2_EVENT_LOGGER_NAME
-    from autogen import TRACE_LOGGER_NAME as AG2_TRACE_LOGGER_NAME
+    import autogen
 
+    # Try to access the constants dynamically to avoid import errors
+    event_logger_name = getattr(autogen, "EVENT_LOGGER_NAME", "ag2.event")
+    trace_logger_name = getattr(autogen, "TRACE_LOGGER_NAME", "ag2.trace")
     ag2_available = True
-    event_logger_name = AG2_EVENT_LOGGER_NAME
-    trace_logger_name = AG2_TRACE_LOGGER_NAME
-except ImportError:
+except (ImportError, AttributeError):
+    # Fallback if autogen is not available or constants don't exist
     pass
 
 logger = logging.getLogger(__name__)

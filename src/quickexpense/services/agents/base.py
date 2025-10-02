@@ -177,3 +177,18 @@ class BaseReceiptAgent(ABC):
             "timeout_seconds": self.timeout_seconds,
             "agent_type": self.__class__.__name__,
         }
+
+    def set_correlation_context(
+        self, correlation_id: str, session_id: str | None = None
+    ) -> None:
+        """Set correlation context for logging (default implementation does nothing).
+
+        Args:
+            correlation_id: Correlation ID for tracking related operations
+            session_id: Optional session ID
+        """
+        # Default implementation does nothing
+        # Logging-enabled agents can override this method
+        # Store the context if needed by subclasses
+        self._correlation_id = correlation_id
+        self._session_id = session_id

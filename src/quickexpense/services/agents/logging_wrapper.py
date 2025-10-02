@@ -346,21 +346,3 @@ class LoggingAgentWrapper:
     def get_agent_info(self) -> dict[str, Any]:
         """Get agent information."""
         return self._wrapped_agent.get_agent_info()
-
-    async def _process_internal(
-        self,
-        receipt_data: dict[str, Any],
-        context: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Delegate to wrapped agent."""
-        return await self._wrapped_agent._process_internal(receipt_data, context)
-
-    def _calculate_confidence(
-        self, result_data: dict[str, Any], receipt_data: dict[str, Any]
-    ) -> float:
-        """Delegate to wrapped agent."""
-        return self._wrapped_agent._calculate_confidence(result_data, receipt_data)
-
-    def _get_metadata(self, result_data: dict[str, Any]) -> dict[str, Any]:
-        """Delegate to wrapped agent."""
-        return self._wrapped_agent._get_metadata(result_data)  # noqa: SLF001

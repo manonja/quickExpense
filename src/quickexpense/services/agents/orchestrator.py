@@ -259,10 +259,11 @@ class AgentOrchestrator:
 
         # Low overall confidence
         if overall_confidence < self.consensus_threshold:
-            flags.append(
+            confidence_msg = (
                 f"Low confidence ({overall_confidence:.2f} < "
                 f"{self.consensus_threshold})"
             )
+            flags.append(confidence_msg)
 
         # Failed agents
         failed_agents = [r for r in agent_results if not r.success]

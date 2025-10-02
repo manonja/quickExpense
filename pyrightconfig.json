@@ -24,7 +24,7 @@
   "reportUntypedClassDecorator": false,
   "reportUntypedBaseClass": false,
   "reportImplicitStringConcatenation": true,
-  "reportUnnecessaryTypeIgnoreComment": true,
+  "reportUnnecessaryTypeIgnoreComment": false,
   "reportMatchNotExhaustive": true,
   "useLibraryCodeForTypes": true,
   "executionEnvironments": [

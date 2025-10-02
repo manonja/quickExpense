@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from quickexpense.services.agents.base import AgentResult, BaseReceiptAgent
 
@@ -417,7 +417,7 @@ def create_logging_agent(
         Agent instance with logging capabilities
     """
 
-    class LoggingAgent(LoggingBaseReceiptAgent, agent_class):  # type: ignore[misc, valid-type]  # pyright: ignore[reportAbstractUsage]
+    class LoggingAgent(LoggingBaseReceiptAgent, agent_class):  # type: ignore[misc, valid-type]  # fmt: skip
         """Dynamic class combining logging capabilities with specific agent."""
 
         def __init__(self) -> None:
@@ -432,4 +432,4 @@ def create_logging_agent(
             )
             agent_class.__init__(self, name, **kwargs)
 
-    return LoggingAgent()
+    return cast(LoggingBaseReceiptAgent, LoggingAgent())  # pyright: ignore[reportAbstractUsage]

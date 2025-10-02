@@ -272,7 +272,10 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
             self.cra_rules_agent,
             self.tax_calculator_agent,
         ]:
-            if hasattr(agent, "set_correlation_context"):
+            if (
+                hasattr(agent, "set_correlation_context")
+                and self.current_correlation_id
+            ):
                 agent.set_correlation_context(
                     self.current_correlation_id,
                     self.current_session_id,
