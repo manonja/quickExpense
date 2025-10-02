@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import time
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from quickexpense.core.dependencies import (
     GeminiServiceDep,
@@ -14,6 +15,7 @@ from quickexpense.core.dependencies import (
     QuickBooksServiceDep,
 )
 from quickexpense.models import (
+    AgentResultResponse,
     Expense,
     MultiAgentReceiptResponse,
     ReceiptExtractionRequest,
@@ -27,6 +29,20 @@ from quickexpense.services.quickbooks import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["expenses"])
+
+# Supported file formats (matching CLI)
+SUPPORTED_FORMATS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".webp",
+    ".pdf",
+    ".heic",
+    ".heif",
+}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
 @router.get("/")
@@ -192,34 +208,86 @@ async def extract_receipt(
         ) from e
 
 
-@router.post("/receipts/extract-with-agents", response_model=MultiAgentReceiptResponse)
-async def extract_receipt_with_agents(
-    request: ReceiptExtractionRequest,
-    orchestrator: MultiAgentOrchestratorDep,
+@router.post("/receipts/process-file", response_model=MultiAgentReceiptResponse)
+async def process_receipt_file(
+    receipt: Annotated[
+        UploadFile, File(description="Receipt file (JPEG, PNG, PDF, HEIC)")
+    ],
+    additional_context: Annotated[
+        str,
+        Form(default="Business expense receipt", description="Additional context"),
+    ],
+    orchestrator: MultiAgentOrchestratorDep | None = None,
 ) -> MultiAgentReceiptResponse:
-    """Extract and process expense data using multi-agent system with CRA compliance.
+    """Process a receipt file directly using multi-agent system.
 
-    This endpoint uses a 3-agent system for enhanced transparency and CRA compliance:
-    - Data Extraction Agent: Extracts structured data from receipt
-    - CRA Rules Agent: Applies Canadian tax law and categorization
-    - Tax Calculator Agent: Validates GST/HST and calculates deductible amounts
+    This endpoint accepts file uploads directly (no base64 encoding needed)
+    and processes them through the 3-agent system for CRA compliance.
+    Supports all common receipt formats: JPEG, PNG, PDF, HEIC/HEIF, etc.
+
+    Example usage:
+        curl -X POST http://localhost:8000/api/v1/receipts/process-file \
+            -F "receipt=@/path/to/receipt.jpg" \
+            -F "additional_context=Business meal with client"
 
     Args:
-        request: Contains base64 encoded file (image or PDF) and optional context
-        orchestrator: Multi-agent orchestrator service
+        receipt: The uploaded receipt file
+        additional_context: Optional context about the expense
+        orchestrator: Multi-agent orchestrator service (injected)
 
     Returns:
         MultiAgentReceiptResponse with consensus results and agent breakdown
     """
-    try:
-        # Process receipt through multi-agent system
-        consensus_result = await orchestrator.process_receipt(
-            file_base64=request.image_base64,
-            additional_context=request.additional_context,
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Multi-agent orchestrator not initialized. Check configuration.",
         )
 
-        # Convert ConsensusResult to response model
-        from quickexpense.models import AgentResultResponse
+    try:
+        # Validate file
+        if not receipt.filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="No filename provided"
+            )
+
+        # Check file extension
+        file_ext = f".{receipt.filename.split('.')[-1]}".lower()
+        if file_ext not in SUPPORTED_FORMATS:
+            supported = ", ".join(sorted(SUPPORTED_FORMATS))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file format '{file_ext}'. Supported: {supported}",
+            )
+
+        # Read file content
+        file_content = await receipt.read()
+
+        # Check file size
+        if len(file_content) > MAX_FILE_SIZE:
+            size_mb = len(file_content) / (1024 * 1024)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File too large ({size_mb:.1f}MB). Maximum size: 10MB",
+            )
+
+        # Convert to base64 for processing
+        file_base64 = base64.b64encode(file_content).decode("utf-8")
+
+        logger.info(
+            "Processing receipt file: filename=%s, size=%d bytes, format=%s",
+            receipt.filename,
+            len(file_content),
+            file_ext,
+        )
+
+        # Process receipt through multi-agent system
+        consensus_result = await orchestrator.process_receipt(
+            file_base64=file_base64,
+            additional_context=additional_context,
+        )
+
+        # Convert ConsensusResult to response model (same as base64 endpoint)
 
         agent_results = [
             AgentResultResponse(
@@ -229,7 +297,7 @@ async def extract_receipt_with_agents(
                 processing_time=result.processing_time,
                 error_message=result.error_message,
             )
-            for result in consensus_result.agent_results.values()
+            for result in consensus_result.agent_results
         ]
 
         # Extract key fields from final data
@@ -266,8 +334,8 @@ async def extract_receipt_with_agents(
         )
 
         logger.info(
-            "Multi-agent receipt processing completed: overall_confidence=%.2f, "
-            "processing_time=%.2f, flags_for_review=%s",
+            "Receipt processed: %s, conf=%.2f, time=%.2f, flags=%d",
+            receipt.filename,
             consensus_result.overall_confidence,
             consensus_result.processing_time,
             len(consensus_result.flags_for_review),
@@ -275,15 +343,18 @@ async def extract_receipt_with_agents(
 
         return response
 
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except ValueError as e:
-        logger.warning("Multi-agent processing validation error: %s", e)
+        logger.warning("File processing validation error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to process receipt with multi-agent system: {e}",
+            detail=f"Failed to process receipt file: {e}",
         ) from e
     except Exception as e:
-        logger.exception("Unexpected error during multi-agent receipt processing")
+        logger.exception("Unexpected error during file processing")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred during multi-agent processing",
+            detail="An unexpected error occurred during file processing",
         ) from e
