@@ -59,8 +59,8 @@ class Settings(BaseSettings):
         description="Allowed CORS origins",
     )
 
-    # Gemini AI configuration
-    gemini_api_key: str = Field(..., description="Google Gemini API key")
+    # Gemini AI configuration (kept as fallback)
+    gemini_api_key: str = Field(default="", description="Google Gemini API key")
     gemini_model: str = Field(
         default="gemini-2.0-flash-exp",
         description="Gemini model to use",
@@ -68,6 +68,31 @@ class Settings(BaseSettings):
     gemini_timeout: int = Field(
         default=30,
         description="Timeout for Gemini API calls in seconds",
+    )
+
+    # TogetherAI configuration
+    together_api_key: str = Field(..., description="Together AI API key")
+    together_model: str = Field(
+        default="meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+        description="TogetherAI model to use",
+    )
+    together_max_tokens: int = Field(
+        default=4096,
+        description="Maximum tokens for TogetherAI responses",
+    )
+    together_temperature: float = Field(
+        default=0.2,
+        description="Temperature for TogetherAI (lower for consistency)",
+    )
+
+    # LLM Provider configuration
+    llm_provider: str = Field(
+        default="together",
+        description="Primary LLM provider (together/gemini/auto)",
+    )
+    llm_fallback_enabled: bool = Field(
+        default=True,
+        description="Enable automatic fallback to secondary provider",
     )
 
     model_config = SettingsConfigDict(

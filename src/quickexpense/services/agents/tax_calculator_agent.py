@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 import autogen
 
+from quickexpense.services.llm_provider import LLMProviderFactory
+
 from .base import BaseReceiptAgent
 
 if TYPE_CHECKING:
@@ -52,18 +54,12 @@ class TaxCalculatorAgent(BaseReceiptAgent):
             "YT": {"gst": 5.0, "pst": 0.0, "hst": 0.0},  # Yukon
         }
 
-        # Configure autogen with Gemini for tax calculations
-        self.llm_config = {
-            "config_list": [
-                {
-                    "model": settings.gemini_model,
-                    "api_key": settings.gemini_api_key,
-                    "api_type": "google",
-                }
-            ],
-            "temperature": 0.05,  # Very low temperature for mathematical accuracy
-            "max_tokens": 2048,
-        }
+        # Configure LLM provider
+        self.llm_provider = LLMProviderFactory.create(settings)
+        self.llm_config = self.llm_provider.get_autogen_config()
+        # Override temperature for mathematical accuracy
+        self.llm_config["config_list"][0]["temperature"] = 0.05
+        self.llm_config["config_list"][0]["max_tokens"] = 2048
 
         # Create the autogen assistant agent
         self.agent = autogen.AssistantAgent(

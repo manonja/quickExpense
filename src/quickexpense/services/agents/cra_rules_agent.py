@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 import autogen
 
 from quickexpense.services.cra_business_rules import CRABusinessRulesService
+from quickexpense.services.llm_provider import LLMProviderFactory
 
 from .base import BaseReceiptAgent
 
@@ -40,18 +41,12 @@ class CRArulesAgent(BaseReceiptAgent):
         self.settings = settings
         self.cra_rules_service = CRABusinessRulesService(rules_csv_path)
 
-        # Configure autogen with Gemini for tax law expertise
-        self.llm_config = {
-            "config_list": [
-                {
-                    "model": settings.gemini_model,
-                    "api_key": settings.gemini_api_key,
-                    "api_type": "google",
-                }
-            ],
-            "temperature": 0.1,  # Low temperature for consistent categorization
-            "max_tokens": 2048,
-        }
+        # Configure LLM provider
+        self.llm_provider = LLMProviderFactory.create(settings)
+        self.llm_config = self.llm_provider.get_autogen_config()
+        # Override temperature for consistent categorization
+        self.llm_config["config_list"][0]["temperature"] = 0.1
+        self.llm_config["config_list"][0]["max_tokens"] = 2048
 
         # Create the autogen assistant agent
         self.agent = autogen.AssistantAgent(
@@ -203,7 +198,7 @@ class CRArulesAgent(BaseReceiptAgent):
                     categorization_data = json.loads(json_match.group())
                 else:
                     # Use fallback rule
-                    fallback_rule = self.cra_rules_service._get_fallback_rule()  # noqa: SLF001
+                    fallback_rule = self.cra_rules_service._get_fallback_rule()
                     return self._rule_match_to_dict(fallback_rule)
 
             self._validate_categorization_result(categorization_data)

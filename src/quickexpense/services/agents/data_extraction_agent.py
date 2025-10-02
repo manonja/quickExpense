@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 import autogen
 
 from quickexpense.services.file_processor import FileProcessorService
+from quickexpense.services.gemini import GeminiService
+from quickexpense.services.llm_provider import LLMProviderFactory
 
 from .base import BaseReceiptAgent
 
@@ -25,7 +27,7 @@ class DataExtractionAgent(BaseReceiptAgent):
         self,
         settings: Settings,
         name: str = "DataExtractionAgent",
-        timeout_seconds: float = 2.0,
+        timeout_seconds: float = 30.0,
     ) -> None:
         """Initialize the data extraction agent.
 
@@ -38,18 +40,12 @@ class DataExtractionAgent(BaseReceiptAgent):
         self.settings = settings
         self.file_processor = FileProcessorService()
 
-        # Configure autogen with Gemini
-        self.llm_config = {
-            "config_list": [
-                {
-                    "model": settings.gemini_model,
-                    "api_key": settings.gemini_api_key,
-                    "api_type": "google",
-                }
-            ],
-            "temperature": 0.1,
-            "max_tokens": 4096,
-        }
+        # Use Gemini for image processing
+        self.gemini_service = GeminiService(settings)
+
+        # Configure LLM provider for validation/formatting only
+        self.llm_provider = LLMProviderFactory.create(settings)
+        self.llm_config = self.llm_provider.get_autogen_config()
 
         # Create the autogen assistant agent
         self.agent = autogen.AssistantAgent(
@@ -63,7 +59,7 @@ class DataExtractionAgent(BaseReceiptAgent):
         receipt_data: dict[str, Any],
         context: dict[str, Any],
     ) -> dict[str, Any]:
-        """Extract receipt data using autogen and Gemini.
+        """Extract receipt data using Gemini for image processing.
 
         Args:
             receipt_data: Should contain 'file_base64' key
@@ -79,74 +75,32 @@ class DataExtractionAgent(BaseReceiptAgent):
 
         additional_context = context.get("additional_context")
 
-        # Process file (handle PDF conversion, etc.)
-        processed_file = await self.file_processor.process_file(
-            file_base64, file_type=None
-        )
-
-        # Prepare the prompt for extraction
-        extraction_prompt = self._build_extraction_prompt(additional_context)
-
-        # For Gemini, we'll pass the base64 image directly in the prompt
-
-        # Create a user proxy agent for the interaction
-        user_proxy = autogen.UserProxyAgent(
-            name="user",
-            human_input_mode="NEVER",
-            max_consecutive_auto_reply=1,
-            code_execution_config=False,
-        )
-
-        # Use autogen to process the image and extract data
         try:
-            # For Gemini with images, we pass the image as base64 in the prompt
-            # since autogen handles the multimodal aspect internally
-
-            # Create a simple assistant agent for extraction
-            assistant = autogen.AssistantAgent(
-                name="receipt_extractor",
-                llm_config=self.llm_config,
-                system_message=self._get_extraction_system_message(),
+            # Use Gemini service directly for image extraction
+            self.logger.info("Using Gemini for image extraction")
+            extracted_receipt = await self.gemini_service.extract_receipt_data(
+                file_base64=file_base64,
+                additional_context=additional_context,
             )
 
-            # Start the conversation with the base64 image in the prompt
-            response = await user_proxy.a_initiate_chat(
-                assistant,
-                message=f"{extraction_prompt}\n\nImage: data:image/png;base64,{processed_file.content}",
-                max_turns=1,
-            )
-
-            # Extract the JSON response from the chat
-            last_message = response.chat_history[-1]["content"]
-
-            # Parse the JSON response
-            try:
-                extracted_data = json.loads(last_message)
-            except json.JSONDecodeError:
-                # Try to find JSON in the response if it's wrapped in text
-                import re
-
-                json_match = re.search(r"\{.*\}", last_message, re.DOTALL)
-                if json_match:
-                    extracted_data = json.loads(json_match.group())
-                else:
-                    msg = f"Failed to parse JSON from response: {last_message}"
-                    raise ValueError(msg)
+            # Convert ExtractedReceipt model to dict with JSON-compatible format
+            extracted_data = extracted_receipt.model_dump(mode="json")
 
             # Validate the extracted data structure
             self._validate_extracted_data(extracted_data)
 
             # Add processing metadata
             extracted_data["processing_metadata"] = {
-                "original_file_type": processed_file.original_file_type.value,
+                "original_file_type": "image",  # Gemini handles file type detection
                 "agent_name": self.name,
-                "model_used": self.settings.gemini_model,
+                "extraction_provider": "gemini",  # Always Gemini for images
+                "llm_provider": self.llm_provider.provider_name,  # For agent config
             }
 
-            if processed_file.original_file_type.is_pdf:
-                extracted_data["processing_metadata"]["pdf_pages"] = (
-                    processed_file.processing_metadata.get("pdf_pages", "unknown")
-                )
+            # Optionally use autogen for data validation/formatting
+            # This is text-only processing, no images
+            if self.settings.llm_provider == "together":
+                extracted_data = await self._validate_with_agent(extracted_data)
 
             return extracted_data
 
@@ -331,9 +285,62 @@ but adjust your confidence score accordingly.
         metadata = super()._get_metadata(result_data)
         metadata.update(
             {
-                "model_used": self.settings.gemini_model,
+                "llm_provider": self.llm_provider.provider_name,
+                "model_used": self.llm_config["config_list"][0]["model"],
                 "extraction_fields": len(result_data.keys()),
                 "line_items_count": len(result_data.get("line_items", [])),
             }
         )
         return metadata
+
+    async def _validate_with_agent(
+        self, extracted_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Optionally validate/enhance extracted data using TogetherAI agent.
+
+        Args:
+            extracted_data: Data extracted by Gemini
+
+        Returns:
+            Validated/enhanced data
+        """
+        # Create validation prompt with JSON data only (no images)
+        validation_prompt = f"""
+Please validate and enhance this receipt data extracted by vision AI.
+Fix any obvious errors and ensure mathematical consistency.
+
+Extracted Data:
+{json.dumps(extracted_data, indent=2)}
+
+Return the corrected/validated JSON data only.
+"""
+
+        user_proxy = autogen.UserProxyAgent(
+            name="user",
+            human_input_mode="NEVER",
+            max_consecutive_auto_reply=1,
+            code_execution_config=False,
+        )
+
+        try:
+            # Use TogetherAI for text-based validation
+            response = await user_proxy.a_initiate_chat(
+                self.agent,
+                message=validation_prompt,
+                max_turns=1,
+            )
+
+            last_message = response.chat_history[-1]["content"]
+
+            try:
+                validated_data = json.loads(last_message)
+                self.logger.info("Data validated by TogetherAI agent")
+                return validated_data
+            except json.JSONDecodeError:
+                # If validation fails, return original data
+                self.logger.warning("Agent validation failed, using original data")
+                return extracted_data
+
+        except Exception as e:
+            self.logger.warning("Agent validation error: %s", e)
+            return extracted_data
