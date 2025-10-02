@@ -214,9 +214,8 @@ async def process_receipt_file(
         UploadFile, File(description="Receipt file (JPEG, PNG, PDF, HEIC)")
     ],
     additional_context: Annotated[
-        str,
-        Form(default="Business expense receipt", description="Additional context"),
-    ],
+        str, Form(description="Additional context")
+    ] = "Business expense receipt",
     orchestrator: MultiAgentOrchestratorDep | None = None,
 ) -> MultiAgentReceiptResponse:
     """Process a receipt file directly using multi-agent system.

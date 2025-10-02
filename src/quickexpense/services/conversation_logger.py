@@ -86,7 +86,7 @@ class ConversationLogger:
                     processing_time REAL,
                     metadata TEXT,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (correlation_id) 
+                    FOREIGN KEY (correlation_id)
                         REFERENCES conversations(correlation_id)
                 )
             """
