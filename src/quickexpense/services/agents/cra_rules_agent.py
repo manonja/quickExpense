@@ -198,15 +198,16 @@ class CRArulesAgent(BaseReceiptAgent):
                     categorization_data = json.loads(json_match.group())
                 else:
                     # Use fallback rule
-                    fallback_rule = self.cra_rules_service._get_fallback_rule()
+                    fallback_rule = self.cra_rules_service.get_fallback_rule()
                     return self._rule_match_to_dict(fallback_rule)
 
             self._validate_categorization_result(categorization_data)
             return categorization_data
 
         except Exception as e:  # noqa: BLE001
-            self.logger.warning("Agent fallback categorization failed: %s", e)
-            fallback_rule = self.cra_rules_service._get_fallback_rule()  # noqa: SLF001
+            # Return fallback categorization on error
+            self.logger.error("Error in categorization: %s", str(e))
+            fallback_rule = self.cra_rules_service.get_fallback_rule()
             return self._rule_match_to_dict(fallback_rule)
 
     def _build_refinement_prompt(
@@ -228,7 +229,7 @@ class CRArulesAgent(BaseReceiptAgent):
             ]
         )
 
-        prompt = f"""
+        return f"""
 Analyze this business expense and validate the suggested CRA categorization:
 
 EXPENSE DETAILS:
@@ -268,7 +269,6 @@ Return your analysis as JSON:
 
 Return ONLY the JSON object.
 """
-        return prompt
 
     def _build_fallback_prompt(self, receipt_data: dict[str, Any]) -> str:
         """Build prompt for fallback categorization when no rules match."""
@@ -287,7 +287,7 @@ Return ONLY the JSON object.
         # Get available categories from the rules service
         available_categories = self.cra_rules_service.get_all_categories()
 
-        prompt = f"""
+        return f"""
 Categorize this business expense according to Canadian tax law (CRA) and Income Tax Act:
 
 EXPENSE DETAILS:
@@ -324,18 +324,17 @@ Return your categorization as JSON:
 
 Return ONLY the JSON object.
 """
-        return prompt
 
     def _format_alternative_matches(self, matches: list[Any]) -> str:
         """Format alternative rule matches for display."""
         if not matches:
             return "None"
 
-        formatted = []
-        for match in matches[:4]:  # Limit to 4 alternatives
-            formatted.append(
-                f"- {match.rule.category} ({match.confidence_score:.2f}): {match.rule.description}"
-            )
+        formatted = [
+            f"- {match.rule.category} ({match.confidence_score:.2f}): "
+            f"{match.rule.description}"
+            for match in matches[:4]  # Limit to 4 alternatives
+        ]
         return "\n".join(formatted)
 
     def _rule_match_to_dict(self, rule_match: Any) -> dict[str, Any]:  # noqa: ANN401
@@ -348,7 +347,10 @@ Return ONLY the JSON object.
             "ita_section": rule_match.rule.ita_section,
             "audit_risk": rule_match.rule.audit_risk,
             "t2125_line": rule_match.rule.t2125_line,
-            "rule_applied": f"CSV Rule: {rule_match.rule.id if hasattr(rule_match.rule, 'id') else rule_match.rule.description}",
+            "rule_applied": (
+                f"CSV Rule: "
+                f"{getattr(rule_match.rule, 'id', rule_match.rule.description)}"
+            ),
             "confidence_adjustment": 0.0,
             "reasoning": rule_match.matching_reason,
             "matched_keywords": rule_match.matched_keywords,
@@ -379,7 +381,7 @@ Return ONLY the JSON object.
         deductibility = data.get("deductibility_percentage")
         try:
             deductibility_val = float(deductibility)
-            if not 0 <= deductibility_val <= 100:
+            if not 0 <= deductibility_val <= 100:  # noqa: PLR2004
                 msg = f"Deductibility percentage must be 0-100, got {deductibility_val}"
                 raise ValueError(msg)
         except (ValueError, TypeError) as e:
@@ -457,7 +459,8 @@ Key principles you follow:
 - Professional fees: 100% deductible
 
 Always consider vendor type, expense nature, and business context when categorizing.
-Be conservative with high-risk categorizations and flag items for manual review when uncertain.
+Be conservative with high-risk categorizations and flag items for manual review
+when uncertain.
 """
 
     def _get_metadata(self, result_data: dict[str, Any]) -> dict[str, Any]:

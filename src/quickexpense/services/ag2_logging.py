@@ -6,6 +6,7 @@ import json
 import logging
 import sqlite3
 from collections import defaultdict
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -15,13 +16,10 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    import autogen
-
     from quickexpense.services.audit_logger import AuditLogger
 
 # AG2/AutoGen native loggers
 try:
-    import autogen.runtime_logging
     from autogen import EVENT_LOGGER_NAME, TRACE_LOGGER_NAME
 
     AG2_AVAILABLE = True
@@ -107,7 +105,7 @@ class AG2StructuredLogger:
         db_path: Path | None = None,
         enable_ag2_native: bool = True,
         enable_runtime_logging: bool = True,
-    ):
+    ) -> None:
         """Initialize AG2 structured logger."""
         self.audit_logger = audit_logger
         self.db_path = db_path or Path("data/agent_logs.db")
@@ -154,7 +152,9 @@ class AG2StructuredLogger:
             self.event_logger.setLevel(logging.INFO)
 
     @contextmanager
-    def session(self, correlation_id: str):
+    def session(
+        self, correlation_id: str
+    ) -> Generator[AG2StructuredLogger, None, None]:
         """Context manager for a logging session with correlation ID."""
         old_correlation = self.current_correlation_id
         self.current_correlation_id = correlation_id
@@ -171,7 +171,7 @@ class AG2StructuredLogger:
                     }
                 )
                 logger.info(
-                    f"Started AG2 runtime logging session: {self.current_session_id}"
+                    "Started AG2 runtime logging session: %s", self.current_session_id
                 )
             except Exception as e:  # noqa: BLE001
                 logger.warning("Could not start AG2 runtime logging: %s", e)
@@ -425,15 +425,15 @@ class AG2StructuredLogger:
                     """,
                     (session_to_query,),
                 )
-                for row in cursor:
-                    events.append(
-                        {
-                            "timestamp": row[0],
-                            "source": row[1],
-                            "message": row[2],
-                            "state": json.loads(row[3]) if row[3] else {},
-                        }
-                    )
+                events = [
+                    {
+                        "timestamp": row[0],
+                        "source": row[1],
+                        "message": row[2],
+                        "state": json.loads(row[3]) if row[3] else {},
+                    }
+                    for row in cursor
+                ]
         except Exception as e:  # noqa: BLE001
             logger.error("Error retrieving session events: %s", e)
 

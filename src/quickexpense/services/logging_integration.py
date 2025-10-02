@@ -93,7 +93,7 @@ class LoggingIntegration:
             ]
         ):
             # Return original agents if no logging is enabled
-            return data_extraction_agent, cra_rules_agent, tax_calculator_agent  # type: ignore[return-value]
+            return data_extraction_agent, cra_rules_agent, tax_calculator_agent
 
         # Create wrappers for each agent
         wrapped_data_agent = LoggingAgentWrapper(

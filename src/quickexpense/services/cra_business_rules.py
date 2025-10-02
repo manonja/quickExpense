@@ -241,7 +241,7 @@ class CRABusinessRulesService:
             The best matching rule result
         """
         matches = self.find_matching_rules(vendor_name, line_item_descriptions, amount)
-        return matches[0] if matches else self._get_fallback_rule()
+        return matches[0] if matches else self.get_fallback_rule()
 
     def get_rules_by_category(self, category: str) -> list[CRARule]:
         """Get all rules for a specific category.
@@ -262,7 +262,7 @@ class CRABusinessRulesService:
         """
         return list({rule.category for rule in self.rules})
 
-    def _get_fallback_rule(self) -> RuleMatchResult:
+    def get_fallback_rule(self) -> RuleMatchResult:
         """Get the fallback rule for unknown expenses."""
         fallback_rule = CRARule(
             category="General Business Expense",

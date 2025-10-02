@@ -135,7 +135,7 @@ async def test_logging_system() -> None:
         logger.info("Audit Risk: %s", final_data.get("audit_risk"))
 
     except Exception as e:
-        logger.error("Processing failed: %s", e, exc_info=True)
+        logger.exception("Processing failed: %s", e)
 
     # Get performance report
     logger.info("\n=== Performance Report ===")

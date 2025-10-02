@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from quickexpense.services.agents import AgentResult, MultiAgentReceiptResponse
+    from quickexpense.models.multi_agent import MultiAgentReceiptResponse
+    from quickexpense.services.agents.base import AgentResult
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class ConversationHistory(BaseModel):
 class ConversationLogger:
     """SQLite-based conversation history logger."""
 
-    def __init__(self, db_path: Path | None = None):
+    def __init__(self, db_path: Path | None = None) -> None:
         """Initialize conversation logger."""
         self.db_path = db_path or Path("data/conversation_history.db")
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,7 +86,8 @@ class ConversationLogger:
                     processing_time REAL,
                     metadata TEXT,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (correlation_id) REFERENCES conversations(correlation_id)
+                    FOREIGN KEY (correlation_id) 
+                        REFERENCES conversations(correlation_id)
                 )
             """
             )
@@ -361,7 +363,7 @@ class ConversationLogger:
                     ON c.correlation_id = ce.correlation_id
             """
 
-            params = []
+            params: list[Any] = []
             if agent_name:
                 query += " WHERE ce.agent_name = ?"
                 params.append(agent_name)
