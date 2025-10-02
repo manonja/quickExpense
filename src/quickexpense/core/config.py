@@ -52,6 +52,48 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
 
+    # Enhanced logging configuration
+    enable_ag2_logging: bool = Field(
+        default=True, description="Enable AG2/AutoGen native logging"
+    )
+    enable_runtime_logging: bool = Field(
+        default=True, description="Enable AG2 runtime database logging"
+    )
+    enable_conversation_logging: bool = Field(
+        default=True, description="Enable conversation history logging"
+    )
+    enable_performance_monitoring: bool = Field(
+        default=True, description="Enable performance monitoring and analytics"
+    )
+    ag2_trace_level: str = Field(default="DEBUG", description="AG2 trace logger level")
+    ag2_event_level: str = Field(default="INFO", description="AG2 event logger level")
+    logging_db_path: str = Field(
+        default="data/agent_logs.db", description="Path to AG2 runtime logging database"
+    )
+    conversation_db_path: str = Field(
+        default="data/conversation_history.db",
+        description="Path to conversation history database",
+    )
+    log_retention_days: int = Field(
+        default=2555,  # 7 years for CRA compliance
+        description="Log retention period in days",
+    )
+    log_agent_reasoning: bool = Field(
+        default=True, description="Log detailed agent reasoning and thought processes"
+    )
+    log_inter_agent_communication: bool = Field(
+        default=True, description="Log communication between agents"
+    )
+    log_token_usage: bool = Field(
+        default=True, description="Log LLM token usage and costs"
+    )
+    log_consensus_decisions: bool = Field(
+        default=True, description="Log consensus decision making process"
+    )
+    performance_sampling_rate: float = Field(
+        default=1.0, description="Sampling rate for performance metrics (0.0-1.0)"
+    )
+
     # API settings
     api_prefix: str = Field(default="/api/v1", description="API route prefix")
     cors_origins: list[str] = Field(

@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from quickexpense.api import health_router, main_router
+from quickexpense.api import health_router, main_router, monitoring_router
 from quickexpense.api.web_endpoints import router as web_api_router
 from quickexpense.web.routes import router as web_ui_router
 from quickexpense.core.config import Settings, get_settings
@@ -203,6 +203,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(health_router)
     app.include_router(main_router)
+    app.include_router(monitoring_router)
     app.include_router(web_api_router)
     app.include_router(web_ui_router)
 
