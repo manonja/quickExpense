@@ -213,10 +213,10 @@ async def process_receipt_file(
     receipt: Annotated[
         UploadFile, File(description="Receipt file (JPEG, PNG, PDF, HEIC)")
     ],
+    orchestrator: MultiAgentOrchestratorDep,
     additional_context: Annotated[
         str, Form(description="Additional context")
     ] = "Business expense receipt",
-    orchestrator: MultiAgentOrchestratorDep | None = None,
 ) -> MultiAgentReceiptResponse:
     """Process a receipt file directly using multi-agent system.
 
@@ -231,18 +231,12 @@ async def process_receipt_file(
 
     Args:
         receipt: The uploaded receipt file
-        additional_context: Optional context about the expense
         orchestrator: Multi-agent orchestrator service (injected)
+        additional_context: Optional context about the expense
 
     Returns:
         MultiAgentReceiptResponse with consensus results and agent breakdown
     """
-    if orchestrator is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Multi-agent orchestrator not initialized. Check configuration.",
-        )
-
     try:
         # Validate file
         if not receipt.filename:
