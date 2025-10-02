@@ -20,6 +20,8 @@ dependencies = [
     "python-multipart>=0.0.6",
     "pymupdf>=1.23.0",
     "pillow-heif>=0.18.0",
+    "ag2[gemini]>=0.9.9",
+    "pandas>=2.0.0",
 ]
 
 [project.scripts]

@@ -1,0 +1,16 @@
+category,t2125_line,deductibility_rate,ita_section,description,keywords,examples,audit_risk,confidence_threshold
+Travel-Lodging,8521,100,Standard,"Hotel accommodation charges","room charge;accommodation;hotel fee;lodging;suite;room tax;resort fee","Marriott;Hilton;Hyatt;Courtyard",LOW,0.75
+Meals & Entertainment,8523,50,ITA67.1,"Local restaurant meals","sandwich;salad;rolls;burger;pizza;noodle;soup;chicken;beef;pork;shrimp;fish;rice;pasta;meal;lunch;dinner;breakfast","Tim Hortons;Starbucks;McDonald's",MEDIUM,0.80
+Travel-Meals,8523,50,ITA67.1,"Restaurant meals in travel context","restaurant;meal;dining;food;coffee;breakfast;lunch;dinner;catering;beverage","Restaurant;Cafe;Bistro;Bar",MEDIUM,0.75
+Travel-Meals,8523,50,ITA67.1,"Hotel room service meals","room service;restaurant room charge;in-room dining;minibar;restaurant charge","Hotel;Inn;Resort",MEDIUM,0.80
+Travel-Lodging,8521,100,Standard,"Hotel marketing and service fees","marketing fee;resort fee;destination fee;amenity fee;facility fee;service fee","Marriott;Hilton;Hyatt;Sheraton",LOW,0.85
+Tax-GST/HST,9270,100,GST/HST,"GST/HST tax charges","gst;hst;tax;sales tax;harmonized tax","GST;HST",LOW,0.90
+Travel-Taxes,8521,100,Standard,"Tourism levy and municipal taxes","tourism levy;destination fee;city tax;municipal tax;tourism tax;occupancy tax","Tourism;Municipal",LOW,0.75
+Professional Services,8862,100,Standard,"Marketing and service fees (Non-Hotel)","marketing fee;service fee;administration fee;booking fee;processing fee","Service;Admin;Processing",MEDIUM,0.70
+Travel-Transportation,8525,100,Standard,"Taxi and rideshare transportation","taxi;uber;lyft;cab;transportation;ride;airport shuttle","Uber;Lyft;Taxi",LOW,0.80
+Office Supplies,8810,100,Standard,"Office supplies and stationery","office supplies;stationery;paper;pens;printer;toner;ink;folders;envelopes","Staples;Office Depot",LOW,0.75
+Vehicle-Fuel,8521,100,Standard,"Fuel and gasoline","fuel;gasoline;gas;diesel;petrol","Shell;Esso;Petro-Canada",LOW,0.85
+Software,8810,100,Standard,"Software and subscription services","software;subscription;license;saas;cloud;app;service","Microsoft;Adobe;Google",LOW,0.80
+Telecommunications,9219,100,Standard,"Internet and telecommunications","internet;phone;mobile;cellular;telecommunications;wifi;data","Bell;Rogers;Telus",MEDIUM,0.75
+Travel-Parking,8525,100,Standard,"Parking fees","parking;park;meter;garage;lot","Parking;Meter",LOW,0.80
+General Business Expense,9270,100,Standard,"Unknown expense type","","",HIGH,0.50

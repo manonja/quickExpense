@@ -2,6 +2,7 @@
 
 from .enhanced_expense import CategorizedLineItem, MultiCategoryExpense
 from .expense import Expense, LineItem
+from .multi_agent import AgentResultResponse, MultiAgentReceiptResponse
 from .receipt import (
     ExtractedReceipt,
     PaymentMethod,
@@ -13,10 +14,12 @@ from .receipt import (
 )
 
 __all__ = [
+    "AgentResultResponse",
     "CategorizedLineItem",
     "Expense",
     "ExtractedReceipt",
     "LineItem",
+    "MultiAgentReceiptResponse",
     "MultiCategoryExpense",
     "PaymentMethod",
     "ReceiptExtractionRequest",
