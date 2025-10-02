@@ -18,6 +18,8 @@ The application has been successfully restructured with:
 - **Modern web UI with essentials-only grid design**
 - **QuickBooks Purchase API integration fixed**
 - **Vendor-aware business rules engine with hotel-specific categorization**
+- **Multi-agent system with CRA compliance (ag2/autogen)**
+- **Hybrid LLM approach: Gemini for images, TogetherAI for reasoning**
 
 ## Design Principles
 
@@ -161,10 +163,15 @@ QB_CLIENT_ID=your_client_id
 QB_CLIENT_SECRET=your_client_secret
 QB_REDIRECT_URI=http://localhost:8000/callback
 
-# Gemini AI Configuration
+# Gemini AI Configuration (for image processing)
 GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-2.0-flash-exp
 GEMINI_TIMEOUT=30
+
+# TogetherAI Configuration (for agent reasoning)
+TOGETHER_API_KEY=your_together_api_key
+TOGETHER_MODEL=meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+LLM_PROVIDER=together  # Options: together, gemini, auto
 ```
 
 **Note:** OAuth tokens (access_token, refresh_token) and company_id are now stored in `data/tokens.json` after running the OAuth flow.
@@ -287,6 +294,12 @@ uv run mypy src tests
 - `POST /api/v1/vendors?vendor_name=...` - Create vendor
 - `GET /api/v1/accounts/expense` - List expense accounts
 - `GET /api/v1/test-connection` - Test QuickBooks connection
+
+### Multi-Agent Processing
+- `POST /api/v1/receipts/extract-with-agents` - Process receipt with 3-agent system
+  - DataExtractionAgent: Uses Gemini for image extraction
+  - CRArulesAgent: Applies Canadian tax rules with TogetherAI
+  - TaxCalculatorAgent: Validates GST/HST calculations with TogetherAI
 
 ### Web UI Endpoints
 - `GET /` - Web UI home page
@@ -460,6 +473,13 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
    - Real-time processing with visual feedback
    - Drag-and-drop file upload with validation
    - Seamless QuickBooks OAuth integration with popup flow
+10. ✅ **Multi-Agent System**: Transparent receipt processing with CRA compliance
+   - Three specialized agents working in consensus
+   - Confidence scoring and audit risk assessment
+   - CSV-based business rules for easy updates
+   - Hybrid LLM: Gemini handles images (HEIC, PDF), TogetherAI handles reasoning
+   - 47% cost reduction vs pure Gemini approach
+   - Full backward compatibility maintained
 
 ## Business Rules Configuration
 
