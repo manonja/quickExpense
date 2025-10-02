@@ -371,3 +371,44 @@ class AuditLogger:
             "retention_policy": f"{self.config.retention_years} years (CRA compliance)",
             "log_format": "JSON structured",
         }
+
+    def log_with_context(
+        self,
+        level: str,
+        message: str,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        """Log message with context at the specified level.
+
+        Args:
+            level: Log level (INFO, WARNING, ERROR, etc.)
+            message: Log message
+            context: Additional context to log
+        """
+        context = context or {}
+        context["timestamp"] = datetime.now(UTC).isoformat()
+
+        if level.upper() == "INFO":
+            self.logger.info(message, extra=context)
+        elif level.upper() == "WARNING":
+            self.logger.warning(message, extra=context)
+        elif level.upper() == "ERROR":
+            self.logger.error(message, extra=context)
+        else:
+            self.logger.info(message, extra=context)
+
+
+# Global instance for convenience
+_audit_logger: AuditLogger | None = None
+
+
+def get_audit_logger() -> AuditLogger:
+    """Get the global audit logger instance.
+
+    Returns:
+        AuditLogger instance
+    """
+    global _audit_logger
+    if _audit_logger is None:
+        _audit_logger = AuditLogger()
+    return _audit_logger

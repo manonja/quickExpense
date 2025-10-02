@@ -77,12 +77,12 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
             ConsensusResult with final consensus data
         """
         # Generate or use provided correlation ID
-        self.current_correlation_id = correlation_id or str(uuid.uuid4())
+        correlation_id_val = correlation_id or str(uuid.uuid4())
+        self.current_correlation_id = correlation_id_val
 
         # Start logging session
         if self.ag2_logger:
-            logging_context = self.ag2_logger.session(self.current_correlation_id)
-            async with logging_context as logger_session:
+            with self.ag2_logger.session(self.current_correlation_id) as logger_session:
                 self.current_session_id = logger_session.current_session_id
                 return await self._process_with_logging(file_base64, additional_context)
         else:
@@ -100,7 +100,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         self._log_orchestration_start(additional_context)
 
         # Start conversation logging
-        if self.conversation_logger:
+        if self.conversation_logger and self.current_correlation_id:
             self.conversation_logger.start_conversation(
                 correlation_id=self.current_correlation_id,
                 session_id=self.current_session_id,
@@ -111,11 +111,12 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
             )
 
             # Log user input
-            self.conversation_logger.log_user_input(
-                correlation_id=self.current_correlation_id,
-                content=f"Process receipt with context: {additional_context or 'None'}",
-                session_id=self.current_session_id,
-            )
+            if self.current_correlation_id:
+                self.conversation_logger.log_user_input(
+                    correlation_id=self.current_correlation_id,
+                    content=f"Process receipt with context: {additional_context or 'None'}",
+                    session_id=self.current_session_id,
+                )
 
         # Set correlation context for all agents
         self._set_agent_correlation_context()
@@ -305,7 +306,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
                 session_id=self.current_session_id,
             )
 
-        logger.info(f"Starting phase {phase_name} with agent {agent_name}")
+        logger.info("Starting phase %s with agent {agent_name}", phase_name)
 
     def _log_phase_complete(
         self,
@@ -444,7 +445,22 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         """Finalize all logging for the session."""
         if self.conversation_logger:
             # Import at runtime to avoid circular dependency
-            from quickexpense.api.models import MultiAgentReceiptResponse
+            from quickexpense.models.multi_agent import (
+                AgentResultResponse,
+                MultiAgentReceiptResponse,
+            )
+
+            # Convert AgentResult to AgentResultResponse
+            agent_result_responses = [
+                AgentResultResponse(
+                    agent_name=ar.agent_name,
+                    success=ar.success,
+                    confidence_score=ar.confidence_score,
+                    processing_time=ar.processing_time,
+                    error_message=ar.error_message,
+                )
+                for ar in result.agent_results
+            ]
 
             # Convert to response format for logging
             response = MultiAgentReceiptResponse(
@@ -452,10 +468,20 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
                 overall_confidence=result.overall_confidence,
                 consensus_method=result.consensus_method,
                 processing_time=result.processing_time,
-                final_data=result.final_data,
-                agent_results=result.agent_results,
+                vendor_name=result.final_data.get("vendor_name"),
+                transaction_date=result.final_data.get("transaction_date"),
+                total_amount=result.final_data.get("total_amount"),
+                subtotal=result.final_data.get("subtotal"),
+                tax_amount=result.final_data.get("tax_amount"),
+                category=result.final_data.get("category"),
+                deductibility_percentage=result.final_data.get(
+                    "deductibility_percentage"
+                ),
+                qb_account=result.final_data.get("qb_account"),
+                audit_risk=result.final_data.get("audit_risk"),
+                agent_results=agent_result_responses,
                 flags_for_review=result.flags_for_review,
-                metadata=result.metadata,
+                full_data=result.final_data,
             )
 
             self.conversation_logger.end_conversation(
@@ -470,7 +496,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         # Get final metrics from AG2 logger
         if self.ag2_logger:
             metrics = self.ag2_logger.get_session_metrics()
-            logger.info(f"Session metrics: {metrics}")
+            logger.info("Session metrics: %s", metrics)
 
 
 def create_logging_orchestrator(

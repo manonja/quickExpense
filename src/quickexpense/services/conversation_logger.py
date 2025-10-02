@@ -239,7 +239,7 @@ class ConversationLogger:
         self.log_agent_message(
             correlation_id=correlation_id,
             agent_name=agent_result.agent_name,
-            content=json.dumps(agent_result.data or {}),
+            content=json.dumps(agent_result.data or {}, default=str),
             role="assistant",
             confidence_score=agent_result.confidence_score,
             processing_time=agent_result.processing_time,
@@ -267,7 +267,7 @@ class ConversationLogger:
                 "overall_confidence": final_result.overall_confidence,
                 "consensus_method": final_result.consensus_method,
                 "processing_time": final_result.processing_time,
-                "final_data": final_result.final_data,
+                "final_data": final_result.full_data,
                 "flags_for_review": final_result.flags_for_review,
                 "agent_count": len(final_result.agent_results),
             }

@@ -478,7 +478,7 @@ class PerformanceAnalytics:
         with sqlite3.connect(self.conversation_db_path) as conn:
             query = """
                 SELECT
-                    strftime('%H', timestamp) as hour,
+                    strftime('%H', start_time) as hour,
                     COUNT(*) as count
                 FROM conversations
                 WHERE 1=1

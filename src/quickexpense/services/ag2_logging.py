@@ -126,6 +126,10 @@ class AG2StructuredLogger:
         # Initialize AG2 native loggers if available
         if self.enable_ag2_native:
             self._setup_ag2_native_logging()
+        else:
+            # Set default loggers to avoid AttributeError
+            self.trace_logger = logger
+            self.event_logger = logger
 
     def _setup_ag2_native_logging(self) -> None:
         """Set up AG2's native trace and event logging."""
@@ -169,8 +173,8 @@ class AG2StructuredLogger:
                 logger.info(
                     f"Started AG2 runtime logging session: {self.current_session_id}"
                 )
-            except Exception as e:
-                logger.warning(f"Could not start AG2 runtime logging: {e}")
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Could not start AG2 runtime logging: %s", e)
                 self.current_session_id = None
 
         try:
@@ -183,8 +187,8 @@ class AG2StructuredLogger:
 
                     autogen.runtime_logging.stop()
                     logger.info("Stopped AG2 runtime logging session")
-                except Exception as e:
-                    logger.warning(f"Error stopping AG2 runtime logging: {e}")
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("Error stopping AG2 runtime logging: %s", e)
 
             self.current_correlation_id = old_correlation
             self.current_session_id = None
@@ -386,7 +390,7 @@ class AG2StructuredLogger:
             self.event_logger.info(json.dumps(event_dict))
 
         # Log to standard logger
-        logger.info(f"AG2 Event: {json.dumps(event_dict)}")
+        logger.info("AG2 Event: %s", json.dumps(event_dict))
 
     def get_session_metrics(self) -> dict[str, Any]:
         """Get performance metrics for the current session."""
@@ -430,8 +434,8 @@ class AG2StructuredLogger:
                             "state": json.loads(row[3]) if row[3] else {},
                         }
                     )
-        except Exception as e:
-            logger.error(f"Error retrieving session events: {e}")
+        except Exception as e:  # noqa: BLE001
+            logger.error("Error retrieving session events: %s", e)
 
         return events
 

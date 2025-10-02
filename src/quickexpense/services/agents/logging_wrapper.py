@@ -1,52 +1,51 @@
-"""Enhanced base agent with comprehensive logging capabilities."""
+"""Agent wrapper for adding logging capabilities to existing agents."""
 
 from __future__ import annotations
 
-import asyncio
-import json
-import logging
 import time
 from typing import TYPE_CHECKING, Any
 
-from quickexpense.services.agents.base import AgentResult, BaseReceiptAgent
+from quickexpense.services.agents.base import AgentResult
 
 if TYPE_CHECKING:
     from quickexpense.services.ag2_logging import AG2StructuredLogger
+    from quickexpense.services.agents.base import BaseReceiptAgent
     from quickexpense.services.audit_logger import AuditLogger
     from quickexpense.services.conversation_logger import ConversationLogger
 
-logger = logging.getLogger(__name__)
 
-
-class LoggingBaseReceiptAgent(BaseReceiptAgent):
-    """Enhanced base agent with structured logging capabilities."""
+class LoggingAgentWrapper:
+    """Wrapper that adds logging capabilities to any agent."""
 
     def __init__(
         self,
-        name: str,
-        timeout_seconds: float = 2.0,
+        agent: BaseReceiptAgent,
         ag2_logger: AG2StructuredLogger | None = None,
         conversation_logger: ConversationLogger | None = None,
         audit_logger: AuditLogger | None = None,
         enable_detailed_logging: bool = True,
     ) -> None:
-        """Initialize enhanced agent with logging.
+        """Initialize the logging wrapper.
 
         Args:
-            name: Name of the agent
-            timeout_seconds: Maximum processing time
+            agent: The agent to wrap
             ag2_logger: AG2 structured logger instance
             conversation_logger: Conversation history logger
             audit_logger: Audit logger instance
             enable_detailed_logging: Whether to enable detailed logging
         """
-        super().__init__(name, timeout_seconds)
+        self._wrapped_agent = agent
         self.ag2_logger = ag2_logger
         self.conversation_logger = conversation_logger
         self.audit_logger = audit_logger
         self.enable_detailed_logging = enable_detailed_logging
         self.correlation_id: str | None = None
         self.session_id: str | None = None
+
+        # Copy agent attributes
+        self.name = agent.name
+        self.timeout_seconds = agent.timeout_seconds
+        self.logger = agent.logger
 
     def set_correlation_context(
         self, correlation_id: str, session_id: str | None = None
@@ -87,78 +86,67 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
                 self.conversation_logger.log_agent_message(
                     correlation_id=self.correlation_id,
                     agent_name=self.name,
-                    content=f"Processing receipt with context: {json.dumps(context)}",
+                    content=f"Processing receipt with context: {context}",
                     role="system",
                     session_id=self.session_id,
                 )
 
-            # Run processing with timeout
-            result_data = await asyncio.wait_for(
-                self._process_internal_with_logging(receipt_data, context),
-                timeout=self.timeout_seconds,
-            )
-
-            processing_time = time.time() - start_time
-            confidence_score = self._calculate_confidence(result_data, receipt_data)
+            # Call the wrapped agent's process method
+            result = await self._wrapped_agent.process(receipt_data, context)
 
             # Extract key results for logging
-            reasoning = self._extract_reasoning(result_data)
-            category = result_data.get("category")
-            tax_treatment = result_data.get("tax_treatment")
+            processing_time = time.time() - start_time
+            reasoning = self._extract_reasoning(result.data)
+            category = result.data.get("category")
+            tax_treatment = result.data.get("tax_treatment")
 
             # Log successful completion
-            self._log_agent_success(
-                result_data=result_data,
-                confidence_score=confidence_score,
-                processing_time=processing_time,
-                reasoning=reasoning,
-                category=category,
-                tax_treatment=tax_treatment,
-            )
-
-            # Create result
-            result = AgentResult(
-                agent_name=self.name,
-                success=True,
-                confidence_score=confidence_score,
-                data=result_data,
-                processing_time=processing_time,
-                metadata=self._get_enhanced_metadata(result_data),
-            )
+            if result.success:
+                self._log_agent_success(
+                    result_data=result.data,
+                    confidence_score=result.confidence_score,
+                    processing_time=processing_time,
+                    reasoning=reasoning,
+                    category=category,
+                    tax_treatment=tax_treatment,
+                )
+            else:
+                self._log_agent_error(
+                    result.error_message or "Unknown error",
+                    "processing_error",
+                    processing_time,
+                )
 
             # Log to conversation history
             if self.conversation_logger and self.correlation_id:
-                self.conversation_logger.log_agent_result(
-                    correlation_id=self.correlation_id,
-                    agent_result=result,
-                    session_id=self.session_id,
-                )
-
-            return result
-
-        except TimeoutError:
-            processing_time = time.time() - start_time
-            error_msg = f"Agent {self.name} timed out after {self.timeout_seconds}s"
-
-            # Log timeout error
-            self._log_agent_error(error_msg, "timeout", processing_time)
-
-            result = AgentResult(
-                agent_name=self.name,
-                success=False,
-                confidence_score=0.0,
-                data={},
-                processing_time=processing_time,
-                error_message=error_msg,
-            )
-
-            # Log to conversation history
-            if self.conversation_logger and self.correlation_id:
-                self.conversation_logger.log_agent_result(
-                    correlation_id=self.correlation_id,
-                    agent_result=result,
-                    session_id=self.session_id,
-                )
+                try:
+                    self.conversation_logger.log_agent_result(
+                        correlation_id=self.correlation_id,
+                        agent_result=result,
+                        session_id=self.session_id,
+                    )
+                except AttributeError as e:
+                    # Handle the isoformat error more gracefully
+                    self.logger.warning(
+                        "Error logging agent result to conversation history: %s", str(e)
+                    )
+                    # Log a simplified version without problematic fields
+                    self.conversation_logger.log_agent_message(
+                        correlation_id=self.correlation_id,
+                        agent_name=result.agent_name,
+                        content=f"Result: success={result.success}, confidence={result.confidence_score}",
+                        role="assistant",
+                        confidence_score=result.confidence_score,
+                        processing_time=result.processing_time,
+                        metadata={
+                            "success": result.success,
+                            "error": result.error_message,
+                            "result_keys": (
+                                list(result.data.keys()) if result.data else []
+                            ),
+                        },
+                        session_id=self.session_id,
+                    )
 
             return result
 
@@ -180,37 +168,17 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
 
             # Log to conversation history
             if self.conversation_logger and self.correlation_id:
-                self.conversation_logger.log_agent_result(
-                    correlation_id=self.correlation_id,
-                    agent_result=result,
-                    session_id=self.session_id,
-                )
+                try:
+                    self.conversation_logger.log_agent_result(
+                        correlation_id=self.correlation_id,
+                        agent_result=result,
+                        session_id=self.session_id,
+                    )
+                except AttributeError as e:
+                    # Handle the isoformat error more gracefully
+                    self.logger.warning("Error logging failed agent result: %s", str(e))
 
             return result
-
-    async def _process_internal_with_logging(
-        self,
-        receipt_data: dict[str, Any],
-        context: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Wrapper for internal processing with step logging."""
-        # Log processing start
-        if self.ag2_logger and self.enable_detailed_logging:
-            self.ag2_logger.trace_logger.debug(
-                f"[{self.name}] Starting internal processing"
-            )
-
-        # Call the actual implementation
-        result = await self._process_internal(receipt_data, context)
-
-        # Log processing steps
-        if self.ag2_logger and self.enable_detailed_logging:
-            self.ag2_logger.trace_logger.debug(
-                f"[{self.name}] Completed internal processing with "
-                f"{len(result)} result keys"
-            )
-
-        return result
 
     def _log_agent_start(
         self, receipt_data: dict[str, Any], context: dict[str, Any]
@@ -230,7 +198,7 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
                 },
             )
 
-        if self.ag2_logger:
+        if self.ag2_logger and hasattr(self.ag2_logger, "trace_logger"):
             self.ag2_logger.trace_logger.info(
                 f"[{self.name}] Started processing receipt"
             )
@@ -337,30 +305,6 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
 
         return "No explicit reasoning provided"
 
-    def _get_enhanced_metadata(self, result_data: dict[str, Any]) -> dict[str, Any]:
-        """Get enhanced metadata with logging context."""
-        base_metadata = super()._get_metadata(result_data)
-
-        enhanced = {
-            **base_metadata,
-            "correlation_id": self.correlation_id,
-            "session_id": self.session_id,
-            "logging_enabled": {
-                "ag2_logger": self.ag2_logger is not None,
-                "conversation_logger": self.conversation_logger is not None,
-                "audit_logger": self.audit_logger is not None,
-            },
-        }
-
-        # Add result-specific metadata
-        if "tax_validation_result" in result_data:
-            enhanced["tax_validation"] = result_data["tax_validation_result"]
-
-        if "audit_risk" in result_data:
-            enhanced["audit_risk"] = result_data["audit_risk"]
-
-        return enhanced
-
     def log_inter_agent_message(
         self,
         recipient: str,
@@ -389,44 +333,30 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
                 session_id=self.session_id,
             )
 
+    # Delegate all other attributes to the wrapped agent
+    def __getattr__(self, name: str) -> Any:
+        """Delegate attribute access to the wrapped agent."""
+        return getattr(self._wrapped_agent, name)
 
-def create_logging_agent(
-    name: str,
-    agent_class: type[BaseReceiptAgent],
-    settings: Any,
-    ag2_logger: AG2StructuredLogger | None = None,
-    conversation_logger: ConversationLogger | None = None,
-    audit_logger: AuditLogger | None = None,
-    **kwargs: Any,
-) -> LoggingBaseReceiptAgent:
-    """Factory function to create agents with logging capabilities.
+    # Methods required by the agent interface
+    def get_agent_info(self) -> dict[str, Any]:
+        """Get agent information."""
+        return self._wrapped_agent.get_agent_info()
 
-    Args:
-        name: Agent name
-        agent_class: The specific agent class to instantiate
-        settings: Application settings
-        ag2_logger: AG2 structured logger
-        conversation_logger: Conversation logger
-        audit_logger: Audit logger
-        **kwargs: Additional arguments for the agent class
+    async def _process_internal(
+        self,
+        receipt_data: dict[str, Any],
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Delegate to wrapped agent."""
+        return await self._wrapped_agent._process_internal(receipt_data, context)
 
-    Returns:
-        Agent instance with logging capabilities
-    """
+    def _calculate_confidence(
+        self, result_data: dict[str, Any], receipt_data: dict[str, Any]
+    ) -> float:
+        """Delegate to wrapped agent."""
+        return self._wrapped_agent._calculate_confidence(result_data, receipt_data)
 
-    class LoggingAgent(LoggingBaseReceiptAgent, agent_class):
-        """Dynamic class combining logging capabilities with specific agent."""
-
-        def __init__(self) -> None:
-            # Initialize both parent classes
-            LoggingBaseReceiptAgent.__init__(
-                self,
-                name=name,
-                timeout_seconds=kwargs.get("timeout_seconds", 2.0),
-                ag2_logger=ag2_logger,
-                conversation_logger=conversation_logger,
-                audit_logger=audit_logger,
-            )
-            agent_class.__init__(self, settings, **kwargs)
-
-    return LoggingAgent()
+    def _get_metadata(self, result_data: dict[str, Any]) -> dict[str, Any]:
+        """Delegate to wrapped agent."""
+        return self._wrapped_agent._get_metadata(result_data)

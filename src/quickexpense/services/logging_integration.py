@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, Any
 
 from quickexpense.core.config import get_settings
 from quickexpense.services.ag2_logging import create_ag2_logger
-from quickexpense.services.agents.logging_base import LoggingBaseReceiptAgent
 from quickexpense.services.agents.logging_orchestrator import (
     create_logging_orchestrator,
 )
+from quickexpense.services.agents.logging_wrapper import LoggingAgentWrapper
 from quickexpense.services.audit_logger import get_audit_logger
 from quickexpense.services.conversation_logger import create_conversation_logger
 from quickexpense.services.performance_analytics import create_performance_analytics
@@ -82,9 +82,7 @@ class LoggingIntegration:
         data_extraction_agent: DataExtractionAgent,
         cra_rules_agent: CRArulesAgent,
         tax_calculator_agent: TaxCalculatorAgent,
-    ) -> tuple[
-        LoggingBaseReceiptAgent, LoggingBaseReceiptAgent, LoggingBaseReceiptAgent
-    ]:
+    ) -> tuple[Any, Any, Any]:
         """Wrap agents with logging capabilities."""
         # Check if logging features are enabled
         if not any(
@@ -95,80 +93,46 @@ class LoggingIntegration:
             ]
         ):
             # Return original agents if no logging is enabled
-            return data_extraction_agent, cra_rules_agent, tax_calculator_agent
+            return data_extraction_agent, cra_rules_agent, tax_calculator_agent  # type: ignore[return-value]
 
-        # Create wrapper classes that combine logging with original agents
-        class LoggingDataExtractionAgent(
-            LoggingBaseReceiptAgent, type(data_extraction_agent)
-        ):
-            def __init__(agent_self) -> None:
-                LoggingBaseReceiptAgent.__init__(
-                    agent_self,
-                    name=data_extraction_agent.name,
-                    timeout_seconds=data_extraction_agent.timeout_seconds,
-                    ag2_logger=(
-                        self.ag2_logger if self.settings.log_agent_reasoning else None
-                    ),
-                    conversation_logger=self.conversation_logger,
-                    audit_logger=self.audit_logger,
-                    enable_detailed_logging=self.settings.log_agent_reasoning,
-                )
-                # Copy attributes from original agent
-                for attr, value in data_extraction_agent.__dict__.items():
-                    if not attr.startswith("_"):
-                        setattr(agent_self, attr, value)
+        # Create wrappers for each agent
+        wrapped_data_agent = LoggingAgentWrapper(
+            agent=data_extraction_agent,
+            ag2_logger=self.ag2_logger if self.settings.log_agent_reasoning else None,
+            conversation_logger=self.conversation_logger,
+            audit_logger=self.audit_logger,
+            enable_detailed_logging=self.settings.log_agent_reasoning,
+        )
 
-        class LoggingCRArulesAgent(LoggingBaseReceiptAgent, type(cra_rules_agent)):
-            def __init__(agent_self) -> None:
-                LoggingBaseReceiptAgent.__init__(
-                    agent_self,
-                    name=cra_rules_agent.name,
-                    timeout_seconds=cra_rules_agent.timeout_seconds,
-                    ag2_logger=(
-                        self.ag2_logger if self.settings.log_agent_reasoning else None
-                    ),
-                    conversation_logger=self.conversation_logger,
-                    audit_logger=self.audit_logger,
-                    enable_detailed_logging=self.settings.log_agent_reasoning,
-                )
-                # Copy attributes from original agent
-                for attr, value in cra_rules_agent.__dict__.items():
-                    if not attr.startswith("_"):
-                        setattr(agent_self, attr, value)
+        wrapped_cra_agent = LoggingAgentWrapper(
+            agent=cra_rules_agent,
+            ag2_logger=self.ag2_logger if self.settings.log_agent_reasoning else None,
+            conversation_logger=self.conversation_logger,
+            audit_logger=self.audit_logger,
+            enable_detailed_logging=self.settings.log_agent_reasoning,
+        )
 
-        class LoggingTaxCalculatorAgent(
-            LoggingBaseReceiptAgent, type(tax_calculator_agent)
-        ):
-            def __init__(agent_self) -> None:
-                LoggingBaseReceiptAgent.__init__(
-                    agent_self,
-                    name=tax_calculator_agent.name,
-                    timeout_seconds=tax_calculator_agent.timeout_seconds,
-                    ag2_logger=(
-                        self.ag2_logger if self.settings.log_agent_reasoning else None
-                    ),
-                    conversation_logger=self.conversation_logger,
-                    audit_logger=self.audit_logger,
-                    enable_detailed_logging=self.settings.log_agent_reasoning,
-                )
-                # Copy attributes from original agent
-                for attr, value in tax_calculator_agent.__dict__.items():
-                    if not attr.startswith("_"):
-                        setattr(agent_self, attr, value)
+        wrapped_tax_agent = LoggingAgentWrapper(
+            agent=tax_calculator_agent,
+            ag2_logger=self.ag2_logger if self.settings.log_agent_reasoning else None,
+            conversation_logger=self.conversation_logger,
+            audit_logger=self.audit_logger,
+            enable_detailed_logging=self.settings.log_agent_reasoning,
+        )
 
         return (
-            LoggingDataExtractionAgent(),
-            LoggingCRArulesAgent(),
-            LoggingTaxCalculatorAgent(),
+            wrapped_data_agent,
+            wrapped_cra_agent,
+            wrapped_tax_agent,
         )
 
     def create_logging_orchestrator(
         self,
-        data_extraction_agent: LoggingBaseReceiptAgent,
-        cra_rules_agent: LoggingBaseReceiptAgent,
-        tax_calculator_agent: LoggingBaseReceiptAgent,
+        data_extraction_agent: Any,
+        cra_rules_agent: Any,
+        tax_calculator_agent: Any,
         consensus_threshold: float = 0.75,
-    ):
+    ) -> Any:
         """Create orchestrator with logging capabilities."""
         if not any(
             [
@@ -209,8 +173,8 @@ class LoggingIntegration:
         try:
             system_stats = self.performance_analytics.get_system_performance()
             return system_stats.model_dump()
-        except Exception as e:
-            logger.error(f"Error generating performance report: {e}")
+        except Exception as e:  # noqa: BLE001
+            logger.error("Error generating performance report: %s", e)
             return None
 
     def cleanup(self) -> None:
@@ -268,15 +232,15 @@ def print_logging_config() -> None:
     settings = get_settings()
 
     logger.info("=== QuickExpense Logging Configuration ===")
-    logger.info(f"AG2 Logging: {settings.enable_ag2_logging}")
-    logger.info(f"Runtime Logging: {settings.enable_runtime_logging}")
-    logger.info(f"Conversation Logging: {settings.enable_conversation_logging}")
-    logger.info(f"Performance Monitoring: {settings.enable_performance_monitoring}")
-    logger.info(f"AG2 Trace Level: {settings.ag2_trace_level}")
-    logger.info(f"AG2 Event Level: {settings.ag2_event_level}")
-    logger.info(f"Agent Reasoning Logs: {settings.log_agent_reasoning}")
-    logger.info(f"Inter-Agent Communication: {settings.log_inter_agent_communication}")
-    logger.info(f"Token Usage Tracking: {settings.log_token_usage}")
-    logger.info(f"Consensus Decision Logs: {settings.log_consensus_decisions}")
-    logger.info(f"Log Retention: {settings.log_retention_days} days")
+    logger.info("AG2 Logging: %s", settings.enable_ag2_logging)
+    logger.info("Runtime Logging: %s", settings.enable_runtime_logging)
+    logger.info("Conversation Logging: %s", settings.enable_conversation_logging)
+    logger.info("Performance Monitoring: %s", settings.enable_performance_monitoring)
+    logger.info("AG2 Trace Level: %s", settings.ag2_trace_level)
+    logger.info("AG2 Event Level: %s", settings.ag2_event_level)
+    logger.info("Agent Reasoning Logs: %s", settings.log_agent_reasoning)
+    logger.info("Inter-Agent Communication: %s", settings.log_inter_agent_communication)
+    logger.info("Token Usage Tracking: %s", settings.log_token_usage)
+    logger.info("Consensus Decision Logs: %s", settings.log_consensus_decisions)
+    logger.info("Log Retention: %s days", settings.log_retention_days)
     logger.info("=========================================")

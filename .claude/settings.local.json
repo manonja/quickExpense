@@ -11,7 +11,8 @@
       "Bash(uv run ruff format:*)",
       "Bash(mkdir:*)",
       "Bash(git checkout:*)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

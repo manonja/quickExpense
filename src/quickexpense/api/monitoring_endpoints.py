@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
 from pydantic import BaseModel
@@ -15,6 +16,10 @@ from quickexpense.services.performance_analytics import create_performance_analy
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/monitoring", tags=["monitoring"])
+
+
+# Dependency for settings
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 class PerformanceResponse(BaseModel):
@@ -66,8 +71,8 @@ class ErrorAnalysisResponse(BaseModel):
 
 @router.get("/performance", response_model=PerformanceResponse)
 async def get_system_performance(
-    hours: int = Query(default=24, description="Number of hours to analyze"),
-    settings: Settings = Depends(get_settings),
+    settings: SettingsDep,
+    hours: Annotated[int, Query(description="Number of hours to analyze")] = 24,
 ) -> PerformanceResponse:
     """Get overall system performance metrics."""
     if not settings.enable_performance_monitoring:
@@ -113,18 +118,18 @@ async def get_system_performance(
         )
 
     except Exception as e:
-        logger.error(f"Error getting system performance: {e}")
+        logger.error("Error getting system performance: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving performance data: {e!s}",
-        )
+        ) from e
 
 
 @router.get("/agents/{agent_name}/performance", response_model=AgentPerformanceResponse)
 async def get_agent_performance(
     agent_name: str,
+    settings: SettingsDep,
     hours: int = Query(default=24, description="Number of hours to analyze"),
-    settings: Settings = Depends(get_settings),
 ) -> AgentPerformanceResponse:
     """Get performance metrics for a specific agent."""
     if not settings.enable_performance_monitoring:
@@ -164,20 +169,20 @@ async def get_agent_performance(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting agent performance: {e}")
+        logger.error("Error getting agent performance: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving agent performance: {e!s}",
-        )
+        ) from e
 
 
 @router.get("/conversations", response_model=list[ConversationSummary])
 async def get_recent_conversations(
+    settings: SettingsDep,
     limit: int = Query(
         default=10, le=100, description="Maximum conversations to return"
     ),
     agent_name: str | None = Query(None, description="Filter by agent name"),
-    settings: Settings = Depends(get_settings),
 ) -> list[ConversationSummary]:
     """Get recent conversations."""
     if not settings.enable_conversation_logging:
@@ -210,17 +215,17 @@ async def get_recent_conversations(
         ]
 
     except Exception as e:
-        logger.error(f"Error getting conversations: {e}")
+        logger.error("Error getting conversations: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving conversations: {e!s}",
-        )
+        ) from e
 
 
 @router.get("/conversations/{correlation_id}")
 async def get_conversation_detail(
     correlation_id: str,
-    settings: Settings = Depends(get_settings),
+    settings: SettingsDep,
 ) -> dict[str, Any]:
     """Get detailed conversation history."""
     if not settings.enable_conversation_logging:
@@ -244,17 +249,17 @@ async def get_conversation_detail(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting conversation detail: {e}")
+        logger.error("Error getting conversation detail: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving conversation: {e!s}",
-        )
+        ) from e
 
 
 @router.get("/errors", response_model=ErrorAnalysisResponse)
 async def get_error_analysis(
+    settings: SettingsDep,
     hours: int = Query(default=24, description="Number of hours to analyze"),
-    settings: Settings = Depends(get_settings),
 ) -> ErrorAnalysisResponse:
     """Get error analysis."""
     if not settings.enable_performance_monitoring:
@@ -293,20 +298,20 @@ async def get_error_analysis(
         )
 
     except Exception as e:
-        logger.error(f"Error getting error analysis: {e}")
+        logger.error("Error getting error analysis: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving error analysis: {e!s}",
-        )
+        ) from e
 
 
 @router.get("/token-usage")
 async def get_token_usage(
+    settings: SettingsDep,
     hours: int = Query(default=24, description="Number of hours to analyze"),
     group_by: str = Query(
         default="model", description="Group by: model, agent, or day"
     ),
-    settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     """Get token usage report."""
     if not settings.enable_performance_monitoring or not settings.log_token_usage:
@@ -336,7 +341,7 @@ async def get_token_usage(
         usage_dict = usage_df.to_dict(orient="index")
 
         # Format costs
-        for key, data in usage_dict.items():
+        for data in usage_dict.values():
             if "estimated_cost" in data:
                 data["estimated_cost"] = f"${data['estimated_cost']:.4f}"
 
@@ -350,18 +355,18 @@ async def get_token_usage(
         }
 
     except Exception as e:
-        logger.error(f"Error getting token usage: {e}")
+        logger.error("Error getting token usage: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving token usage: {e!s}",
-        )
+        ) from e
 
 
 @router.get("/confidence-trends")
 async def get_confidence_trends(
+    settings: SettingsDep,
     agent_name: str | None = Query(None, description="Filter by agent name"),
     hours: int = Query(default=24, description="Number of hours to analyze"),
-    settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     """Get confidence score trends."""
     if not settings.enable_performance_monitoring:
@@ -397,18 +402,18 @@ async def get_confidence_trends(
         }
 
     except Exception as e:
-        logger.error(f"Error getting confidence trends: {e}")
+        logger.error("Error getting confidence trends: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving confidence trends: {e!s}",
-        )
+        ) from e
 
 
 @router.websocket("/live")
 async def websocket_monitoring(
     websocket: WebSocket,
-    settings: Settings = Depends(get_settings),
-):
+    settings: SettingsDep,
+) -> None:
     """WebSocket endpoint for live monitoring."""
     if not settings.enable_performance_monitoring:
         await websocket.close(code=1008, reason="Performance monitoring is disabled")
@@ -441,10 +446,6 @@ async def websocket_monitoring(
             # Wait 5 seconds before next update
             await asyncio.sleep(5)
 
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+    except Exception as e:  # noqa: BLE001
+        logger.error("WebSocket error: %s", e)
         await websocket.close(code=1011, reason=str(e))
-
-
-# Add async import
-import asyncio

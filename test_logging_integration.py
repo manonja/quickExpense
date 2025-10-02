@@ -41,7 +41,7 @@ def encode_file_to_base64(file_path: str) -> str:
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-async def test_logging_system():
+async def test_logging_system() -> None:
     """Test the complete logging system integration."""
     logger.info("=== Testing Comprehensive Logging System ===")
 
@@ -50,7 +50,7 @@ async def test_logging_system():
 
     # Create correlation ID for this test
     correlation_id = f"test-{int(time.time())}"
-    logger.info(f"Test correlation ID: {correlation_id}")
+    logger.info("Test correlation ID: %s", correlation_id)
 
     # Initialize logging integration
     logging_integration = create_logging_integration(correlation_id)
@@ -64,9 +64,9 @@ async def test_logging_system():
     tax_agent = TaxCalculatorAgent(settings)
 
     logger.info("\nOriginal agents created:")
-    logger.info(f"  - {data_agent.get_agent_info()}")
-    logger.info(f"  - {cra_agent.get_agent_info()}")
-    logger.info(f"  - {tax_agent.get_agent_info()}")
+    logger.info("  - %s", data_agent.get_agent_info())
+    logger.info("  - %s", cra_agent.get_agent_info())
+    logger.info("  - %s", tax_agent.get_agent_info())
 
     # Wrap agents with logging
     logging_data_agent, logging_cra_agent, logging_tax_agent = (
@@ -87,16 +87,16 @@ async def test_logging_system():
     # Test receipt path
     receipt_path = "/Users/manonjacquin/Documents/receipts/IMG_7597.HEIC"
     if not Path(receipt_path).exists():
-        logger.error(f"Receipt file not found: {receipt_path}")
+        logger.error("Receipt file not found: %s", receipt_path)
         return
 
     # Encode receipt
     try:
         file_base64 = encode_file_to_base64(receipt_path)
-        logger.info(f"\nEncoded receipt: {Path(receipt_path).name}")
-        logger.info(f"File size: {len(file_base64)} base64 characters")
+        logger.info("\nEncoded receipt: %s", Path(receipt_path).name)
+        logger.info("File size: %d base64 characters", len(file_base64))
     except Exception as e:
-        logger.error(f"Failed to encode receipt: {e}")
+        logger.error("Failed to encode receipt: %s", e)
         return
 
     # Process receipt with full logging
@@ -109,33 +109,33 @@ async def test_logging_system():
         )
 
         logger.info("\n=== Processing Results ===")
-        logger.info(f"Success: {result.success}")
-        logger.info(f"Overall Confidence: {result.overall_confidence:.2f}")
-        logger.info(f"Consensus Method: {result.consensus_method}")
-        logger.info(f"Processing Time: {result.processing_time:.2f}s")
-        logger.info(f"Flags for Review: {result.flags_for_review}")
+        logger.info("Success: %s", result.success)
+        logger.info("Overall Confidence: %.2f", result.overall_confidence)
+        logger.info("Consensus Method: %s", result.consensus_method)
+        logger.info("Processing Time: %.2fs", result.processing_time)
+        logger.info("Flags for Review: %s", result.flags_for_review)
 
         # Log agent results
         logger.info("\n=== Agent Results ===")
         for agent_result in result.agent_results:
-            logger.info(f"\n{agent_result.agent_name}:")
-            logger.info(f"  - Success: {agent_result.success}")
-            logger.info(f"  - Confidence: {agent_result.confidence_score:.2f}")
-            logger.info(f"  - Processing Time: {agent_result.processing_time:.2f}s")
+            logger.info("\n%s:", agent_result.agent_name)
+            logger.info("  - Success: %s", agent_result.success)
+            logger.info("  - Confidence: %.2f", agent_result.confidence_score)
+            logger.info("  - Processing Time: %.2fs", agent_result.processing_time)
             if agent_result.error_message:
-                logger.error(f"  - Error: {agent_result.error_message}")
+                logger.error("  - Error: %s", agent_result.error_message)
 
         # Log final data
         logger.info("\n=== Final Extracted Data ===")
         final_data = result.final_data
-        logger.info(f"Vendor: {final_data.get('vendor_name')}")
-        logger.info(f"Total Amount: ${final_data.get('total_amount')}")
-        logger.info(f"Category: {final_data.get('category')}")
-        logger.info(f"Tax Treatment: {final_data.get('tax_treatment')}")
-        logger.info(f"Audit Risk: {final_data.get('audit_risk')}")
+        logger.info("Vendor: %s", final_data.get("vendor_name"))
+        logger.info("Total Amount: $%s", final_data.get("total_amount"))
+        logger.info("Category: %s", final_data.get("category"))
+        logger.info("Tax Treatment: %s", final_data.get("tax_treatment"))
+        logger.info("Audit Risk: %s", final_data.get("audit_risk"))
 
     except Exception as e:
-        logger.error(f"Processing failed: {e}", exc_info=True)
+        logger.error("Processing failed: %s", e, exc_info=True)
 
     # Get performance report
     logger.info("\n=== Performance Report ===")
@@ -152,23 +152,26 @@ async def test_logging_system():
             correlation_id
         )
         if conversation:
-            logger.info(f"Conversation found: {conversation.correlation_id}")
-            logger.info(f"Start time: {conversation.start_time}")
-            logger.info(f"End time: {conversation.end_time}")
-            logger.info(f"Total entries: {len(conversation.entries)}")
+            logger.info("Conversation found: %s", conversation.correlation_id)
+            logger.info("Start time: %s", conversation.start_time)
+            logger.info("End time: %s", conversation.end_time)
+            logger.info("Total entries: %s", len(conversation.entries))
 
             # Log first few entries
             for i, entry in enumerate(conversation.entries[:5]):
                 logger.info(
-                    f"\nEntry {i+1}: {entry.agent_name} ({entry.role}) - "
-                    f"Confidence: {entry.confidence_score}"
+                    "\nEntry %d: %s (%s) - Confidence: %s",
+                    i + 1,
+                    entry.agent_name,
+                    entry.role,
+                    entry.confidence_score,
                 )
 
             # Check recent conversations
             recent = logging_integration.conversation_logger.get_recent_conversations(
                 limit=5
             )
-            logger.info(f"\nRecent conversations: {len(recent)}")
+            logger.info("\nRecent conversations: %s", len(recent))
 
     # Check AG2 session metrics
     if logging_integration.ag2_logger:
@@ -184,20 +187,23 @@ async def test_logging_system():
         agent_perf = logging_integration.performance_analytics.get_agent_performance()
         logger.info("\nAgent Performance:")
         for agent_name, stats in agent_perf.items():
-            logger.info(f"  {agent_name}:")
-            logger.info(f"    - Total requests: {stats.total_requests}")
-            logger.info(f"    - Success rate: {stats.success_rate:.2%}")
-            logger.info(f"    - Avg time: {stats.avg_processing_time:.2f}s")
-            logger.info(f"    - Avg confidence: {stats.avg_confidence_score:.2f}")
+            logger.info("  %s:", agent_name)
+            logger.info("    - Total requests: %s", stats.total_requests)
+            logger.info("    - Success rate: %.2f%%", stats.success_rate * 100)
+            logger.info("    - Avg time: %.2fs", stats.avg_processing_time)
+            logger.info("    - Avg confidence: %.2f", stats.avg_confidence_score)
 
         # System performance
         system_perf = logging_integration.performance_analytics.get_system_performance()
         logger.info("\nSystem Performance:")
-        logger.info(f"  - Total sessions: {system_perf.total_sessions}")
-        logger.info(
-            f"  - Success rate: {system_perf.successful_sessions / system_perf.total_sessions:.2%}"
+        logger.info("  - Total sessions: %s", system_perf.total_sessions)
+        success_rate = (
+            system_perf.successful_sessions / system_perf.total_sessions
+            if system_perf.total_sessions > 0
+            else 0
         )
-        logger.info(f"  - Avg session time: {system_perf.avg_session_time:.2f}s")
+        logger.info("  - Success rate: %.2f%%", success_rate * 100)
+        logger.info("  - Avg session time: %.2fs", system_perf.avg_session_time)
 
         # Token usage
         try:
@@ -208,12 +214,12 @@ async def test_logging_system():
                 logger.info("\nToken Usage by Model:")
                 logger.info(token_usage.to_string())
         except Exception as e:
-            logger.warning(f"Could not get token usage: {e}")
+            logger.warning("Could not get token usage: %s", e)
 
     logger.info("\n=== Logging Test Complete ===")
 
 
-async def test_monitoring_endpoints():
+async def test_monitoring_endpoints() -> None:
     """Test the monitoring API endpoints."""
     logger.info("\n\n=== Testing Monitoring Endpoints ===")
 
@@ -228,14 +234,16 @@ async def test_monitoring_endpoints():
             if response.status_code == 200:
                 logger.info("✓ Performance endpoint working")
                 data = response.json()
-                logger.info(f"  - Total sessions: {data.get('total_sessions', 0)}")
-                logger.info(f"  - Success rate: {data.get('success_rate', 0):.2%}")
+                logger.info("  - Total sessions: %s", data.get("total_sessions", 0))
+                logger.info(
+                    "  - Success rate: %.2%%", data.get("success_rate", 0) * 100
+                )
             else:
                 logger.warning(
-                    f"✗ Performance endpoint returned {response.status_code}"
+                    "✗ Performance endpoint returned %s", response.status_code
                 )
         except Exception as e:
-            logger.error(f"✗ Performance endpoint failed: {e}")
+            logger.error("✗ Performance endpoint failed: %s", e)
 
         # Test conversations endpoint
         try:
@@ -243,29 +251,28 @@ async def test_monitoring_endpoints():
             if response.status_code == 200:
                 logger.info("✓ Conversations endpoint working")
                 conversations = response.json()
-                logger.info(f"  - Found {len(conversations)} conversations")
+                logger.info("  - Found %s conversations", len(conversations))
             else:
                 logger.warning(
-                    f"✗ Conversations endpoint returned {response.status_code}"
+                    "✗ Conversations endpoint returned %s", response.status_code
                 )
         except Exception as e:
-            logger.error(f"✗ Conversations endpoint failed: {e}")
+            logger.error("✗ Conversations endpoint failed: %s", e)
 
         # Test agent performance endpoint
         try:
-            response = await client.get(
-                f"{base_url}/agents/DataExtractionAgent/performance?hours=1"
-            )
+            agent_url = f"{base_url}/agents/DataExtractionAgent/performance"
+            response = await client.get(f"{agent_url}?hours=1")
             if response.status_code == 200:
                 logger.info("✓ Agent performance endpoint working")
                 data = response.json()
-                logger.info(f"  - Total requests: {data.get('total_requests', 0)}")
+                logger.info("  - Total requests: %s", data.get("total_requests", 0))
             else:
                 logger.warning(
-                    f"✗ Agent performance endpoint returned {response.status_code}"
+                    "✗ Agent performance endpoint returned %s", response.status_code
                 )
         except Exception as e:
-            logger.error(f"✗ Agent performance endpoint failed: {e}")
+            logger.error("✗ Agent performance endpoint failed: %s", e)
 
         # Test error analysis endpoint
         try:
@@ -273,18 +280,18 @@ async def test_monitoring_endpoints():
             if response.status_code == 200:
                 logger.info("✓ Error analysis endpoint working")
                 data = response.json()
-                logger.info(f"  - Total errors: {data.get('total_errors', 0)}")
+                logger.info("  - Total errors: %s", data.get("total_errors", 0))
             else:
                 logger.warning(
-                    f"✗ Error analysis endpoint returned {response.status_code}"
+                    "✗ Error analysis endpoint returned %s", response.status_code
                 )
         except Exception as e:
-            logger.error(f"✗ Error analysis endpoint failed: {e}")
+            logger.error("✗ Error analysis endpoint failed: %s", e)
 
     logger.info("\n=== Monitoring Endpoint Test Complete ===")
 
 
-async def main():
+async def main() -> None:
     """Run all tests."""
     # Test the logging system
     await test_logging_system()
