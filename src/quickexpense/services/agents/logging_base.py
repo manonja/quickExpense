@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from quickexpense.services.agents.base import AgentResult, BaseReceiptAgent
 
 if TYPE_CHECKING:
+    from quickexpense.core.config import Settings
     from quickexpense.services.ag2_logging import AG2StructuredLogger
     from quickexpense.services.audit_logger import AuditLogger
     from quickexpense.services.conversation_logger import ConversationLogger
@@ -198,7 +199,7 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
         # Log processing start
         if self.ag2_logger and self.enable_detailed_logging:
             self.ag2_logger.trace_logger.debug(
-                f"[{self.name}] Starting internal processing"
+                "[%s] Starting internal processing", self.name
             )
 
         # Call the actual implementation
@@ -207,8 +208,9 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
         # Log processing steps
         if self.ag2_logger and self.enable_detailed_logging:
             self.ag2_logger.trace_logger.debug(
-                f"[{self.name}] Completed internal processing with "
-                f"{len(result)} result keys"
+                "[%s] Completed internal processing with %d result keys",
+                self.name,
+                len(result),
             )
 
         return result
@@ -233,7 +235,7 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
 
         if self.ag2_logger:
             self.ag2_logger.trace_logger.info(
-                f"[{self.name}] Started processing receipt"
+                "[%s] Started processing receipt", self.name
             )
 
     def _log_agent_success(
@@ -394,11 +396,11 @@ class LoggingBaseReceiptAgent(BaseReceiptAgent):
 def create_logging_agent(
     name: str,
     agent_class: type[BaseReceiptAgent],
-    settings: Any,
+    settings: Settings,  # noqa: ARG001
     ag2_logger: AG2StructuredLogger | None = None,
     conversation_logger: ConversationLogger | None = None,
     audit_logger: AuditLogger | None = None,
-    **kwargs: Any,
+    **kwargs: Any,  # noqa: ANN401  # Required for flexibility
 ) -> LoggingBaseReceiptAgent:
     """Factory function to create agents with logging capabilities.
 
@@ -415,7 +417,7 @@ def create_logging_agent(
         Agent instance with logging capabilities
     """
 
-    class LoggingAgent(LoggingBaseReceiptAgent, agent_class):
+    class LoggingAgent(LoggingBaseReceiptAgent, agent_class):  # type: ignore[misc, valid-type]  # pyright: ignore[reportAbstractUsage]
         """Dynamic class combining logging capabilities with specific agent."""
 
         def __init__(self) -> None:
@@ -428,6 +430,6 @@ def create_logging_agent(
                 conversation_logger=conversation_logger,
                 audit_logger=audit_logger,
             )
-            agent_class.__init__(self, settings, **kwargs)
+            agent_class.__init__(self, name, **kwargs)
 
     return LoggingAgent()

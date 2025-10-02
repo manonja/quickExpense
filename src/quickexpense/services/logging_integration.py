@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from quickexpense.core.config import get_settings
 from quickexpense.services.ag2_logging import create_ag2_logger
 from quickexpense.services.agents.logging_orchestrator import (
+    LoggingAgentOrchestrator,
     create_logging_orchestrator,
 )
 from quickexpense.services.agents.logging_wrapper import LoggingAgentWrapper
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
         DataExtractionAgent,
         TaxCalculatorAgent,
     )
+    from quickexpense.services.agents.base import BaseReceiptAgent
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ logger = logging.getLogger(__name__)
 class LoggingIntegration:
     """Central integration point for all logging components."""
 
-    def __init__(self, correlation_id: str | None = None):
+    def __init__(self, correlation_id: str | None = None) -> None:
         """Initialize logging integration."""
         self.settings = get_settings()
         self.correlation_id = correlation_id
@@ -128,11 +130,11 @@ class LoggingIntegration:
 
     def create_logging_orchestrator(
         self,
-        data_extraction_agent: Any,
-        cra_rules_agent: Any,
-        tax_calculator_agent: Any,
+        data_extraction_agent: BaseReceiptAgent,
+        cra_rules_agent: BaseReceiptAgent,
+        tax_calculator_agent: BaseReceiptAgent,
         consensus_threshold: float = 0.75,
-    ) -> Any:
+    ) -> LoggingAgentOrchestrator:
         """Create orchestrator with logging capabilities."""
         if not any(
             [
@@ -144,9 +146,9 @@ class LoggingIntegration:
             ]
         ):
             # Use regular orchestrator if no logging features are enabled
-            from quickexpense.services.agents import AgentOrchestrator
+            from quickexpense.services.agents.orchestrator import AgentOrchestrator
 
-            return AgentOrchestrator(
+            return AgentOrchestrator(  # type: ignore[return-value]
                 data_extraction_agent=data_extraction_agent,
                 cra_rules_agent=cra_rules_agent,
                 tax_calculator_agent=tax_calculator_agent,

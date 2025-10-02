@@ -311,7 +311,7 @@ async def _process_file_content(file: UploadFile) -> str:
 
 
 @router.post("/upload-receipt")
-async def upload_receipt(  # noqa: C901, PLR0913, PLR0912, PLR0915
+async def upload_receipt(  # noqa: C901, PLR0912, PLR0915
     gemini_service: GeminiServiceDep,
     quickbooks_service: QuickBooksServiceDep,
     business_rules_engine: BusinessRulesEngineDep,

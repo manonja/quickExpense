@@ -8,9 +8,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .base import AgentResult, BaseReceiptAgent
+from .base import AgentResult, BaseReceiptAgent  # noqa: TCH001
 
 logger = logging.getLogger(__name__)
+
+# Constants
+LARGE_EXPENSE_THRESHOLD = 1000  # Dollar amount threshold for flagging large expenses
 
 
 class ConsensusResult(BaseModel):
@@ -176,7 +179,7 @@ class AgentOrchestrator:
     def _merge_agent_data(
         self,
         successful_agents: list[AgentResult],
-        context: dict[str, Any],
+        context: dict[str, Any],  # noqa: ARG002
     ) -> dict[str, Any]:
         """Merge data from successful agents into final result.
 
@@ -257,7 +260,8 @@ class AgentOrchestrator:
         # Low overall confidence
         if overall_confidence < self.consensus_threshold:
             flags.append(
-                f"Low confidence score ({overall_confidence:.2f} < {self.consensus_threshold})"
+                f"Low confidence ({overall_confidence:.2f} < "
+                f"{self.consensus_threshold})"
             )
 
         # Failed agents
@@ -283,7 +287,10 @@ class AgentOrchestrator:
         )
         if extraction_agent and extraction_agent.success:
             total_amount = extraction_agent.data.get("total_amount", 0)
-            if isinstance(total_amount, (int, float)) and total_amount > 1000:
+            if (
+                isinstance(total_amount, int | float)
+                and total_amount > LARGE_EXPENSE_THRESHOLD
+            ):
                 flags.append(f"Large expense amount (${total_amount:.2f})")
 
         return flags

@@ -150,7 +150,7 @@ class CRArulesAgent(BaseReceiptAgent):
             # Ensure we have all required fields
             self._validate_categorization_result(refined_data)
 
-            return refined_data
+            return refined_data  # type: ignore[no-any-return]
 
         except Exception as e:  # noqa: BLE001
             self.logger.warning(
@@ -202,7 +202,7 @@ class CRArulesAgent(BaseReceiptAgent):
                     return self._rule_match_to_dict(fallback_rule)
 
             self._validate_categorization_result(categorization_data)
-            return categorization_data
+            return categorization_data  # type: ignore[no-any-return]
 
         except Exception as e:  # noqa: BLE001
             # Return fallback categorization on error
@@ -331,8 +331,10 @@ Return ONLY the JSON object.
             return "None"
 
         formatted = [
-            f"- {match.rule.category} ({match.confidence_score:.2f}): "
-            f"{match.rule.description}"
+            (
+                f"- {match.rule.category} ({match.confidence_score:.2f}): "
+                f"{match.rule.description}"
+            )
             for match in matches[:4]  # Limit to 4 alternatives
         ]
         return "\n".join(formatted)
@@ -380,7 +382,9 @@ Return ONLY the JSON object.
         # Validate deductibility percentage
         deductibility = data.get("deductibility_percentage")
         try:
-            deductibility_val = float(deductibility)
+            deductibility_val = (
+                float(deductibility) if deductibility is not None else 0.0
+            )
             if not 0 <= deductibility_val <= 100:  # noqa: PLR2004
                 msg = f"Deductibility percentage must be 0-100, got {deductibility_val}"
                 raise ValueError(msg)

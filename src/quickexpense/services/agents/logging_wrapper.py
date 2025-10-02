@@ -23,6 +23,7 @@ class LoggingAgentWrapper:
         ag2_logger: AG2StructuredLogger | None = None,
         conversation_logger: ConversationLogger | None = None,
         audit_logger: AuditLogger | None = None,
+        *,
         enable_detailed_logging: bool = True,
     ) -> None:
         """Initialize the logging wrapper.
@@ -134,7 +135,10 @@ class LoggingAgentWrapper:
                     self.conversation_logger.log_agent_message(
                         correlation_id=self.correlation_id,
                         agent_name=result.agent_name,
-                        content=f"Result: success={result.success}, confidence={result.confidence_score}",
+                        content=(
+                            f"Result: success={result.success}, "
+                            f"confidence={result.confidence_score}"
+                        ),
                         role="assistant",
                         confidence_score=result.confidence_score,
                         processing_time=result.processing_time,
@@ -200,7 +204,7 @@ class LoggingAgentWrapper:
 
         if self.ag2_logger and hasattr(self.ag2_logger, "trace_logger"):
             self.ag2_logger.trace_logger.info(
-                f"[{self.name}] Started processing receipt"
+                "[%s] Started processing receipt", self.name
             )
 
     def _log_agent_success(
@@ -334,7 +338,7 @@ class LoggingAgentWrapper:
             )
 
     # Delegate all other attributes to the wrapped agent
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(self, name: str) -> Any:  # noqa: ANN401  # Dynamic proxy pattern
         """Delegate attribute access to the wrapped agent."""
         return getattr(self._wrapped_agent, name)
 
@@ -359,4 +363,4 @@ class LoggingAgentWrapper:
 
     def _get_metadata(self, result_data: dict[str, Any]) -> dict[str, Any]:
         """Delegate to wrapped agent."""
-        return self._wrapped_agent._get_metadata(result_data)
+        return self._wrapped_agent._get_metadata(result_data)  # noqa: SLF001

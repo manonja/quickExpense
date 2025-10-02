@@ -7,6 +7,7 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from quickexpense.services.ag2_logging import ConsensusDecisionData
 from quickexpense.services.agents.orchestrator import (
     AgentOrchestrator,
     ConsensusResult,
@@ -14,7 +15,7 @@ from quickexpense.services.agents.orchestrator import (
 
 if TYPE_CHECKING:
     from quickexpense.services.ag2_logging import AG2StructuredLogger
-    from quickexpense.services.agents.base import BaseReceiptAgent
+    from quickexpense.services.agents.base import AgentResult, BaseReceiptAgent
     from quickexpense.services.audit_logger import AuditLogger
     from quickexpense.services.conversation_logger import ConversationLogger
 
@@ -112,9 +113,10 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
 
             # Log user input
             if self.current_correlation_id:
+                context_str = additional_context or "None"
                 self.conversation_logger.log_user_input(
                     correlation_id=self.current_correlation_id,
-                    content=f"Process receipt with context: {additional_context or 'None'}",
+                    content=f"Process receipt with context: {context_str}",
                     session_id=self.current_session_id,
                 )
 
@@ -129,7 +131,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
             "session_id": self.current_session_id,
         }
 
-        agent_results = []
+        agent_results: list[AgentResult] = []
 
         # Phase 1: Data Extraction
         self._log_phase_start("DataExtraction", self.data_extraction_agent.name)
@@ -143,9 +145,9 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         self._log_phase_complete(
             "DataExtraction",
             self.data_extraction_agent.name,
-            extraction_result.success,
-            extraction_result.confidence_score,
-            extraction_result.processing_time,
+            success=extraction_result.success,
+            confidence=extraction_result.confidence_score,
+            processing_time=extraction_result.processing_time,
         )
 
         if not extraction_result.success:
@@ -180,9 +182,9 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         self._log_phase_complete(
             "CRArulesAnalysis",
             self.cra_rules_agent.name,
-            cra_result.success,
-            cra_result.confidence_score,
-            cra_result.processing_time,
+            success=cra_result.success,
+            confidence=cra_result.confidence_score,
+            processing_time=cra_result.processing_time,
         )
 
         # Log inter-agent communication
@@ -207,9 +209,9 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         self._log_phase_complete(
             "TaxCalculation",
             self.tax_calculator_agent.name,
-            tax_result.success,
-            tax_result.confidence_score,
-            tax_result.processing_time,
+            success=tax_result.success,
+            confidence=tax_result.confidence_score,
+            processing_time=tax_result.processing_time,
         )
 
         # Calculate consensus
@@ -225,7 +227,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
 
     def _calculate_consensus_with_logging(
         self,
-        agent_results: list,
+        agent_results: list[AgentResult],
         context: dict[str, Any],
         total_processing_time: float,
     ) -> ConsensusResult:
@@ -244,7 +246,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
                 agent_results, consensus
             )
 
-            self.ag2_logger.log_consensus_decision(
+            decision_data = ConsensusDecisionData(
                 overall_confidence=consensus.overall_confidence,
                 consensus_method=consensus.consensus_method,
                 final_category=consensus.final_data.get("category", "Unknown"),
@@ -252,11 +254,12 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
                     "tax_treatment", "Unknown"
                 ),
                 individual_scores=individual_scores,
-                requires_review=len(consensus.flags_for_review) > 0,
                 review_flags=consensus.flags_for_review,
                 processing_time=total_processing_time,
+                requires_review=len(consensus.flags_for_review) > 0,
                 decision_rationale=decision_rationale,
             )
+            self.ag2_logger.log_consensus_decision(decision_data)
 
         self._log_orchestration_complete(consensus)
 
@@ -292,13 +295,13 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
 
         if self.ag2_logger:
             self.ag2_logger.trace_logger.info(
-                f"Orchestrator starting receipt processing "
-                f"(correlation_id: {self.current_correlation_id})"
+                "Orchestrator starting receipt processing (correlation_id: %s)",
+                self.current_correlation_id,
             )
 
     def _log_phase_start(self, phase_name: str, agent_name: str) -> None:
         """Log the start of a processing phase."""
-        if self.conversation_logger:
+        if self.conversation_logger and self.current_correlation_id:
             self.conversation_logger.log_system_message(
                 correlation_id=self.current_correlation_id,
                 content=f"Starting phase: {phase_name} with agent {agent_name}",
@@ -312,6 +315,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         self,
         phase_name: str,
         agent_name: str,
+        *,
         success: bool,
         confidence: float,
         processing_time: float,
@@ -335,8 +339,11 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
             )
 
         logger.info(
-            f"Phase {phase_name} {status} "
-            f"(confidence: {confidence:.2f}, time: {processing_time:.2f}s)"
+            "Phase %s %s (confidence: %.2f, time: %.2fs)",
+            phase_name,
+            status,
+            confidence,
+            processing_time,
         )
 
     def _log_inter_agent_handoff(
@@ -366,7 +373,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
                 confidence=confidence,
             )
 
-        if self.conversation_logger:
+        if self.conversation_logger and self.current_correlation_id:
             self.conversation_logger.log_system_message(
                 correlation_id=self.current_correlation_id,
                 content=f"{sender} → {recipient}: {message}",
@@ -412,7 +419,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
 
     def _generate_consensus_rationale(
         self,
-        agent_results: list,
+        agent_results: list[AgentResult],
         consensus: ConsensusResult,
     ) -> str:
         """Generate a rationale for the consensus decision."""
@@ -484,14 +491,15 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
                 full_data=result.final_data,
             )
 
-            self.conversation_logger.end_conversation(
-                correlation_id=self.current_correlation_id,
-                final_result=response,
-                metadata={
-                    "session_id": self.current_session_id,
-                    "agent_count": len(result.agent_results),
-                },
-            )
+            if self.current_correlation_id:
+                self.conversation_logger.end_conversation(
+                    correlation_id=self.current_correlation_id,
+                    final_result=response,
+                    metadata={
+                        "session_id": self.current_session_id,
+                        "agent_count": len(result.agent_results),
+                    },
+                )
 
         # Get final metrics from AG2 logger
         if self.ag2_logger:

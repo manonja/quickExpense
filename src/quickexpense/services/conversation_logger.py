@@ -94,20 +94,20 @@ class ConversationLogger:
 
             # Indexes for performance
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_correlation_id "
-                "ON conversation_entries(correlation_id)"
+                "CREATE INDEX IF NOT EXISTS idx_correlation_id "  # noqa: ISC003
+                + "ON conversation_entries(correlation_id)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_session_id "
-                "ON conversation_entries(session_id)"
+                "CREATE INDEX IF NOT EXISTS idx_session_id "  # noqa: ISC003
+                + "ON conversation_entries(session_id)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_timestamp "
-                "ON conversation_entries(timestamp)"
+                "CREATE INDEX IF NOT EXISTS idx_timestamp "  # noqa: ISC003
+                + "ON conversation_entries(timestamp)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_agent_name "
-                "ON conversation_entries(agent_name)"
+                "CREATE INDEX IF NOT EXISTS idx_agent_name "  # noqa: ISC003
+                + "ON conversation_entries(agent_name)"
             )
 
             conn.commit()
@@ -320,21 +320,20 @@ class ConversationLogger:
                 (correlation_id,),
             )
 
-            entries = []
-            for row in cursor:
-                entries.append(
-                    ConversationEntry(
-                        correlation_id=correlation_id,
-                        session_id=session_id,
-                        timestamp=datetime.fromisoformat(row[0]),
-                        agent_name=row[1],
-                        role=row[2],
-                        content=row[3],
-                        confidence_score=row[4],
-                        processing_time=row[5],
-                        metadata=json.loads(row[6]) if row[6] else {},
-                    )
+            entries = [
+                ConversationEntry(
+                    correlation_id=correlation_id,
+                    session_id=session_id,
+                    timestamp=datetime.fromisoformat(row[0]),
+                    agent_name=row[1],
+                    role=row[2],
+                    content=row[3],
+                    confidence_score=row[4],
+                    processing_time=row[5],
+                    metadata=json.loads(row[6]) if row[6] else {},
                 )
+                for row in cursor
+            ]
 
             return ConversationHistory(
                 correlation_id=correlation_id,
@@ -377,20 +376,17 @@ class ConversationLogger:
 
             cursor = conn.execute(query, params)
 
-            conversations = []
-            for row in cursor:
-                conversations.append(
-                    {
-                        "correlation_id": row[0],
-                        "session_id": row[1],
-                        "start_time": row[2],
-                        "end_time": row[3],
-                        "entry_count": row[4],
-                        "avg_confidence": row[5],
-                    }
-                )
-
-            return conversations
+            return [
+                {
+                    "correlation_id": row[0],
+                    "session_id": row[1],
+                    "start_time": row[2],
+                    "end_time": row[3],
+                    "entry_count": row[4],
+                    "avg_confidence": row[5],
+                }
+                for row in cursor
+            ]
 
     def search_conversations(
         self,
@@ -428,19 +424,16 @@ class ConversationLogger:
 
             cursor = conn.execute(query, params)
 
-            results = []
-            for row in cursor:
-                results.append(
-                    {
-                        "correlation_id": row[0],
-                        "start_time": row[1],
-                        "agent_name": row[2],
-                        "content": row[3],
-                        "confidence_score": row[4],
-                    }
-                )
-
-            return results
+            return [
+                {
+                    "correlation_id": row[0],
+                    "start_time": row[1],
+                    "agent_name": row[2],
+                    "content": row[3],
+                    "confidence_score": row[4],
+                }
+                for row in cursor
+            ]
 
     def get_conversation_stats(self) -> dict[str, Any]:
         """Get overall conversation statistics."""

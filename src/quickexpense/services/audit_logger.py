@@ -67,7 +67,7 @@ class AuditLogger:
         self.logger.info("Expense processing started", extra=audit_record)
         return correlation_id
 
-    def log_gemini_extraction(  # noqa: PLR0913
+    def log_gemini_extraction(
         self,
         correlation_id: str,
         processing_time: float,
@@ -398,17 +398,28 @@ class AuditLogger:
             self.logger.info(message, extra=context)
 
 
-# Global instance for convenience
-_audit_logger: AuditLogger | None = None
+class AuditLoggerManager:
+    """Manager for singleton audit logger instance."""
+
+    _audit_logger: AuditLogger | None = None
+
+    @classmethod
+    def get_logger(cls) -> AuditLogger:
+        """Get the singleton audit logger instance.
+
+        Returns:
+            AuditLogger instance
+        """
+        if cls._audit_logger is None:
+            cls._audit_logger = AuditLogger()
+        return cls._audit_logger
 
 
+# Backward compatibility function
 def get_audit_logger() -> AuditLogger:
     """Get the global audit logger instance.
 
     Returns:
         AuditLogger instance
     """
-    global _audit_logger
-    if _audit_logger is None:
-        _audit_logger = AuditLogger()
-    return _audit_logger
+    return AuditLoggerManager.get_logger()

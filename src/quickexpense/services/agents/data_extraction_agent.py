@@ -269,7 +269,7 @@ Return ONLY the JSON object, no additional text or explanations.
             completeness_bonus -= 0.1
 
         final_confidence = min(base_confidence + completeness_bonus, 1.0)
-        return max(final_confidence, 0.0)
+        return max(final_confidence, 0.0)  # type: ignore[no-any-return]
 
     def _get_extraction_system_message(self) -> str:
         """Get the system message for the autogen agent."""
@@ -343,12 +343,12 @@ Return the corrected/validated JSON data only.
             try:
                 validated_data = json.loads(last_message)
                 self.logger.info("Data validated by TogetherAI agent")
-                return validated_data
+                return validated_data  # type: ignore[no-any-return]
             except json.JSONDecodeError:
                 # If validation fails, return original data
                 self.logger.warning("Agent validation failed, using original data")
                 return extracted_data
 
-        except Exception as e:
-            self.logger.warning("Agent validation error: %s", e)
+        except Exception as e:  # noqa: BLE001 # Intentional: agent robustness
+            self.logger.warning("Agent validation error: %s", e, exc_info=True)
             return extracted_data

@@ -178,8 +178,12 @@ class LLMProviderFactory:
             # TogetherAI model recommendations per agent based on optimal performance
             model_map = {
                 "data_extraction": "microsoft/phi-2",  # Efficient for data extraction
-                "cra_rules": "meta-llama/Llama-3.3-70B-Instruct-Turbo",  # Legal reasoning
-                "tax_calculator": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",  # Default
+                "cra_rules": (
+                    "meta-llama/Llama-3.3-70B-Instruct-Turbo"  # Legal reasoning
+                ),
+                "tax_calculator": (
+                    "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"  # Default
+                ),
             }
             return model_map.get(agent_type, settings.together_model)
         # Use default Gemini model for all agents

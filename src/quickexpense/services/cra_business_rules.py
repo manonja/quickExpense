@@ -77,7 +77,7 @@ class CRABusinessRulesService:
                 raise FileNotFoundError(msg)
 
             # Load CSV with pandas for better handling
-            df = pd.read_csv(self.rules_csv_path)
+            rules_df = pd.read_csv(self.rules_csv_path)
 
             # Validate required columns
             required_columns = {
@@ -92,14 +92,14 @@ class CRABusinessRulesService:
                 "confidence_threshold",
             }
 
-            missing_columns = required_columns - set(df.columns)
+            missing_columns = required_columns - set(rules_df.columns)
             if missing_columns:
                 msg = f"Missing required columns in CSV: {missing_columns}"
                 raise ValueError(msg)
 
             # Convert to CRARule objects
             self.rules = []
-            for _, row in df.iterrows():
+            for _, row in rules_df.iterrows():
                 try:
                     rule = CRARule(
                         category=str(row["category"]),
@@ -113,8 +113,13 @@ class CRABusinessRulesService:
                         confidence_threshold=float(row["confidence_threshold"]),
                     )
                     self.rules.append(rule)
-                except Exception as e:
-                    logger.warning("Failed to parse rule row %s: %s", row.to_dict(), e)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.warning(
+                        "Failed to parse rule row %s: %s",
+                        row.to_dict(),
+                        e,
+                        exc_info=True,
+                    )
 
             logger.info(
                 "Loaded %d CRA business rules from %s",
@@ -122,8 +127,11 @@ class CRABusinessRulesService:
                 self.rules_csv_path,
             )
 
-        except Exception as e:
-            logger.error("Failed to load CRA rules from %s: %s", self.rules_csv_path, e)
+        except (FileNotFoundError, ValueError, pd.errors.ParserError):
+            logger.exception(
+                "Failed to load CRA rules from %s",
+                self.rules_csv_path,
+            )
             # Load fallback rule for unknown expenses
             self.rules = [
                 CRARule(
@@ -143,7 +151,7 @@ class CRABusinessRulesService:
         self,
         vendor_name: str,
         line_item_descriptions: list[str],
-        amount: float | None = None,
+        amount: float | None = None,  # noqa: ARG002
     ) -> list[RuleMatchResult]:
         """Find rules that match the given expense information.
 

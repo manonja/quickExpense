@@ -8,6 +8,7 @@ import sqlite3
 from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -19,16 +20,36 @@ if TYPE_CHECKING:
     from quickexpense.services.audit_logger import AuditLogger
 
 # AG2/AutoGen native loggers
-try:
-    from autogen import EVENT_LOGGER_NAME, TRACE_LOGGER_NAME
+ag2_available = False
+event_logger_name = "ag2.event"
+trace_logger_name = "ag2.trace"
 
-    AG2_AVAILABLE = True
+try:
+    from autogen import EVENT_LOGGER_NAME as AG2_EVENT_LOGGER_NAME
+    from autogen import TRACE_LOGGER_NAME as AG2_TRACE_LOGGER_NAME
+
+    ag2_available = True
+    event_logger_name = AG2_EVENT_LOGGER_NAME
+    trace_logger_name = AG2_TRACE_LOGGER_NAME
 except ImportError:
-    AG2_AVAILABLE = False
-    EVENT_LOGGER_NAME = "ag2.event"
-    TRACE_LOGGER_NAME = "ag2.trace"
+    pass
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ConsensusDecisionData:
+    """Data class for consensus decision logging parameters."""
+
+    overall_confidence: float
+    consensus_method: str
+    final_category: str
+    final_tax_treatment: str
+    individual_scores: dict[str, float]
+    review_flags: list[str]
+    processing_time: float
+    requires_review: bool
+    decision_rationale: str = ""
 
 
 class AgentDecisionEvent(BaseModel):
@@ -110,8 +131,8 @@ class AG2StructuredLogger:
         """Initialize AG2 structured logger."""
         self.audit_logger = audit_logger
         self.db_path = db_path or Path("data/agent_logs.db")
-        self.enable_ag2_native = enable_ag2_native and AG2_AVAILABLE
-        self.enable_runtime_logging = enable_runtime_logging and AG2_AVAILABLE
+        self.enable_ag2_native = enable_ag2_native and ag2_available
+        self.enable_runtime_logging = enable_runtime_logging and ag2_available
 
         # Current session tracking
         self.current_session_id: str | None = None
@@ -133,7 +154,7 @@ class AG2StructuredLogger:
     def _setup_ag2_native_logging(self) -> None:
         """Set up AG2's native trace and event logging."""
         # Trace logger for human-readable debug info
-        self.trace_logger = logging.getLogger(TRACE_LOGGER_NAME)
+        self.trace_logger = logging.getLogger(trace_logger_name)
         if not self.trace_logger.handlers:
             handler = logging.StreamHandler()
             handler.setFormatter(
@@ -145,7 +166,7 @@ class AG2StructuredLogger:
             self.trace_logger.setLevel(logging.DEBUG)
 
         # Event logger for structured machine-readable events
-        self.event_logger = logging.getLogger(EVENT_LOGGER_NAME)
+        self.event_logger = logging.getLogger(event_logger_name)
         if not self.event_logger.handlers:
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter("%(message)s"))  # JSON output
@@ -257,20 +278,11 @@ class AG2StructuredLogger:
 
     def log_consensus_decision(
         self,
-        overall_confidence: float,
-        consensus_method: str,
-        final_category: str,
-        final_tax_treatment: str,
-        individual_scores: dict[str, float],
-        review_flags: list[str],
-        processing_time: float,
-        *,
-        requires_review: bool,
-        decision_rationale: str = "",
+        decision_data: ConsensusDecisionData,
     ) -> None:
         """Log the final consensus decision."""
         # Calculate agreement rate
-        scores = list(individual_scores.values())
+        scores = list(decision_data.individual_scores.values())
         avg_score = sum(scores) / len(scores) if scores else 0
         agreement_rate = (
             1.0
@@ -283,16 +295,16 @@ class AG2StructuredLogger:
         event = ConsensusDecisionEvent(
             correlation_id=self.current_correlation_id or "unknown",
             session_id=self.current_session_id,
-            overall_confidence=overall_confidence,
-            consensus_method=consensus_method,
+            overall_confidence=decision_data.overall_confidence,
+            consensus_method=decision_data.consensus_method,
             agent_agreement_rate=agreement_rate,
-            final_category=final_category,
-            final_tax_treatment=final_tax_treatment,
-            requires_review=requires_review,
-            review_flags=review_flags,
-            individual_scores=individual_scores,
-            decision_rationale=decision_rationale[:500],
-            processing_time=processing_time,
+            final_category=decision_data.final_category,
+            final_tax_treatment=decision_data.final_tax_treatment,
+            requires_review=decision_data.requires_review,
+            review_flags=decision_data.review_flags,
+            individual_scores=decision_data.individual_scores,
+            decision_rationale=decision_data.decision_rationale[:500],
+            processing_time=decision_data.processing_time,
         )
 
         self._log_event(event)

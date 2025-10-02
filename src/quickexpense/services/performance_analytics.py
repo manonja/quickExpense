@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pandas as pd
 from pydantic import BaseModel, Field
@@ -65,7 +65,7 @@ class PerformanceAnalytics:
     """Analytics engine for multi-agent system performance."""
 
     # Model pricing (per 1K tokens) - Update as needed
-    MODEL_PRICING = {
+    MODEL_PRICING: ClassVar[dict[str, dict[str, float]]] = {
         "gemini-2.0-flash-exp": {"input": 0.0001, "output": 0.0004},
         "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo": {
             "input": 0.0018,
@@ -80,7 +80,7 @@ class PerformanceAnalytics:
         self,
         conversation_db_path: Path | None = None,
         ag2_runtime_db_path: Path | None = None,
-    ):
+    ) -> None:
         """Initialize analytics engine."""
         self.conversation_db_path = conversation_db_path or Path(
             "data/conversation_history.db"
@@ -102,8 +102,10 @@ class PerformanceAnalytics:
                 SELECT
                     agent_name,
                     COUNT(*) as total_requests,
-                    SUM(CASE WHEN metadata LIKE '%"success": true%' THEN 1 ELSE 0 END) as successful,
-                    SUM(CASE WHEN metadata LIKE '%"error_type": "timeout"%' THEN 1 ELSE 0 END) as timeouts,
+                    SUM(CASE WHEN metadata LIKE '%"success": true%' THEN 1
+                        ELSE 0 END) as successful,
+                    SUM(CASE WHEN metadata LIKE '%"error_type": "timeout"%' THEN 1
+                        ELSE 0 END) as timeouts,
                     AVG(processing_time) as avg_time,
                     MIN(processing_time) as min_time,
                     MAX(processing_time) as max_time,
@@ -112,7 +114,7 @@ class PerformanceAnalytics:
                 WHERE role = 'assistant'
             """
 
-            params = []
+            params: list[Any] = []
             conditions = []
 
             if agent_name:
@@ -155,10 +157,14 @@ class PerformanceAnalytics:
 
         # Add token usage and cost data
         token_stats = self._get_token_usage_by_agent(start_date, end_date)
-        for agent_name, agent_stats in stats.items():
-            if agent_name in token_stats:
-                agent_stats.total_tokens_used = token_stats[agent_name]["total_tokens"]
-                agent_stats.estimated_cost = token_stats[agent_name]["estimated_cost"]
+        for agent_name_key, agent_stats in stats.items():
+            if agent_name_key in token_stats:
+                agent_stats.total_tokens_used = token_stats[agent_name_key][
+                    "total_tokens"
+                ]
+                agent_stats.estimated_cost = token_stats[agent_name_key][
+                    "estimated_cost"
+                ]
 
         return stats
 
@@ -178,7 +184,8 @@ class PerformanceAnalytics:
                     SUM(CASE WHEN final_result IS NOT NULL
                         AND json_extract(final_result, '$.success') = 1
                         THEN 1 ELSE 0 END) as successful_sessions,
-                    AVG(JULIANDAY(end_time) - JULIANDAY(start_time)) * 86400 as avg_duration,
+                    AVG(JULIANDAY(end_time) - JULIANDAY(start_time)) * 86400
+                        as avg_duration,
                     AVG(CASE WHEN final_result IS NOT NULL
                         THEN json_extract(final_result, '$.overall_confidence')
                         ELSE NULL END) as avg_confidence
@@ -186,7 +193,7 @@ class PerformanceAnalytics:
                 WHERE 1=1
             """
 
-            params = []
+            params: list[Any] = []
             if start_date:
                 query += " AND start_time >= ?"
                 params.append(start_date.isoformat())
@@ -206,7 +213,7 @@ class PerformanceAnalytics:
                 stats.avg_confidence_score = row[3] or 0
 
         # Get agent statistics
-        stats.agent_stats = self.get_agent_performance(start_date, end_date)
+        stats.agent_stats = self.get_agent_performance(None, start_date, end_date)
 
         # Get hourly load distribution
         stats.hourly_load = self._get_hourly_load_distribution(start_date, end_date)
@@ -223,8 +230,8 @@ class PerformanceAnalytics:
         stats.total_tokens_used = sum(
             agent.total_tokens_used for agent in stats.agent_stats.values()
         )
-        stats.total_estimated_cost = sum(
-            agent.estimated_cost for agent in stats.agent_stats.values()
+        stats.total_estimated_cost = Decimal(
+            sum(agent.estimated_cost for agent in stats.agent_stats.values())
         )
 
         return stats
@@ -246,13 +253,14 @@ class PerformanceAnalytics:
                     json_extract(request, '$.model') as model,
                     json_extract(request, '$.messages[0].name') as agent_name,
                     json_extract(response, '$.usage.prompt_tokens') as prompt_tokens,
-                    json_extract(response, '$.usage.completion_tokens') as completion_tokens,
+                    json_extract(response, '$.usage.completion_tokens')
+                        as completion_tokens,
                     json_extract(response, '$.usage.total_tokens') as total_tokens
                 FROM chat_completions
                 WHERE total_tokens IS NOT NULL
             """
 
-            params = []
+            params: list[Any] = []
             if start_date:
                 query += " AND timestamp >= ?"
                 params.append(start_date.isoformat())
@@ -261,21 +269,23 @@ class PerformanceAnalytics:
                 query += " AND timestamp <= ?"
                 params.append(end_date.isoformat())
 
-            df = pd.read_sql_query(query, conn, params=params)
+            usage_df = pd.read_sql_query(query, conn, params=list(params))
 
-            if df.empty:
-                return df
+            if usage_df.empty:
+                return usage_df
 
             # Parse timestamp
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            usage_df["timestamp"] = pd.to_datetime(usage_df["timestamp"])
 
             # Calculate costs
-            df["estimated_cost"] = df.apply(self._calculate_token_cost, axis=1)
+            usage_df["estimated_cost"] = usage_df.apply(
+                self._calculate_token_cost, axis=1
+            )
 
             # Group by requested dimension
             if group_by == "model":
                 grouped = (
-                    df.groupby("model")
+                    usage_df.groupby("model")
                     .agg(
                         {
                             "prompt_tokens": "sum",
@@ -290,7 +300,7 @@ class PerformanceAnalytics:
 
             elif group_by == "agent":
                 grouped = (
-                    df.groupby("agent_name")
+                    usage_df.groupby("agent_name")
                     .agg(
                         {
                             "prompt_tokens": "sum",
@@ -304,9 +314,9 @@ class PerformanceAnalytics:
                 )
 
             elif group_by == "day":
-                df["date"] = df["timestamp"].dt.date
+                usage_df["date"] = usage_df["timestamp"].dt.date
                 grouped = (
-                    df.groupby("date")
+                    usage_df.groupby("date")
                     .agg(
                         {
                             "prompt_tokens": "sum",
@@ -320,7 +330,7 @@ class PerformanceAnalytics:
                 )
 
             else:
-                grouped = df
+                grouped = usage_df
 
             return grouped
 
@@ -346,7 +356,10 @@ class PerformanceAnalytics:
                     AND timestamp <= ?
             """
 
-            params = [start_date.isoformat(), end_date.isoformat()]
+            params: list[Any] = [
+                start_date.isoformat(),
+                end_date.isoformat(),
+            ]
 
             if agent_name:
                 query += " AND agent_name = ?"
@@ -354,22 +367,20 @@ class PerformanceAnalytics:
 
             query += " ORDER BY timestamp"
 
-            df = pd.read_sql_query(query, conn, params=params)
+            confidence_df = pd.read_sql_query(query, conn, params=list(params))
 
-            if not df.empty:
-                df["timestamp"] = pd.to_datetime(df["timestamp"])
-                df["hour"] = df["timestamp"].dt.floor("H")
+            if not confidence_df.empty:
+                confidence_df["timestamp"] = pd.to_datetime(confidence_df["timestamp"])
+                confidence_df["hour"] = confidence_df["timestamp"].dt.floor("H")
 
                 # Calculate hourly averages
-                trends = (
-                    df.groupby(["hour", "agent_name"])["confidence_score"]
+                return (
+                    confidence_df.groupby(["hour", "agent_name"])["confidence_score"]
                     .agg(["mean", "std", "count"])
                     .reset_index()
                 )
 
-                return trends
-
-            return df
+            return confidence_df
 
     def get_error_analysis(
         self,
@@ -389,7 +400,7 @@ class PerformanceAnalytics:
                 WHERE metadata LIKE '%"error"%'
             """
 
-            params = []
+            params: list[Any] = []
             if start_date:
                 query += " AND timestamp >= ?"
                 params.append(start_date.isoformat())
@@ -402,7 +413,9 @@ class PerformanceAnalytics:
 
             cursor = conn.execute(query, params)
 
-            errors = defaultdict(lambda: defaultdict(list))
+            errors: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(
+                lambda: defaultdict(list)
+            )
             for row in cursor:
                 agent = row[0]
                 error_type = row[1] or "unknown"
@@ -424,21 +437,25 @@ class PerformanceAnalytics:
         if not self.ag2_runtime_db_path.exists():
             return {}
 
-        usage = defaultdict(lambda: {"total_tokens": 0, "estimated_cost": Decimal("0")})
+        usage: dict[str, dict[str, Any]] = defaultdict(
+            lambda: {"total_tokens": 0, "estimated_cost": Decimal("0")}
+        )
 
         with sqlite3.connect(self.ag2_runtime_db_path) as conn:
             query = """
                 SELECT
                     json_extract(request, '$.messages[0].name') as agent_name,
                     json_extract(request, '$.model') as model,
-                    SUM(json_extract(response, '$.usage.prompt_tokens')) as prompt_tokens,
-                    SUM(json_extract(response, '$.usage.completion_tokens')) as completion_tokens,
+                    SUM(json_extract(response, '$.usage.prompt_tokens'))
+                        as prompt_tokens,
+                    SUM(json_extract(response, '$.usage.completion_tokens'))
+                        as completion_tokens,
                     SUM(json_extract(response, '$.usage.total_tokens')) as total_tokens
                 FROM chat_completions
                 WHERE total_tokens IS NOT NULL
             """
 
-            params = []
+            params: list[Any] = []
             if start_date:
                 query += " AND timestamp >= ?"
                 params.append(start_date.isoformat())
@@ -484,7 +501,7 @@ class PerformanceAnalytics:
                 WHERE 1=1
             """
 
-            params = []
+            params: list[Any] = []
             if start_date:
                 query += " AND start_time >= ?"
                 params.append(start_date.isoformat())
@@ -519,7 +536,7 @@ class PerformanceAnalytics:
                     AND json_extract(final_result, '$.success') = 1
             """
 
-            params = []
+            params: list[Any] = []
             if start_date:
                 query += " AND start_time >= ?"
                 params.append(start_date.isoformat())
@@ -554,7 +571,7 @@ class PerformanceAnalytics:
                 WHERE metadata LIKE '%"error_type"%'
             """
 
-            params = []
+            params: list[Any] = []
             if start_date:
                 query += " AND timestamp >= ?"
                 params.append(start_date.isoformat())

@@ -28,7 +28,7 @@ CONFIDENCE_LOW_DISCREPANCY_THRESHOLD = 10  # 10% or more gets confidence reducti
 
 
 class TaxCalculatorAgent(BaseReceiptAgent):
-    """Agent specialized in tax calculations, GST/HST validation, and deductible amounts."""
+    """Agent specialized in tax calculations, GST/HST validation, and deductibles."""
 
     def __init__(
         self,
@@ -116,11 +116,7 @@ class TaxCalculatorAgent(BaseReceiptAgent):
         calculation_result = await self._calculate_taxes_with_agent(calculation_request)
 
         # Add our own validation and calculations
-        validation_result = self._validate_tax_calculations(
-            calculation_result, calculation_request
-        )
-
-        return validation_result
+        return self._validate_tax_calculations(calculation_result, calculation_request)
 
     async def _calculate_taxes_with_agent(
         self, calculation_request: dict[str, Any]
@@ -164,10 +160,12 @@ class TaxCalculatorAgent(BaseReceiptAgent):
                     calculation_data = self._manual_tax_calculation(calculation_request)
 
             self._validate_calculation_result(calculation_data)
-            return calculation_data
+            return calculation_data  # type: ignore[no-any-return]
 
-        except Exception as e:
-            self.logger.warning("Agent tax calculation failed, using manual: %s", e)
+        except Exception as e:  # noqa: BLE001 # Fallback to manual calculation
+            self.logger.warning(
+                "Agent tax calculation failed, using manual: %s", e, exc_info=True
+            )
             return self._manual_tax_calculation(calculation_request)
 
     def _build_tax_calculation_prompt(self, request: dict[str, Any]) -> str:
@@ -184,7 +182,7 @@ class TaxCalculatorAgent(BaseReceiptAgent):
             vendor_location, self.provincial_tax_rates["ON"]
         )
 
-        prompt = f"""
+        return f"""
 Analyze and validate the tax calculations for this Canadian business expense:
 
 EXPENSE DETAILS:
@@ -237,7 +235,6 @@ Return your analysis as JSON:
 
 Return ONLY the JSON object.
 """
-        return prompt
 
     def _manual_tax_calculation(self, request: dict[str, Any]) -> dict[str, Any]:
         """Perform manual tax calculation as fallback.
@@ -479,7 +476,7 @@ Return ONLY the JSON object.
         except (ValueError, TypeError):
             base_confidence -= 0.05
 
-        return max(0.0, min(base_confidence, 1.0))
+        return max(0.0, min(base_confidence, 1.0))  # type: ignore[no-any-return]
 
     def _get_tax_system_message(self) -> str:
         """Get the system message for the tax calculator agent."""
