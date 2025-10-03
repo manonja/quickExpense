@@ -37,6 +37,7 @@ def test_settings() -> Settings:
         qb_redirect_uri="http://localhost:8000/callback",
         qb_company_id="test_company_id",
         gemini_api_key="test_gemini_api_key",
+        together_api_key="test_together_api_key",
         debug=True,
     )
 

@@ -96,7 +96,7 @@ classmethod-decorators = [
 ]
 
 [lint.pylint]
-max-args = 5
+max-args = 8  # Increased from 5 for complex agent configurations
 max-branches = 12
 max-returns = 6
 max-statements = 50

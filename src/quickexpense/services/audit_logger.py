@@ -67,7 +67,7 @@ class AuditLogger:
         self.logger.info("Expense processing started", extra=audit_record)
         return correlation_id
 
-    def log_gemini_extraction(  # noqa: PLR0913
+    def log_gemini_extraction(
         self,
         correlation_id: str,
         processing_time: float,
@@ -371,3 +371,55 @@ class AuditLogger:
             "retention_policy": f"{self.config.retention_years} years (CRA compliance)",
             "log_format": "JSON structured",
         }
+
+    def log_with_context(
+        self,
+        level: str,
+        message: str,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        """Log message with context at the specified level.
+
+        Args:
+            level: Log level (INFO, WARNING, ERROR, etc.)
+            message: Log message
+            context: Additional context to log
+        """
+        context = context or {}
+        context["timestamp"] = datetime.now(UTC).isoformat()
+
+        if level.upper() == "INFO":
+            self.logger.info(message, extra=context)
+        elif level.upper() == "WARNING":
+            self.logger.warning(message, extra=context)
+        elif level.upper() == "ERROR":
+            self.logger.error(message, extra=context)
+        else:
+            self.logger.info(message, extra=context)
+
+
+class AuditLoggerManager:
+    """Manager for singleton audit logger instance."""
+
+    _audit_logger: AuditLogger | None = None
+
+    @classmethod
+    def get_logger(cls) -> AuditLogger:
+        """Get the singleton audit logger instance.
+
+        Returns:
+            AuditLogger instance
+        """
+        if cls._audit_logger is None:
+            cls._audit_logger = AuditLogger()
+        return cls._audit_logger
+
+
+# Backward compatibility function
+def get_audit_logger() -> AuditLogger:
+    """Get the global audit logger instance.
+
+    Returns:
+        AuditLogger instance
+    """
+    return AuditLoggerManager.get_logger()

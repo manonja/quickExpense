@@ -4,13 +4,16 @@ repos:
     hooks:
       - id: black
         language_version: python3.12
+        exclude: ^stubs/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
+        exclude: ^stubs/
       - id: ruff-format
+        exclude: ^stubs/
 
   - repo: local
     hooks:
@@ -20,6 +23,7 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+        exclude: ^stubs/
 
   - repo: local
     hooks:
@@ -30,6 +34,7 @@ repos:
         types: [python]
         args: [--strict, --no-implicit-reexport]
         pass_filenames: false
+        exclude: ^stubs/
 
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v3.4.0
