@@ -7,6 +7,8 @@ Modern expense management system for **Canadian small businesses and sole propri
 - **Modern Web UI** - Clean, professional interface with essentials-only grid design
 - **CLI Interface** - Simple commands for receipt processing and expense management
 - **AI Receipt Processing** - Extract expense data from receipt images using Google Gemini
+- **Multi-Agent System** - Three specialized agents ensure accuracy with confidence scoring
+- **Hybrid LLM Approach** - Gemini for images (HEIC/PDF), TogetherAI for cost-effective reasoning
 - **Automatic Token Management** - Never worry about expired tokens
 - **Direct QuickBooks Integration** - Create vendors and expenses seamlessly
 - **Modern Python Stack** - FastAPI, Pydantic v2, Python 3.12+ with strictest type safety
@@ -23,7 +25,8 @@ Modern expense management system for **Canadian small businesses and sole propri
 - Python 3.12+
 - [uv](https://github.com/astral-sh/uv) package manager
 - QuickBooks Developer Account
-- Google Gemini API key (for receipt processing)
+- Google Gemini API key (for image processing)
+- TogetherAI API key (optional, for multi-agent reasoning)
 
 ## Quick Start
 
@@ -45,8 +48,12 @@ QB_CLIENT_SECRET=your_client_secret
 QB_REDIRECT_URI=http://localhost:8000/callback
 QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
 
-# Gemini AI (for receipt extraction)
+# Gemini AI (for image processing)
 GEMINI_API_KEY=your_gemini_api_key
+
+# TogetherAI (optional, for multi-agent reasoning)
+TOGETHER_API_KEY=your_together_api_key
+LLM_PROVIDER=together  # Options: together, gemini, auto
 ```
 
 ### 3. Authenticate with QuickBooks
@@ -257,6 +264,10 @@ QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
 
 # Gemini AI Configuration
 GEMINI_API_KEY=your_gemini_key
+
+# TogetherAI Configuration (optional)
+TOGETHER_API_KEY=your_together_key
+LLM_PROVIDER=together
 ```
 
 Tokens are stored separately in `data/tokens.json` after authentication.
@@ -321,6 +332,7 @@ For REST API usage, start the server with `uv run fastapi dev src/quickexpense/m
 | `/api/v1/vendors` | POST | Create vendor |
 | `/api/v1/accounts/expense` | GET | List expense accounts |
 | `/api/v1/receipts/extract` | POST | Extract receipt data (AI) |
+| `/api/v1/receipts/extract-with-agents` | POST | Process with multi-agent system |
 | `/api/web/auth-status` | GET | Check QuickBooks authentication |
 | `/api/web/upload-receipt` | POST | Upload receipt via web UI |
 

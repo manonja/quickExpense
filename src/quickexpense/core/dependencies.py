@@ -7,6 +7,12 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import Depends
 
 from quickexpense.core.config import Settings, get_settings
+from quickexpense.services.agents import (
+    AgentOrchestrator,
+    CRArulesAgent,
+    DataExtractionAgent,
+    TaxCalculatorAgent,
+)
 from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.services.gemini import GeminiService
 from quickexpense.services.quickbooks import QuickBooksService
@@ -76,6 +82,24 @@ def get_gemini_service(
     return GeminiService(settings)
 
 
+def get_multi_agent_orchestrator(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> AgentOrchestrator:
+    """Get multi-agent orchestrator instance."""
+    # Create the three specialized agents
+    data_extraction_agent = DataExtractionAgent(settings=settings)
+    cra_rules_agent = CRArulesAgent(settings=settings)
+    tax_calculator_agent = TaxCalculatorAgent(settings=settings)
+
+    # Create and return orchestrator
+    return AgentOrchestrator(
+        data_extraction_agent=data_extraction_agent,
+        cra_rules_agent=cra_rules_agent,
+        tax_calculator_agent=tax_calculator_agent,
+        consensus_threshold=0.75,
+    )
+
+
 async def initialize_quickbooks_client_after_oauth(company_id: str) -> None:
     """Initialize QuickBooks client after successful OAuth."""
     from quickexpense.core.config import get_settings
@@ -100,6 +124,9 @@ QuickBooksServiceDep = Annotated[
     QuickBooksService | None, Depends(get_quickbooks_service)
 ]
 GeminiServiceDep = Annotated[GeminiService, Depends(get_gemini_service)]
+MultiAgentOrchestratorDep = Annotated[
+    AgentOrchestrator, Depends(get_multi_agent_orchestrator)
+]
 OAuthManagerDep = Annotated[QuickBooksOAuthManager, Depends(get_oauth_manager)]
 BusinessRulesEngineDep = Annotated[
     BusinessRuleEngine, Depends(get_business_rules_engine)
