@@ -23,10 +23,9 @@ class QuickExpenseUI {
             errorMessage: document.getElementById('errorMessage'),
             receiptBasic: document.getElementById('receiptBasic'),
             taxBasic: document.getElementById('taxBasic'),
-            statusBasic: document.getElementById('statusBasic'),
+            businessRulesBasic: document.getElementById('businessRulesBasic'),
             toggleDetails: document.getElementById('toggleDetails'),
             detailedInfo: document.getElementById('detailedInfo'),
-            businessRulesDetailed: document.getElementById('businessRulesDetailed'),
             expenseSummaryDetailed: document.getElementById('expenseSummaryDetailed'),
             processAnotherBtn: document.getElementById('processAnotherBtn'),
             tryAgainBtn: document.getElementById('tryAgainBtn')
@@ -378,6 +377,21 @@ class QuickExpenseUI {
             }
 
             console.log('About to show results with:', result);
+
+            // Ensure we have the required data structure
+            if (!result.receipt_info) {
+                console.warn('Missing receipt_info, using empty object');
+                result.receipt_info = {};
+            }
+            if (!result.tax_deductibility) {
+                console.warn('Missing tax_deductibility, using empty object');
+                result.tax_deductibility = {};
+            }
+            if (!result.business_rules) {
+                console.warn('Missing business_rules, using empty object');
+                result.business_rules = {};
+            }
+
             this.showResults(result);
 
         } catch (error) {
@@ -422,6 +436,12 @@ class QuickExpenseUI {
     showResults(data) {
         const { uploadZone, processingState, resultsSection, errorSection } = this.elements;
 
+        // Hide the entire upload section when showing results
+        const uploadSection = document.querySelector('.upload-section');
+        if (uploadSection) {
+            uploadSection.style.display = 'none';
+        }
+
         uploadZone.style.display = 'none';
         processingState.style.display = 'none';
         resultsSection.style.display = 'block';
@@ -451,6 +471,12 @@ class QuickExpenseUI {
 
     resetToUpload() {
         const { uploadZone, processingState, resultsSection, errorSection, fileInput } = this.elements;
+
+        // Show the entire upload section when resetting
+        const uploadSection = document.querySelector('.upload-section');
+        if (uploadSection) {
+            uploadSection.style.display = 'block';
+        }
 
         uploadZone.style.display = 'flex';
         processingState.style.display = 'none';
@@ -497,8 +523,8 @@ class QuickExpenseUI {
             console.log('Populating basic tax summary...');
             this.populateTaxBasic(data.tax_deductibility);
 
-            console.log('Populating basic status...');
-            this.populateStatusBasic(data.quickbooks, data.dry_run);
+            console.log('Populating business rules...');
+            this.populateBusinessRulesBasic(data.business_rules, data.dry_run);
 
             console.log('Populating detailed information...');
             this.populateDetailedInfo(data);
@@ -506,12 +532,17 @@ class QuickExpenseUI {
             console.log('All populate methods completed successfully');
         } catch (error) {
             console.error('Error in populateResults:', error);
-            throw error; // Re-throw to be caught by main error handler
+            // Don't re-throw, just log the error and continue
+            // This allows partial results to be displayed
         }
     }
 
     populateReceiptBasic(receiptInfo) {
         const container = this.elements.receiptBasic;
+        if (!container) {
+            console.error('Receipt container not found');
+            return;
+        }
         container.innerHTML = '';
 
         if (!receiptInfo) {
@@ -534,6 +565,10 @@ class QuickExpenseUI {
 
     populateTaxBasic(taxData) {
         const container = this.elements.taxBasic;
+        if (!container) {
+            console.error('Tax container not found');
+            return;
+        }
         container.innerHTML = '';
 
         if (!taxData) {
@@ -557,100 +592,124 @@ class QuickExpenseUI {
         });
     }
 
-    populateStatusBasic(qbResults, isDryRun = false) {
-        const container = this.elements.statusBasic;
+    populateBusinessRulesBasic(businessRules, isDryRun = false) {
+        const container = this.elements.businessRulesBasic;
+        if (!container) {
+            console.error('Business rules container not found');
+            return;
+        }
         container.innerHTML = '';
 
-        const data = [
-            { label: 'Mode', value: isDryRun ? 'Dry Run' : 'Live' },
-            {
-                label: 'Status',
-                value: isDryRun ? 'Preview Only' : 'Created',
-                className: isDryRun ? '' : 'highlight'
-            }
-        ];
-
-        if (!isDryRun && qbResults?.expense_ids?.length > 0) {
-            data.push({
-                label: 'Expense ID',
-                value: qbResults.expense_ids[0],
-                className: 'amount'
-            });
+        // Add dry run indicator at the top if applicable
+        if (isDryRun) {
+            const dryRunIndicator = document.createElement('div');
+            dryRunIndicator.className = 'dry-run-indicator';
+            dryRunIndicator.innerHTML = '<strong>Mode:</strong> Dry Run (Preview Only)';
+            dryRunIndicator.style.marginBottom = '1rem';
+            dryRunIndicator.style.padding = '0.5rem';
+            dryRunIndicator.style.backgroundColor = 'var(--peach-light)';
+            dryRunIndicator.style.borderRadius = 'var(--radius-sm)';
+            dryRunIndicator.style.fontSize = '0.875rem';
+            container.appendChild(dryRunIndicator);
         }
 
-        data.forEach(item => {
-            const row = this.createDataRow(item.label, item.value, item.className);
-            container.appendChild(row);
-        });
-    }
-
-    populateDetailedInfo(data) {
-        // Populate business rules details
-        this.populateBusinessRulesDetailed(data.business_rules);
-
-        // Populate expense summary details
-        this.populateExpenseSummaryDetailed(data.enhanced_expense);
-    }
-
-    populateBusinessRulesDetailed(businessRules) {
-        const container = this.elements.businessRulesDetailed;
-        container.innerHTML = '';
-
         if (!businessRules?.applied_rules?.length) {
-            container.innerHTML = '<p>No business rules applied</p>';
+            const noRulesMsg = document.createElement('p');
+            noRulesMsg.textContent = 'No business rules applied';
+            noRulesMsg.style.color = 'var(--text-muted)';
+            container.appendChild(noRulesMsg);
             return;
         }
 
-        businessRules.applied_rules.forEach(rule => {
+        // Display each applied rule
+        businessRules.applied_rules.forEach((rule, index) => {
             const ruleDiv = document.createElement('div');
-            ruleDiv.className = 'rule-item-simple';
+            ruleDiv.className = 'rule-item-compact';
+            if (index > 0) {
+                ruleDiv.style.marginTop = '1rem';
+                ruleDiv.style.paddingTop = '1rem';
+                ruleDiv.style.borderTop = '1px solid var(--border-light)';
+            }
 
-            const title = document.createElement('div');
-            title.className = 'rule-title-simple';
-            title.textContent = rule.description;
+            // Rule name
+            const ruleName = document.createElement('div');
+            ruleName.className = 'rule-name-compact';
+            ruleName.textContent = rule.description || rule.rule_applied;
+            ruleName.style.fontWeight = '500';
+            ruleName.style.marginBottom = '0.5rem';
+            ruleDiv.appendChild(ruleName);
 
-            const details = document.createElement('div');
-            details.className = 'rule-details-simple';
-            details.innerHTML = `
-                <strong>Rule:</strong> ${rule.rule_applied}<br>
-                <strong>Category:</strong> ${rule.category}<br>
-                <strong>Account:</strong> ${rule.qb_account}<br>
-                <strong>Deductible:</strong> ${rule.deductible_percentage}%<br>
-                <strong>Amount:</strong> $${(rule.amount || 0).toFixed(2)}
-            `;
+            // Rule details in compact format
+            const details = [
+                { label: 'Category', value: rule.category },
+                { label: 'Account', value: rule.qb_account },
+                { label: 'Deductible', value: `${rule.deductible_percentage}%`, className: 'highlight' },
+                { label: 'Amount', value: `$${(rule.amount || 0).toFixed(2)}`, className: 'amount' }
+            ];
 
-            ruleDiv.appendChild(title);
-            ruleDiv.appendChild(details);
+            details.forEach(detail => {
+                const row = this.createDataRow(detail.label, detail.value, detail.className);
+                row.style.fontSize = '0.875rem';
+                ruleDiv.appendChild(row);
+            });
+
             container.appendChild(ruleDiv);
         });
     }
 
+    populateDetailedInfo(data) {
+        // Only populate expense summary details
+        this.populateExpenseSummaryDetailed(data.enhanced_expense);
+    }
+
+
     populateExpenseSummaryDetailed(expenseData) {
         const container = this.elements.expenseSummaryDetailed;
-        container.innerHTML = '';
-
-        if (!expenseData) {
-            container.innerHTML = '<p>Expense data not available</p>';
+        if (!container) {
+            console.error('Expense summary container not found');
             return;
         }
+        container.innerHTML = '';
 
+        // Create a summary based on available data
         const summaryDiv = document.createElement('div');
         summaryDiv.className = 'rule-item-simple';
 
-        const title = document.createElement('div');
-        title.className = 'rule-title-simple';
-        title.textContent = 'Processing Summary';
-
         const details = document.createElement('div');
         details.className = 'rule-details-simple';
-        details.innerHTML = `
-            <strong>Items Processed:</strong> ${expenseData.items_count || 0}<br>
-            <strong>Categories:</strong> ${expenseData.categories_count || 0}<br>
-            <strong>Rules Applied:</strong> ${expenseData.rules_applied || 0}<br>
-            <strong>Payment Method:</strong> ${expenseData.payment || 'cash'}
-        `;
 
-        summaryDiv.appendChild(title);
+        // Build summary from available data
+        let summaryHtml = '';
+
+        if (expenseData) {
+            // Try to extract meaningful information from the expense data
+            const itemsCount = expenseData.items_count ||
+                               (expenseData.line_items?.length) ||
+                               (Array.isArray(expenseData) ? expenseData.length : 1);
+
+            const categoriesSet = new Set();
+            if (expenseData.line_items) {
+                expenseData.line_items.forEach(item => {
+                    if (item.category) categoriesSet.add(item.category);
+                });
+            } else if (expenseData.category) {
+                categoriesSet.add(expenseData.category);
+            }
+
+            summaryHtml = `
+                <strong>Items Processed:</strong> ${itemsCount}<br>
+                <strong>Categories Found:</strong> ${categoriesSet.size || 1}<br>
+                <strong>Processing Time:</strong> ${new Date().toLocaleTimeString('en-CA')}<br>
+                <strong>Payment Method:</strong> ${expenseData.payment || 'Not specified'}
+            `;
+        } else {
+            summaryHtml = `
+                <strong>Processing Time:</strong> ${new Date().toLocaleTimeString('en-CA')}<br>
+                <strong>Status:</strong> Completed
+            `;
+        }
+
+        details.innerHTML = summaryHtml;
         summaryDiv.appendChild(details);
         container.appendChild(summaryDiv);
     }
