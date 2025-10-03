@@ -504,7 +504,8 @@ p {
 /* Grid section styling */
 .receipt-overview,
 .tax-overview,
-.status-overview {
+.status-overview,
+.business-rules-overview {
   background: rgba(255, 255, 255, 0.6);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
@@ -522,6 +523,7 @@ p {
 
 /* Basic data display */
 .receipt-basic,
+.business-rules-basic,
 .tax-basic,
 .status-basic {
   display: flex;
@@ -646,6 +648,30 @@ p {
   line-height: 1.4;
 }
 
+/* Compact rule display for main grid */
+.rule-item-compact {
+  font-size: 0.875rem;
+}
+
+.rule-name-compact {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.business-rules-basic .data-row {
+  margin-bottom: var(--space-1);
+}
+
+.dry-run-indicator {
+  font-size: 0.875rem;
+  padding: var(--space-2);
+  background: var(--peach-light);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--pink-accent);
+}
+
 /* Responsive grid layout */
 @media (max-width: 900px) {
   .essential-grid {
@@ -661,7 +687,8 @@ p {
 
   .receipt-overview,
   .tax-overview,
-  .status-overview {
+  .status-overview,
+  .business-rules-overview {
     padding: var(--space-4);
   }
 
