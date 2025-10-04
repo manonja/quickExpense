@@ -28,7 +28,10 @@ class QuickExpenseUI {
             detailedInfo: document.getElementById('detailedInfo'),
             expenseSummaryDetailed: document.getElementById('expenseSummaryDetailed'),
             processAnotherBtn: document.getElementById('processAnotherBtn'),
-            tryAgainBtn: document.getElementById('tryAgainBtn')
+            tryAgainBtn: document.getElementById('tryAgainBtn'),
+            agentModeCheckbox: document.getElementById('agentModeCheckbox'),
+            dryRunCheckbox: document.getElementById('dryRunCheckbox'),
+            processingOptions: document.querySelector('.processing-options')
         };
 
         this.init();
@@ -279,44 +282,81 @@ class QuickExpenseUI {
 
             // Start processing
             this.isProcessing = true;
-            this.showProcessing(`Extracting data from ${file.name}...`);
+
+            // Check if agent mode is enabled
+            const agentMode = this.elements.agentModeCheckbox?.checked || false;
+            const dryRun = this.elements.dryRunCheckbox?.checked || false;
+
+            if (agentMode) {
+                this.showProcessing(`Processing with 3-agent system: ${file.name}...`);
+            } else {
+                this.showProcessing(`Extracting data from ${file.name}...`);
+            }
 
             // Prepare form data
             const formData = new FormData();
             formData.append('file', file);
             formData.append('category', '');
             formData.append('additional_context', '');
+            formData.append('dry_run', dryRun);
 
-            // Add dry-run option
-            const dryRunCheckbox = document.getElementById('dryRunCheckbox');
-            formData.append('dry_run', dryRunCheckbox ? dryRunCheckbox.checked : false);
+            // Update processing messages based on mode
+            if (agentMode) {
+                // Agent mode processing messages
+                setTimeout(() => {
+                    if (this.isProcessing) {
+                        this.elements.processingMessage.textContent = 'Agent 1/3: DataExtractionAgent extracting receipt data...';
+                    }
+                }, 3000);
 
-            // Update processing message
-            setTimeout(() => {
-                if (this.isProcessing) {
-                    this.elements.processingMessage.textContent = 'Analyzing receipt with AI... (this may take 2-3 minutes)';
-                }
-            }, 5000);
+                setTimeout(() => {
+                    if (this.isProcessing) {
+                        this.elements.processingMessage.textContent = 'Agent 2/3: CRArulesAgent applying Canadian tax rules...';
+                    }
+                }, 60000); // After ~1 minute
 
-            setTimeout(() => {
-                if (this.isProcessing) {
-                    this.elements.processingMessage.textContent = 'AI processing complete. Applying business rules...';
-                }
-            }, 90000); // After ~1.5 minutes
+                setTimeout(() => {
+                    if (this.isProcessing) {
+                        this.elements.processingMessage.textContent = 'Agent 3/3: TaxCalculatorAgent validating calculations...';
+                    }
+                }, 90000); // After ~1.5 minutes
 
-            setTimeout(() => {
-                if (this.isProcessing) {
-                    this.elements.processingMessage.textContent = 'Creating expense in QuickBooks...';
-                }
-            }, 120000); // After ~2 minutes
+                setTimeout(() => {
+                    if (this.isProcessing) {
+                        this.elements.processingMessage.textContent = 'Agents reaching consensus and finalizing results...';
+                    }
+                }, 120000); // After ~2 minutes
+            } else {
+                // Standard processing messages
+                setTimeout(() => {
+                    if (this.isProcessing) {
+                        this.elements.processingMessage.textContent = 'Analyzing receipt with AI... (this may take 2-3 minutes)';
+                    }
+                }, 5000);
+
+                setTimeout(() => {
+                    if (this.isProcessing) {
+                        this.elements.processingMessage.textContent = 'AI processing complete. Applying business rules...';
+                    }
+                }, 90000); // After ~1.5 minutes
+
+                setTimeout(() => {
+                    if (this.isProcessing) {
+                        this.elements.processingMessage.textContent = 'Creating expense in QuickBooks...';
+                    }
+                }, 120000); // After ~2 minutes
+            }
+
+            // Choose endpoint based on mode
+            const endpoint = agentMode ? '/api/web/upload-receipt-agents' : '/api/web/upload-receipt';
 
             // Upload and process with timeout
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout for Gemini AI processing
+            const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout for AI processing
 
             let response;
             try {
-                response = await fetch('/api/web/upload-receipt', {
+                response = await fetch(endpoint, {
                     method: 'POST',
                     body: formData,
                     signal: controller.signal
@@ -423,9 +463,10 @@ class QuickExpenseUI {
     // ===== UI STATE MANAGEMENT =====
 
     showProcessing(message) {
-        const { uploadZone, processingState, processingMessage, resultsSection, errorSection } = this.elements;
+        const { uploadZone, processingState, processingMessage, resultsSection, errorSection, processingOptions } = this.elements;
 
         uploadZone.style.display = 'none';
+        processingOptions.style.display = 'none';
         processingState.style.display = 'block';
         resultsSection.style.display = 'none';
         errorSection.style.display = 'none';
@@ -447,10 +488,24 @@ class QuickExpenseUI {
         resultsSection.style.display = 'block';
         errorSection.style.display = 'none';
 
-        // Update title for dry-run mode
+        // Add agent mode styling if applicable
+        const resultsCard = resultsSection.querySelector('.results-card');
+        if (resultsCard) {
+            if (data.agent_mode) {
+                resultsCard.setAttribute('data-agent-mode', 'true');
+            } else {
+                resultsCard.removeAttribute('data-agent-mode');
+            }
+        }
+
+        // Update title for dry-run and agent mode
         const resultsTitle = resultsSection.querySelector('h2');
-        if (data.dry_run) {
+        if (data.dry_run && data.agent_mode) {
+            resultsTitle.textContent = 'Receipt Processed with Agents (Dry Run - Preview Only)';
+        } else if (data.dry_run) {
             resultsTitle.textContent = 'Receipt Processed (Dry Run - Preview Only)';
+        } else if (data.agent_mode) {
+            resultsTitle.textContent = 'Receipt Processed Successfully with Agents';
         } else {
             resultsTitle.textContent = 'Receipt Processed Successfully';
         }
@@ -459,9 +514,10 @@ class QuickExpenseUI {
     }
 
     showError(message) {
-        const { uploadZone, processingState, resultsSection, errorSection, errorMessage } = this.elements;
+        const { uploadZone, processingState, resultsSection, errorSection, errorMessage, processingOptions } = this.elements;
 
         uploadZone.style.display = 'block';
+        processingOptions.style.display = 'block';
         processingState.style.display = 'none';
         resultsSection.style.display = 'none';
         errorSection.style.display = 'block';
@@ -470,7 +526,7 @@ class QuickExpenseUI {
     }
 
     resetToUpload() {
-        const { uploadZone, processingState, resultsSection, errorSection, fileInput } = this.elements;
+        const { uploadZone, processingState, resultsSection, errorSection, fileInput, processingOptions } = this.elements;
 
         // Show the entire upload section when resetting
         const uploadSection = document.querySelector('.upload-section');
@@ -479,6 +535,7 @@ class QuickExpenseUI {
         }
 
         uploadZone.style.display = 'flex';
+        processingOptions.style.display = 'block';
         processingState.style.display = 'none';
         resultsSection.style.display = 'none';
         errorSection.style.display = 'none';
@@ -524,7 +581,7 @@ class QuickExpenseUI {
             this.populateTaxBasic(data.tax_deductibility);
 
             console.log('Populating business rules...');
-            this.populateBusinessRulesBasic(data.business_rules, data.dry_run);
+            this.populateBusinessRulesBasic(data.business_rules, data.dry_run, data);
 
             console.log('Populating detailed information...');
             this.populateDetailedInfo(data);
@@ -592,7 +649,7 @@ class QuickExpenseUI {
         });
     }
 
-    populateBusinessRulesBasic(businessRules, isDryRun = false) {
+    populateBusinessRulesBasic(businessRules, isDryRun = false, data = null) {
         const container = this.elements.businessRulesBasic;
         if (!container) {
             console.error('Business rules container not found');
@@ -600,17 +657,33 @@ class QuickExpenseUI {
         }
         container.innerHTML = '';
 
-        // Add dry run indicator at the top if applicable
-        if (isDryRun) {
-            const dryRunIndicator = document.createElement('div');
-            dryRunIndicator.className = 'dry-run-indicator';
-            dryRunIndicator.innerHTML = '<strong>Mode:</strong> Dry Run (Preview Only)';
-            dryRunIndicator.style.marginBottom = '1rem';
-            dryRunIndicator.style.padding = '0.5rem';
-            dryRunIndicator.style.backgroundColor = 'var(--peach-light)';
-            dryRunIndicator.style.borderRadius = 'var(--radius-sm)';
-            dryRunIndicator.style.fontSize = '0.875rem';
-            container.appendChild(dryRunIndicator);
+        // Add mode indicators at the top if applicable
+        if (isDryRun || (data && data.agent_mode)) {
+            const modeIndicator = document.createElement('div');
+            modeIndicator.className = 'mode-indicator';
+
+            let modeText = '';
+            if (isDryRun && data?.agent_mode) {
+                modeText = '<strong>Mode:</strong> Agent Processing + Dry Run (Preview Only)';
+            } else if (isDryRun) {
+                modeText = '<strong>Mode:</strong> Dry Run (Preview Only)';
+            } else if (data?.agent_mode) {
+                modeText = '<strong>Mode:</strong> Agent Processing (3-Agent System)';
+            }
+
+            modeIndicator.innerHTML = modeText;
+            modeIndicator.style.marginBottom = '1rem';
+            modeIndicator.style.padding = '0.5rem';
+            modeIndicator.style.backgroundColor = data?.agent_mode ? 'var(--pink-accent)' : 'var(--peach-light)';
+            modeIndicator.style.borderRadius = 'var(--radius-sm)';
+            modeIndicator.style.fontSize = '0.875rem';
+
+            // Add agent mode attribute for CSS styling
+            if (data?.agent_mode) {
+                modeIndicator.setAttribute('data-agent-mode', 'true');
+            }
+
+            container.appendChild(modeIndicator);
         }
 
         if (!businessRules?.applied_rules?.length) {
@@ -658,8 +731,13 @@ class QuickExpenseUI {
     }
 
     populateDetailedInfo(data) {
-        // Only populate expense summary details
+        // Populate expense summary details
         this.populateExpenseSummaryDetailed(data.enhanced_expense);
+
+        // If agent mode was used, populate agent details
+        if (data.agent_mode && data.agent_details) {
+            this.populateAgentDetails(data.agent_details);
+        }
     }
 
 
@@ -712,6 +790,89 @@ class QuickExpenseUI {
         details.innerHTML = summaryHtml;
         summaryDiv.appendChild(details);
         container.appendChild(summaryDiv);
+    }
+
+    populateAgentDetails(agentDetails) {
+        // Create or find agent details container
+        let agentContainer = document.getElementById('agentDetailsDetailed');
+
+        if (!agentContainer) {
+            // Create agent details section if it doesn't exist
+            const detailedInfo = this.elements.detailedInfo;
+            if (!detailedInfo) return;
+
+            const agentSection = document.createElement('div');
+            agentSection.className = 'detail-section';
+            agentSection.innerHTML = `
+                <h4>Agent Processing Details</h4>
+                <div class="agent-details-simple" id="agentDetailsDetailed">
+                    <!-- Dynamic agent details -->
+                </div>
+            `;
+            detailedInfo.appendChild(agentSection);
+            agentContainer = document.getElementById('agentDetailsDetailed');
+        }
+
+        if (!agentContainer) {
+            console.error('Agent details container not found');
+            return;
+        }
+
+        agentContainer.innerHTML = '';
+
+        // Overall confidence and consensus info
+        const overallDiv = document.createElement('div');
+        overallDiv.className = 'rule-item-simple';
+        overallDiv.innerHTML = `
+            <div class="rule-title-simple">Processing Summary</div>
+            <div class="rule-details-simple">
+                <strong>Overall Confidence:</strong> ${(agentDetails.overall_confidence * 100).toFixed(1)}%<br>
+                <strong>Consensus Method:</strong> ${agentDetails.consensus_method}<br>
+                <strong>Flags for Review:</strong> ${agentDetails.flags_for_review.length || 'None'}
+            </div>
+        `;
+        agentContainer.appendChild(overallDiv);
+
+        // Individual agent results
+        if (agentDetails.agent_results && agentDetails.agent_results.length > 0) {
+            agentDetails.agent_results.forEach(agent => {
+                const agentDiv = document.createElement('div');
+                agentDiv.className = 'rule-item-simple';
+
+                const statusIcon = agent.success ? '✅ ' : '❌ ';
+                const errorInfo = agent.error_message ? `<br><strong>Error:</strong> ${agent.error_message}` : '';
+
+                agentDiv.innerHTML = `
+                    <div class="rule-title-simple">${statusIcon} ${agent.agent_name}</div>
+                    <div class="rule-details-simple">
+                        <strong>Status:</strong> ${agent.success ? 'Success' : 'Failed'}<br>
+                        <strong>Confidence:</strong> ${(agent.confidence_score * 100).toFixed(1)}%<br>
+                        <strong>Processing Time:</strong> ${agent.processing_time.toFixed(2)}s${errorInfo}
+                    </div>
+                `;
+                agentContainer.appendChild(agentDiv);
+            });
+        }
+
+        // Agent breakdown with purposes
+        if (agentDetails.agent_breakdown) {
+            const breakdownDiv = document.createElement('div');
+            breakdownDiv.className = 'rule-item-simple';
+            breakdownDiv.innerHTML = `<div class="rule-title-simple">Agent Responsibilities</div>`;
+
+            const breakdownDetails = document.createElement('div');
+            breakdownDetails.className = 'rule-details-simple';
+
+            let breakdownHtml = '';
+            Object.entries(agentDetails.agent_breakdown).forEach(([key, info]) => {
+                const confidence = info.confidence ? ` (${(info.confidence * 100).toFixed(1)}%)` : '';
+                breakdownHtml += `<strong>${info.agent}:</strong> ${info.purpose}${confidence}<br>`;
+            });
+
+            breakdownDetails.innerHTML = breakdownHtml;
+            breakdownDiv.appendChild(breakdownDetails);
+            agentContainer.appendChild(breakdownDiv);
+        }
     }
 
     setupDetailsToggle() {

@@ -246,8 +246,9 @@ p {
 .upload-card {
   min-height: 300px;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .upload-zone {
@@ -295,6 +296,43 @@ p {
   font-size: 0.875rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
+}
+
+/* Processing Options */
+.processing-options {
+  margin-top: var(--space-6);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: background-color 0.2s ease;
+}
+
+.checkbox-container:hover {
+  background-color: var(--peach-light);
+}
+
+.checkbox-container input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.checkbox-text {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  cursor: pointer;
 }
 
 /* ===== PROCESSING STATE ===== */
@@ -696,4 +734,126 @@ p {
   .summary-simple {
     grid-template-columns: 1fr;
   }
+}
+
+/* ===== AGENT PROCESSING STYLES ===== */
+
+/* Processing options styling */
+.processing-options {
+  background: rgba(255, 255, 255, 0.3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+}
+
+.checkbox-container {
+  transition: all 0.2s ease;
+}
+
+.checkbox-container:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1);
+  margin: calc(-1 * var(--space-1));
+}
+
+.checkbox-text {
+  font-family: var(--font-sans);
+  font-weight: 500;
+}
+
+/* Mode indicator styling */
+.mode-indicator {
+  background: linear-gradient(135deg, #fce7f3 30%, #fed7aa 20%, #fce7f3 40%);
+  border: 1px solid var(--pink-accent);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.mode-indicator strong {
+  color: var(--primary-dark);
+}
+
+/* Agent details styling */
+.agent-details-simple {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-4);
+}
+
+.agent-details-simple .rule-item-simple {
+  border-left: 3px solid var(--pink-accent);
+  background: rgba(252, 231, 243, 0.3);
+}
+
+.agent-details-simple .rule-title-simple {
+  color: var(--primary-dark);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.agent-details-simple .rule-details-simple {
+  line-height: 1.5;
+}
+
+/* Agent status icons and text */
+.agent-details-simple .rule-title-simple:has-text("✅") {
+  color: var(--status-success);
+}
+
+.agent-details-simple .rule-title-simple:has-text("❌") {
+  color: var(--status-error);
+}
+
+/* Enhanced progress messages for agent mode */
+.processing-state[data-agent-mode="true"] {
+  background: linear-gradient(135deg, #fce7f3 30%, #fed7aa 20%, #fce7f3 40%);
+}
+
+.processing-state[data-agent-mode="true"] .loading-spinner {
+  border-top-color: var(--pink-accent);
+}
+
+/* Agent mode results enhancements */
+.results-card[data-agent-mode="true"] {
+  background: linear-gradient(135deg, #ffffff, #fce7f3 30%);
+  border: 2px solid var(--pink-accent);
+}
+
+.results-card[data-agent-mode="true"] h2 {
+  color: var(--primary-dark);
+  border-bottom: 1px solid var(--pink-accent);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-8);
+}
+
+/* Responsive adjustments for agent details */
+@media (max-width: 600px) {
+  .agent-details-simple {
+    grid-template-columns: 1fr;
+  }
+
+  .processing-options {
+    padding: var(--space-3);
+  }
+
+  .checkbox-text {
+    font-size: 0.8rem;
+  }
+}
+
+/* Animation for agent processing mode */
+@keyframes agentPulse {
+  0%, 100% {
+    background: linear-gradient(135deg, #fce7f3 30%, #fed7aa 20%, #fce7f3 40%);
+  }
+  50% {
+    background: linear-gradient(135deg, #fed7aa 30%, #fce7f3 20%, #fed7aa 40%);
+  }
+}
+
+.mode-indicator[data-agent-mode="true"] {
+  animation: agentPulse 3s ease-in-out infinite;
 }
