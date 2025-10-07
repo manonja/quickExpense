@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import time
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from fastapi import (
     APIRouter,
@@ -20,14 +21,28 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse
 
-# Import actual dependencies for runtime
-from quickexpense.core.dependencies import (  # noqa: TCH001
-    BusinessRulesEngineDep,
-    GeminiServiceDep,
-    OAuthManagerDep,
-    QuickBooksServiceDep,
-)
+if TYPE_CHECKING:
+    from quickexpense.core.dependencies import (
+        BusinessRulesEngineDep,
+        GeminiServiceDep,
+        MultiAgentOrchestratorDep,
+        OAuthManagerDep,
+        QuickBooksServiceDep,
+    )
+else:
+    # Import actual dependencies for runtime
+    from quickexpense.core.dependencies import (  # noqa: TCH001
+        BusinessRulesEngineDep,
+        GeminiServiceDep,
+        MultiAgentOrchestratorDep,
+        OAuthManagerDep,
+        QuickBooksServiceDep,
+    )
 from quickexpense.models.business_rules import ExpenseContext
+from quickexpense.models.multi_agent import (
+    AgentResultResponse,
+    MultiAgentReceiptResponse,
+)
 from quickexpense.services.file_processor import FileProcessorService
 from quickexpense.services.quickbooks import QuickBooksError
 
@@ -577,6 +592,306 @@ async def upload_receipt(  # noqa: C901, PLR0912, PLR0915
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred processing the receipt",
+        ) from e
+
+
+@router.post("/upload-receipt-agents")
+async def upload_receipt_with_agents(  # noqa: C901, PLR0915
+    orchestrator: MultiAgentOrchestratorDep,
+    quickbooks_service: QuickBooksServiceDep,
+    file: UploadFile = File(..., description="Receipt file (JPEG, PNG, PDF, HEIC)"),
+    additional_context: str = Form(
+        default="Business expense receipt",
+        description="Additional context for processing",
+    ),
+    dry_run: bool = Form(  # noqa: FBT001
+        default=False, description="Preview processing without creating expenses"
+    ),
+) -> dict[str, Any]:
+    """Upload and process a receipt file using the multi-agent system.
+
+    This endpoint provides agent-based processing as an alternative to the standard
+    Gemini + business rules approach. It uses the 3-agent system:
+    - DataExtractionAgent: Extracts receipt data using Gemini
+    - CRArulesAgent: Applies Canadian tax rules using TogetherAI
+    - TaxCalculatorAgent: Validates tax calculations using TogetherAI
+
+    Mirrors the /api/v1/receipts/process-file endpoint but returns
+    web-compatible format.
+    """
+    try:
+        # Validate file (using same pattern as API endpoint)
+        if not file.filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="No filename provided"
+            )
+
+        # Check file extension
+        file_ext = f".{file.filename.split('.')[-1]}".lower()
+        if file_ext not in SUPPORTED_EXTENSIONS:
+            supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file format '{file_ext}'. Supported: {supported}",
+            )
+
+        # Read file content
+        file_content = await file.read()
+
+        # Check file size
+        if len(file_content) > MAX_FILE_SIZE:
+            size_mb = len(file_content) / (1024 * 1024)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File too large ({size_mb:.1f}MB). Maximum size: 10MB",
+            )
+
+        # Convert to base64 for processing (same as API endpoint)
+        file_base64 = base64.b64encode(file_content).decode("utf-8")
+
+        logger.info(
+            (
+                "Processing receipt file with agents: filename=%s, size=%d bytes, "
+                "format=%s"
+            ),
+            file.filename,
+            len(file_content),
+            file_ext,
+        )
+
+        # Process receipt through multi-agent system (exact same call as API endpoint)
+        consensus_result = await orchestrator.process_receipt(
+            file_base64=file_base64,
+            additional_context=additional_context,
+        )
+
+        # Convert to AgentResultResponse format (same as API endpoint)
+        agent_results = [
+            AgentResultResponse(
+                agent_name=result.agent_name,
+                success=result.success,
+                confidence_score=result.confidence_score,
+                processing_time=result.processing_time,
+                error_message=result.error_message,
+            )
+            for result in consensus_result.agent_results
+        ]
+
+        # Extract key fields from final data
+        final_data = consensus_result.final_data
+
+        # Create MultiAgentReceiptResponse (same as API endpoint)
+        agent_response = MultiAgentReceiptResponse(
+            success=consensus_result.success,
+            overall_confidence=consensus_result.overall_confidence,
+            # Receipt data
+            vendor_name=final_data.get("vendor_name"),
+            transaction_date=final_data.get("transaction_date"),
+            total_amount=final_data.get("total_amount"),
+            subtotal=final_data.get("subtotal"),
+            tax_amount=final_data.get("tax_amount"),
+            # CRA categorization
+            category=final_data.get("category"),
+            deductibility_percentage=final_data.get("deductibility_percentage"),
+            qb_account=final_data.get("qb_account"),
+            ita_section=final_data.get("ita_section"),
+            audit_risk=final_data.get("audit_risk"),
+            # Tax calculations
+            calculated_gst_hst=final_data.get("calculated_gst_hst"),
+            deductible_amount=final_data.get("deductible_amount"),
+            tax_validation_result=final_data.get("tax_validation_result"),
+            # Processing metadata
+            processing_time=consensus_result.processing_time,
+            consensus_method=consensus_result.consensus_method,
+            flags_for_review=consensus_result.flags_for_review,
+            # Agent details
+            agent_results=agent_results,
+            agent_confidence_scores=final_data.get("agent_confidence_scores", {}),
+            # Full data for advanced users
+            full_data=final_data,
+        )
+
+        # Handle QuickBooks creation if not dry-run
+        if not dry_run and quickbooks_service:
+            try:
+                # Create expense in QuickBooks
+                from datetime import datetime
+
+                from quickexpense.models.expense import Expense
+
+                # Parse transaction date
+                transaction_date_str = final_data.get("transaction_date")
+                if transaction_date_str:
+                    try:
+                        transaction_date = datetime.fromisoformat(
+                            transaction_date_str.replace("Z", "+00:00")
+                        ).date()
+                    except (ValueError, AttributeError):
+                        transaction_date = datetime.now(UTC).date()
+                else:
+                    transaction_date = datetime.now(UTC).date()
+
+                expense = Expense(
+                    vendor_name=final_data.get("vendor_name", "Unknown Vendor"),
+                    amount=final_data.get("total_amount", 0.0),
+                    date=transaction_date,
+                    currency=final_data.get("currency", "CAD"),
+                    category=final_data.get("category", "General"),
+                )
+
+                logger.info("Creating expense in QuickBooks...")
+                qb_result = await quickbooks_service.create_expense(expense)
+                qb_expense_id = qb_result.get("id")
+                logger.info("Created QuickBooks expense: %s", qb_expense_id)
+            except (ValueError, AttributeError, TypeError) as e:
+                logger.warning("QuickBooks expense creation failed: %s", e)
+                qb_expense_id = None
+        else:
+            qb_expense_id = "DRY_RUN" if dry_run else None
+
+        # Transform to web-compatible format while preserving agent data
+        response = {
+            "status": "success",
+            "dry_run": dry_run,
+            "agent_mode": True,  # Flag to indicate agent processing was used
+            "message": (
+                "DRY RUN - No expense created in QuickBooks" if dry_run else None
+            ),
+            "receipt_info": {
+                "filename": file.filename,
+                "vendor_name": agent_response.vendor_name,
+                "date": agent_response.transaction_date,
+                "total_amount": float(agent_response.total_amount or 0),
+                "tax_amount": float(agent_response.tax_amount or 0),
+                "currency": final_data.get("currency", "CAD"),
+            },
+            "business_rules": {
+                "applied_rules": (
+                    [
+                        {
+                            "description": (
+                                f"Agent consensus: {agent_response.category}"
+                            ),
+                            "rule_name": "Multi-Agent Analysis",
+                            "rule_applied": "agent_consensus",
+                            "category": agent_response.category,
+                            "qb_account": agent_response.qb_account,
+                            "amount": float(agent_response.total_amount or 0),
+                            "deductible_percentage": (
+                                agent_response.deductibility_percentage
+                            ),
+                            "tax_treatment": agent_response.tax_validation_result,
+                            "confidence": agent_response.overall_confidence,
+                        }
+                    ]
+                    if agent_response.category
+                    else []
+                ),
+                "total_categories": 1 if agent_response.category else 0,
+            },
+            "tax_deductibility": {
+                "total_amount": f"{float(agent_response.total_amount or 0):.2f}",
+                "deductible_amount": (
+                    f"{float(agent_response.deductible_amount or 0):.2f}"
+                ),
+                "deductibility_rate": (
+                    f"{float(agent_response.deductibility_percentage or 0):.1f}"
+                ),
+            },
+            "enhanced_expense": {
+                "vendor_name": agent_response.vendor_name,
+                "items_count": len(final_data.get("line_items", [])),
+                "categories_count": 1 if agent_response.category else 0,
+                "rules_applied": 1 if agent_response.category else 0,
+                "payment": "unknown",
+            },
+            "quickbooks": {
+                "expenses_created": (
+                    1 if qb_expense_id and qb_expense_id != "DRY_RUN" else 0
+                ),
+                "expense_ids": [qb_expense_id] if qb_expense_id else [],
+                "details": (
+                    [
+                        {
+                            "id": qb_expense_id,
+                            "category": agent_response.category,
+                            "amount": float(agent_response.total_amount or 0),
+                            "deductible_percentage": (
+                                agent_response.deductibility_percentage
+                            ),
+                        }
+                    ]
+                    if qb_expense_id
+                    else []
+                ),
+            },
+            "processing_time": round(agent_response.processing_time, 2),
+            # Rich agent data for enhanced UI display
+            "agent_details": {
+                "overall_confidence": agent_response.overall_confidence,
+                "consensus_method": agent_response.consensus_method,
+                "flags_for_review": agent_response.flags_for_review,
+                "agent_results": [
+                    {
+                        "agent_name": result.agent_name,
+                        "success": result.success,
+                        "confidence_score": result.confidence_score,
+                        "processing_time": result.processing_time,
+                        "error_message": result.error_message,
+                    }
+                    for result in agent_response.agent_results
+                ],
+                "agent_breakdown": {
+                    "data_extraction": {
+                        "agent": "DataExtractionAgent",
+                        "purpose": "Extract receipt data using Gemini AI",
+                        "confidence": agent_response.agent_confidence_scores.get(
+                            "DataExtractionAgent", 0.0
+                        ),
+                    },
+                    "cra_rules": {
+                        "agent": "CRArulesAgent",
+                        "purpose": "Apply Canadian tax rules and categorization",
+                        "confidence": agent_response.agent_confidence_scores.get(
+                            "CRArulesAgent", 0.0
+                        ),
+                    },
+                    "tax_calculation": {
+                        "agent": "TaxCalculatorAgent",
+                        "purpose": "Validate GST/HST calculations and tax treatment",
+                        "confidence": agent_response.agent_confidence_scores.get(
+                            "TaxCalculatorAgent", 0.0
+                        ),
+                    },
+                },
+                "full_agent_data": agent_response.full_data,
+            },
+        }
+
+        logger.info(
+            "Receipt processed with agents: %s, conf=%.2f, time=%.2f, flags=%d",
+            file.filename,
+            agent_response.overall_confidence,
+            agent_response.processing_time,
+            len(agent_response.flags_for_review),
+        )
+
+        return response
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except ValueError as e:
+        logger.warning("Agent processing validation error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to process receipt with agents: {e}",
+        ) from e
+    except Exception as e:
+        logger.exception("Unexpected error during agent processing")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during agent processing",
         ) from e
 
 

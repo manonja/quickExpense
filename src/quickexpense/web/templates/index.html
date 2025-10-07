@@ -72,14 +72,18 @@
                             <span class="supported-formats">Supports JPEG, PNG, PDF, HEIC (max 10MB)</span>
                         </div>
                         <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf,.heic,.heif" style="display: none;">
+                    </div>
 
-                        <!-- Dry Run Option -->
-                        <div class="dry-run-option" style="margin-top: 1rem; text-align: center;">
-                            <label class="checkbox-container" style="display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="checkbox" id="dryRunCheckbox" style="margin: 0;">
-                                <span class="checkbox-text" style="font-size: 0.9rem; color: #666;">Dry run (preview only - don't create expenses)</span>
-                            </label>
-                        </div>
+                    <!-- Processing Options - Below upload zone -->
+                    <div class="processing-options">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="agentModeCheckbox">
+                            <span class="checkbox-text">Use Agent Processing (enhanced accuracy with 3-agent system)</span>
+                        </label>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="dryRunCheckbox">
+                            <span class="checkbox-text">Dry run (preview only - don't create expenses)</span>
+                        </label>
                     </div>
 
                     <!-- Processing State -->
@@ -176,13 +180,13 @@
             <div class="footer-content">
                 <p>&copy; 2025 QuickExpense. Expense management for Canadian businesses.</p>
                 <div class="footer-links">
-                    <span class="text-caption">Built with ❤️ by the QuickExpense team</span>
+                    <span class="text-caption">Built with ❤️ by QuickExpense</span>
                 </div>
             </div>
         </div>
     </footer>
 
     <!-- JavaScript -->
-    <script src="/static/js/app.js?v=2.0"></script>
+    <script src="/static/js/app.js?v=3.0"></script>
 </body>
 </html>
