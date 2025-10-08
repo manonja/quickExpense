@@ -101,6 +101,16 @@ class Settings(BaseSettings):
         description="Allowed CORS origins",
     )
 
+    # HuggingFace Space Protection
+    hf_space_password: str = Field(
+        default="",
+        description="Password to protect HF Space deployment (leave empty to disable)",
+    )
+    enable_password_protection: bool = Field(
+        default=False,
+        description="Enable password protection middleware for public deployments",
+    )
+
     # Gemini AI configuration (kept as fallback)
     gemini_api_key: str = Field(default="", description="Google Gemini API key")
     gemini_model: str = Field(
