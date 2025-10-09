@@ -185,6 +185,31 @@ def create_app() -> FastAPI:
         debug=settings.debug,
     )
 
+    # Add password protection middleware (MUST be before CORS)
+    if settings.enable_password_protection and settings.hf_space_password:
+        from quickexpense.middleware import BasicAuthMiddleware
+
+        app.add_middleware(
+            BasicAuthMiddleware,
+            password=settings.hf_space_password,
+            exempt_paths=[
+                "/health",
+                "/ready",
+                "/static",
+                "/docs",
+                "/openapi.json",
+                "/redoc",
+            ],
+        )
+        logger.info("🔒 Password protection enabled for HuggingFace Space deployment")
+    elif settings.enable_password_protection:
+        logger.warning(
+            "Password protection is enabled but HF_SPACE_PASSWORD is not set - "
+            + "protection will not be activated"
+        )
+    else:
+        logger.info("Password protection is disabled (development mode)")
+
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,

@@ -163,6 +163,10 @@ QB_CLIENT_ID=your_client_id
 QB_CLIENT_SECRET=your_client_secret
 QB_REDIRECT_URI=http://localhost:8000/callback
 
+# HuggingFace Space Protection (for public deployments)
+ENABLE_PASSWORD_PROTECTION=false  # Set to true for HF Space
+HF_SPACE_PASSWORD=your_secure_password  # Required when protection enabled
+
 # Gemini AI Configuration (for image processing)
 GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-2.0-flash-exp
@@ -263,16 +267,43 @@ uv run mypy src tests
 - `python scripts/search_vendor_expenses.py <vendor>` - Find expenses by vendor
 - `python scripts/list_recent_expenses.py [days]` - List recent expenses
 
+## HuggingFace Space Deployment
+
+### Password Protection Setup
+For public HuggingFace Space deployments, enable password protection:
+
+1. **Configure Environment Variables** in HF Space Settings:
+   ```
+   ENABLE_PASSWORD_PROTECTION=true
+   HF_SPACE_PASSWORD=your_secure_password_here
+   ```
+
+2. **User Access**: Visitors will see a browser login dialog
+   - Username: (leave empty or type anything)
+   - Password: `your_secure_password_here`
+
+3. **Protected vs Exempt Paths**:
+   - **Protected**: Main UI (`/`), API endpoints (`/api/*`), upload functionality
+   - **Exempt**: Health checks (`/health`, `/ready`), static files (`/static/*`), docs (`/docs`, `/redoc`)
+
+### Security Features
+- Constant-time password comparison prevents timing attacks
+- Failed authentication attempts are logged with client IP
+- Supports proxy headers (X-Forwarded-For, X-Real-IP)
+- Standards-compliant HTTP 401 responses
+
 ## Web UI
 
 ### Quick Start
 1. **Start the server**: `uv run fastapi dev src/quickexpense/main.py`
 2. **Open browser**: Navigate to http://localhost:8000
-3. **Authenticate**: Click "Connect to QuickBooks" if not authenticated
-4. **Upload receipt**: Drag and drop or click to select receipt file
-5. **Review results**: View essential information in clean grid layout
+3. **Password (if enabled)**: Enter password for protected deployments
+4. **Authenticate**: Click "Connect to QuickBooks" if not authenticated
+5. **Upload receipt**: Drag and drop or click to select receipt file
+6. **Review results**: View essential information in clean grid layout
 
 ### Web UI Features
+- **Password Protection**: Optional HTTP Basic Auth for public deployments (HuggingFace Space)
 - **Essentials-Only Grid**: Three-column layout showing Receipt, Tax Analysis, and Status
 - **Expandable Details**: Optional advanced information section
 - **Real-time Processing**: Visual feedback with progress indicators
@@ -480,6 +511,12 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
    - Hybrid LLM: Gemini handles images (HEIC, PDF), TogetherAI handles reasoning
    - 47% cost reduction vs pure Gemini approach
    - Full backward compatibility maintained
+11. ✅ **Password Protection**: HTTP Basic Auth for HuggingFace Space deployments
+   - Environment-driven activation (disabled by default)
+   - Constant-time password comparison prevents timing attacks
+   - Configurable exempt paths for health checks and static files
+   - Comprehensive security logging with client IP tracking
+   - Standards-compliant 401 responses with browser login dialog
 
 ## Business Rules Configuration
 
@@ -518,14 +555,15 @@ The business rules engine now supports vendor context awareness, enabling more a
 3. ~~**CLI Interface**: Add command-line interface for receipt processing~~ ✓
 4. ~~**Vendor-Aware Business Rules**: Enhanced categorization with vendor context~~ ✓
 5. ✅ **Add Logging**: Structured logging with appropriate levels
-6. **Add More Tests**: Increase coverage to >90%
-7. **API Documentation**: Enhance OpenAPI/Swagger docs
-8. **Rate Limiting**: Add rate limiting for API endpoints
-9. **Monitoring**: Add OpenTelemetry instrumentation
-10. **Batch Processing**: Add support for multiple receipt uploads
-11. ✅ **PDF Support**: Add PDF receipt extraction capability
-12. ✅ **HEIC Support**: Add native iPhone HEIC photo support
-13. ✅ **Web UI Implementation**: Modern essentials-only interface
+6. ✅ **Password Protection**: HTTP Basic Auth for HuggingFace Space deployments
+7. **Add More Tests**: Increase coverage to >90%
+8. **API Documentation**: Enhance OpenAPI/Swagger docs
+9. **Rate Limiting**: Add rate limiting for API endpoints
+10. **Monitoring**: Add OpenTelemetry instrumentation
+11. **Batch Processing**: Add support for multiple receipt uploads
+12. ✅ **PDF Support**: Add PDF receipt extraction capability
+13. ✅ **HEIC Support**: Add native iPhone HEIC photo support
+14. ✅ **Web UI Implementation**: Modern essentials-only interface
 
 ## Commit Discipline
 
