@@ -56,3 +56,16 @@ repos:
       - id: debug-statements
       - id: mixed-line-ending
         args: [--fix=lf]
+      - id: detect-private-key
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+            .*/tests/.*|
+            .*\.lock$|
+            uv\.lock$
+          )$

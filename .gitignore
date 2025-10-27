@@ -1,7 +1,10 @@
-# Environment variables
+# Environment variables - block ALL variants
 .env
-.env.local
-.env*.local
+.env.*
+!.env.example
+*.env
+*.env.*
+!*.env.example
 
 # Python cache files
 __pycache__/
