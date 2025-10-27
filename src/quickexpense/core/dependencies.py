@@ -17,6 +17,7 @@ from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.services.gemini import GeminiService
 from quickexpense.services.quickbooks import QuickBooksService
 from quickexpense.services.quickbooks_oauth import QuickBooksOAuthManager
+from quickexpense.services.rules_cache import RulesCacheService
 
 if TYPE_CHECKING:
     from quickexpense.services.quickbooks import QuickBooksClient
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 _quickbooks_client: QuickBooksClient | None = None
 _oauth_manager: QuickBooksOAuthManager | None = None
 _business_rules_engine: BusinessRuleEngine | None = None
+_rules_cache: RulesCacheService | None = None
 
 
 def set_quickbooks_client(client: QuickBooksClient | None) -> None:
@@ -44,6 +46,12 @@ def set_business_rules_engine(engine: BusinessRuleEngine) -> None:
     """Set the global business rules engine instance."""
     global _business_rules_engine  # noqa: PLW0603
     _business_rules_engine = engine
+
+
+def set_rules_cache(cache: RulesCacheService) -> None:
+    """Set the global rules cache instance."""
+    global _rules_cache  # noqa: PLW0603
+    _rules_cache = cache
 
 
 def get_quickbooks_client() -> QuickBooksClient | None:
@@ -65,6 +73,14 @@ def get_business_rules_engine() -> BusinessRuleEngine:
         msg = "Business rules engine not initialized"
         raise RuntimeError(msg)
     return _business_rules_engine
+
+
+def get_rules_cache() -> RulesCacheService:
+    """Get the rules cache instance."""
+    if _rules_cache is None:
+        msg = "Rules cache not initialized"
+        raise RuntimeError(msg)
+    return _rules_cache
 
 
 def get_quickbooks_service() -> QuickBooksService | None:
@@ -131,3 +147,4 @@ OAuthManagerDep = Annotated[QuickBooksOAuthManager, Depends(get_oauth_manager)]
 BusinessRulesEngineDep = Annotated[
     BusinessRuleEngine, Depends(get_business_rules_engine)
 ]
+RulesCacheDep = Annotated[RulesCacheService, Depends(get_rules_cache)]

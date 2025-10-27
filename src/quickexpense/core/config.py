@@ -173,6 +173,20 @@ class Settings(BaseSettings):
         description="Directory for rate limiter state files",
     )
 
+    # Caching configuration
+    enable_business_rules_cache: bool = Field(
+        default=True,
+        description="Enable business rules caching at startup",
+    )
+    business_rules_config_path: str = Field(
+        default="config/business_rules.json",
+        description="Path to business rules JSON configuration",
+    )
+    cra_rules_csv_path: str = Field(
+        default="config/cra_rules.csv",
+        description="Path to CRA business rules CSV",
+    )
+
     model_config = SettingsConfigDict(
         env_file=[".env.example", ".env.local"],  # Local overrides example
         env_file_encoding="utf-8",
