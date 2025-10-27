@@ -1,32 +1,54 @@
 # QuickExpense
 
-Modern expense management system for **Canadian small businesses and sole proprietors** with a powerful CLI and API that automatically creates QuickBooks expenses from receipts using AI-powered extraction and robust OAuth token management with **Canadian tax compliance** (CRA ITA Section 67.1, GST/HST).
+Modern expense management for **Canadian small businesses** with AI-powered receipt processing that automatically creates QuickBooks expenses with **CRA tax compliance** (ITA Section 67.1, GST/HST).
 
-## Features
+## What It Does
 
-- **Modern Web UI** - Clean, professional interface with essentials-only grid design
-- **CLI Interface** - Simple commands for receipt processing and expense management
-- **AI Receipt Processing** - Extract expense data from receipt images using Google Gemini
-- **Multi-Agent System** - Three specialized agents ensure accuracy with confidence scoring
-- **Hybrid LLM Approach** - Gemini for images (HEIC/PDF), TogetherAI for cost-effective reasoning
-- **Automatic Token Management** - Never worry about expired tokens
-- **Direct QuickBooks Integration** - Create vendors and expenses seamlessly
-- **Modern Python Stack** - FastAPI, Pydantic v2, Python 3.12+ with strictest type safety
-- **Smart Account Mapping** - Automatically selects appropriate payment and expense accounts
-- **Structured Audit Logging** - Professional CRA-compliant audit trail with 7-year retention
-- **Canadian Tax Compliance** - Business rules engine with CRA-compliant categorization
-  - Hotel marketing fees → Travel-Lodging (not Professional Services)
-  - Meals & Entertainment → 50% deductible (CRA ITA Section 67.1)
-  - GST/HST → 100% Input Tax Credit eligible
-  - Tourism levies → 100% deductible travel expenses
+Snap a photo of your receipt → Get expense created in QuickBooks with proper tax categorization.
+
+- 📸 **Receipt Processing**: Upload photos (JPEG, PNG, HEIC, PDF) via CLI or Web UI
+- 🤖 **Multi-Agent AI**: 3 specialized agents extract data, apply CRA rules, validate taxes
+- 📚 **QuickBooks Integration**: Auto-creates vendors and expenses with proper accounts
+- 🇨🇦 **Tax Compliance**: Meals 50% deductible, GST/HST Input Tax Credits, hotel fees categorized correctly
+- 🔐 **OAuth Management**: Auto-refreshing tokens, no manual intervention needed
+
+## Quick Commands
+
+```bash
+# Authenticate with QuickBooks (first time)
+uv run quickexpense auth
+
+# Process a receipt via CLI
+uv run quickexpense upload receipt.jpg
+
+# Start web UI
+uv run fastapi dev src/quickexpense/main.py
+# → Open http://localhost:8000
+
+# Test with API
+curl -X POST http://localhost:8000/api/v1/receipts/process-file \
+  -F "receipt=@receipt.pdf" \
+  -F "additional_context=Business dinner with client"
+```
+
+## Tech Stack
+
+- **Python 3.12+** with strict type safety (Pyright, mypy, Ruff 600+ rules)
+- **FastAPI** for async web API and modern UI
+- **Pydantic v2** for data validation
+- **LLM Providers**:
+  - **Gemini 2.0 Flash** (`gemini-2.0-flash-exp`) - Image processing (HEIC/PDF support)
+  - **TogetherAI** (`meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo`) - Cost-effective reasoning (47% cheaper)
+- **ag2 (AutoGen)** - Multi-agent orchestration
+- **uv** - Fast dependency management
 
 ## Prerequisites
 
-- Python 3.12+
-- [uv](https://github.com/astral-sh/uv) package manager
-- QuickBooks Developer Account
-- Google Gemini API key (for image processing)
-- TogetherAI API key (optional, for multi-agent reasoning)
+- **Python 3.12+**
+- **[uv](https://github.com/astral-sh/uv)** - Fast package manager
+- **QuickBooks Developer Account** - Get at [developer.intuit.com](https://developer.intuit.com/)
+- **Gemini API Key** - Get at [aistudio.google.com](https://aistudio.google.com/app/apikey)
+- **TogetherAI API Key** (optional) - Get at [api.together.xyz](https://api.together.xyz/)
 
 ## Quick Start
 
@@ -40,21 +62,29 @@ uv sync
 
 ### 2. Configure Environment
 
-Create a `.env` file with:
+Create a `.env` file:
 ```env
-# QuickBooks OAuth
+# QuickBooks OAuth (required)
 QB_CLIENT_ID=your_client_id
 QB_CLIENT_SECRET=your_client_secret
 QB_REDIRECT_URI=http://localhost:8000/callback
 QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
 
-# Gemini AI (for image processing)
+# Gemini AI (required - for image processing)
 GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash-exp
 
-# TogetherAI (optional, for multi-agent reasoning)
+# TogetherAI (optional - enables multi-agent system)
 TOGETHER_API_KEY=your_together_api_key
+TOGETHER_MODEL=meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
 LLM_PROVIDER=together  # Options: together, gemini, auto
+
+# HuggingFace Space Protection (optional - for public deployments)
+ENABLE_PASSWORD_PROTECTION=false
+HF_SPACE_PASSWORD=your_secure_password
 ```
+
+**Note**: OAuth tokens (access_token, refresh_token, company_id) are stored in `data/tokens.json` after authentication.
 
 ### 3. Authenticate with QuickBooks
 
@@ -105,26 +135,25 @@ uv run quickexpense status
 uv run quickexpense upload <receipt-file> [--dry-run] [--output json]
 ```
 
-### Web UI
+### Web UI Features
 
-Access the modern web interface at `http://localhost:8000` after starting the server.
+Access at `http://localhost:8000` after starting the server.
 
-**Features:**
-- **Three-column essentials grid**: Receipt info, Tax analysis, Status
-- **Drag & drop upload**: Support for JPEG, PNG, PDF, HEIC files
-- **Real-time processing**: Visual feedback with progress indicators
-- **Expandable details**: Optional advanced information section
-- **Responsive design**: Works on mobile and desktop
-- **Dry run mode**: Preview processing without creating expenses
+- **Essentials-only grid**: Receipt | Tax Analysis | Status (three columns)
+- **Drag & drop**: Upload JPEG, PNG, PDF, HEIC files
+- **Real-time feedback**: Progress indicators and visual status
+- **Expandable details**: Optional advanced information
+- **Dry run mode**: Preview without creating expenses in QuickBooks
 
-### Supported Receipt Formats
-- JPEG (.jpg, .jpeg)
-- PNG (.png)
-- GIF (.gif)
-- BMP (.bmp)
-- WebP (.webp)
-- PDF (.pdf)
-- HEIC (.heic, .heif) - iPhone photos
+### Supported File Formats
+
+| Format | Extensions | Notes |
+|--------|-----------|-------|
+| JPEG | `.jpg`, `.jpeg` | Standard photos |
+| PNG | `.png` | Screenshots |
+| PDF | `.pdf` | Multi-page receipts |
+| HEIC | `.heic`, `.heif` | iPhone photos (native support) |
+| Other | `.gif`, `.bmp`, `.webp` | Also supported |
 
 ### Example Output
 ```
@@ -178,19 +207,24 @@ $ uv run python scripts/verify_expense.py 185
    - $153.95 → Insurance Expense-General Liability Insurance
 ```
 
-### API Usage (Alternative)
-
-If you prefer the REST API:
+### REST API Usage
 
 ```bash
 # Start the API server
 uv run fastapi dev src/quickexpense/main.py
 
-# Create expense via API
+# Process receipt with multi-agent system (recommended)
+curl -X POST http://localhost:8000/api/v1/receipts/process-file \
+  -F "receipt=@receipt.pdf" \
+  -F "additional_context=Hotel stay for client meeting"
+
+# Create expense directly (no AI processing)
 curl -X POST http://localhost:8000/api/v1/expenses \
   -H "Content-Type: application/json" \
   -d '{"vendor_name": "Office Depot", "amount": 45.99, "date": "2024-01-15"}'
 ```
+
+**Note:** The `additional_context` parameter helps the AI better understand and categorize your expense (e.g., "Business dinner with client", "Hotel for conference").
 
 ## Project Structure
 
@@ -216,61 +250,39 @@ quickExpense/
 └── .env              # Environment variables
 ```
 
-## Key Features Explained
+## How It Works
 
-### Web UI Features
-- **Essentials-only design**: Focus on Receipt, Tax Analysis, and Status
-- **Grid-based layout**: Efficient use of horizontal space
-- **Responsive design**: Works on mobile and desktop devices
-- **Real-time processing**: Visual feedback and progress indicators
-- **Expandable details**: Optional advanced information section
-- **Drag & drop upload**: Intuitive file upload experience
-- **OAuth integration**: Seamless QuickBooks authentication with popup flow
+### Multi-Agent Processing Pipeline
 
-### CLI Features
-- Simple command-line interface for all operations
-- Built-in authentication flow with browser integration
-- Real-time status checking and connection validation
-- Dry-run mode for testing without creating expenses
-- JSON output option for integration with other tools
+When you upload a receipt, three specialized AI agents work in sequence:
 
-### Automatic Token Refresh
-- Access tokens auto-refresh before expiry (5-min buffer)
-- Automatic retry on 401 errors with token refresh
-- Handles QuickBooks refresh token rotation
-- Zero downtime from token expiration
+1. **DataExtractionAgent** (Gemini)
+   - Extracts vendor, date, amount, taxes from image/PDF
+   - Handles HEIC, PDF, multi-page documents
+   - Outputs structured JSON
 
-### Receipt Processing
-- Supports JPEG, PNG, GIF, BMP, WEBP, PDF formats
-- AI-powered extraction of vendor, amount, date, tax
-- Automatic vendor creation if not found
-- Smart expense account categorization
-- Automatic payment account selection (bank/credit card)
+2. **CRArulesAgent** (TogetherAI)
+   - Applies Canadian tax rules (CRA ITA Section 67.1)
+   - Categorizes expenses (Meals 50%, Travel, Office Supplies, etc.)
+   - Determines GST/HST Input Tax Credit eligibility
+   - Vendor-aware rules (hotel fees → Travel-Lodging)
 
-### Expense Verification
-- Built-in verification scripts to confirm expenses in QuickBooks
-- Search by vendor, date, or Purchase ID
-- View expense details including account mappings
+3. **TaxCalculatorAgent** (TogetherAI)
+   - Validates tax calculations
+   - Confidence scoring and audit risk assessment
+   - Final approval or flags for manual review
 
-### Environment Variables
+### Token Management
 
-Required in `.env`:
-```env
-# QuickBooks OAuth Configuration
-QB_CLIENT_ID=your_client_id
-QB_CLIENT_SECRET=your_client_secret
-QB_REDIRECT_URI=http://localhost:8000/callback
-QB_BASE_URL=https://sandbox-quickbooks.api.intuit.com
+**One-time setup required**: Configure OAuth credentials in `.env` file (see step 2 above)
 
-# Gemini AI Configuration
-GEMINI_API_KEY=your_gemini_key
+**After first authentication**: Tokens are automatically managed
+- **Storage**: `data/tokens.json` (gitignored)
+- **Auto-refresh**: 5-minute buffer before expiry
+- **Retry logic**: Automatic 401 error handling
+- **Zero downtime**: Handles QuickBooks token rotation seamlessly
 
-# TogetherAI Configuration (optional)
-TOGETHER_API_KEY=your_together_key
-LLM_PROVIDER=together
-```
-
-Tokens are stored separately in `data/tokens.json` after authentication.
+You only need to run `quickexpense auth` once. The system handles all token refreshing automatically.
 
 ## Development
 
@@ -320,22 +332,54 @@ uv run pre-commit install --hook-type commit-msg
 
 ## API Reference
 
-For REST API usage, start the server with `uv run fastapi dev src/quickexpense/main.py`:
+Start server: `uv run fastapi dev src/quickexpense/main.py`
+API docs: http://localhost:8000/docs
+
+### Key Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | Web UI home page |
-| `/api/v1/` | GET | API info |
+| `/api/v1/receipts/process-file` | POST | **Process receipt with multi-agent AI** (recommended) |
+| `/api/v1/expenses` | POST | Create expense directly (no AI) |
+| `/api/v1/receipts/extract` | POST | Extract receipt data with Gemini only |
 | `/api/v1/test-connection` | GET | Test QuickBooks connection |
-| `/api/v1/expenses` | POST | Create expense |
 | `/api/v1/vendors/{name}` | GET | Search vendor |
-| `/api/v1/vendors` | POST | Create vendor |
 | `/api/v1/accounts/expense` | GET | List expense accounts |
-| `/api/v1/receipts/extract` | POST | Extract receipt data (AI) |
-| `/api/v1/receipts/extract-with-agents` | POST | Process with multi-agent system |
 | `/api/web/auth-status` | GET | Check QuickBooks authentication |
 | `/api/web/upload-receipt` | POST | Upload receipt via web UI |
 
+### Multi-Agent Processing Endpoint
+
+**POST** `/api/v1/receipts/process-file`
+
+**Parameters:**
+- `receipt` (file): Receipt file (JPEG, PNG, PDF, HEIC)
+- `additional_context` (string, optional): Context to improve categorization
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/api/v1/receipts/process-file \
+  -F "receipt=@marriott.pdf" \
+  -F "additional_context=Hotel for business conference"
+```
+
+**Response:** JSON with vendor, amounts, tax analysis, CRA categorization, confidence scores
+
+## HuggingFace Space Deployment
+
+For public deployments, enable HTTP Basic Auth password protection:
+
+```env
+ENABLE_PASSWORD_PROTECTION=true
+HF_SPACE_PASSWORD=your_secure_password
+```
+
+**Protected paths:** Main UI, API endpoints, uploads
+**Exempt paths:** Health checks (`/health`, `/ready`), static files, docs
+
+Users will see a browser login dialog. Username can be blank; password must match `HF_SPACE_PASSWORD`.
+
 ## License
 
-[Your License]
+MIT
