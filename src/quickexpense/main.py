@@ -5,14 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from quickexpense.api import health_router, main_router, monitoring_router
+from quickexpense.api import admin_router, health_router, main_router, monitoring_router
 from quickexpense.api.web_endpoints import router as web_api_router
 from quickexpense.web.routes import router as web_ui_router
 from quickexpense.core.config import Settings, get_settings
@@ -20,8 +19,9 @@ from quickexpense.core.dependencies import (
     set_oauth_manager,
     set_quickbooks_client,
     set_business_rules_engine,
+    set_rules_cache,
 )
-from quickexpense.services.business_rules import BusinessRuleEngine
+from quickexpense.services.rules_cache import RulesCacheService
 from quickexpense.models.quickbooks_oauth import (
     QuickBooksOAuthConfig,
     QuickBooksTokenInfo,
@@ -112,14 +112,23 @@ async def lifespan(app: FastAPIType) -> AsyncGenerator[None, None]:
     oauth_manager.add_token_update_callback(save_tokens_callback)
     set_oauth_manager(oauth_manager)
 
-    # Initialize Business Rules Engine
-    config_path = Path(__file__).parent.parent.parent / "config" / "business_rules.json"
-    business_rules_engine = BusinessRuleEngine(config_path)
-    set_business_rules_engine(business_rules_engine)
+    # Initialize Business Rules Cache
+    rules_cache = RulesCacheService(settings)
+    set_rules_cache(rules_cache)
+
+    # Load rules into cache at startup
+    rules_cache.load_rules()
+    cache_status = rules_cache.get_cache_status()
     logger.info(
-        "Business rules engine initialized with %d rules",
-        len(business_rules_engine.config.rules) if business_rules_engine.config else 0,
+        "Business rules cache initialized: %d business rules, %d CRA rules",
+        cache_status["business_rules_count"],
+        cache_status["cra_rules_count"],
     )
+
+    # Set business rules engine for backward compatibility
+    if rules_cache.is_loaded and rules_cache.business_rule_engine:
+        set_business_rules_engine(rules_cache.business_rule_engine)
+        logger.info("Business rules engine set for backward compatibility")
 
     # Initialize QuickBooks client with OAuth manager only if we have tokens
     async with oauth_manager:
@@ -229,6 +238,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(main_router)
     app.include_router(monitoring_router)
+    app.include_router(admin_router)
     app.include_router(web_api_router)
     app.include_router(web_ui_router)
 

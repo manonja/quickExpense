@@ -15,8 +15,9 @@ from quickexpense.services.agents import (
 )
 from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.services.gemini import GeminiService
-from quickexpense.services.quickbooks import QuickBooksService
+from quickexpense.services.quickbooks_cached import CachedQuickBooksService
 from quickexpense.services.quickbooks_oauth import QuickBooksOAuthManager
+from quickexpense.services.rules_cache import RulesCacheService
 
 if TYPE_CHECKING:
     from quickexpense.services.quickbooks import QuickBooksClient
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 _quickbooks_client: QuickBooksClient | None = None
 _oauth_manager: QuickBooksOAuthManager | None = None
 _business_rules_engine: BusinessRuleEngine | None = None
+_rules_cache: RulesCacheService | None = None
 
 
 def set_quickbooks_client(client: QuickBooksClient | None) -> None:
@@ -44,6 +46,12 @@ def set_business_rules_engine(engine: BusinessRuleEngine) -> None:
     """Set the global business rules engine instance."""
     global _business_rules_engine  # noqa: PLW0603
     _business_rules_engine = engine
+
+
+def set_rules_cache(cache: RulesCacheService) -> None:
+    """Set the global rules cache instance."""
+    global _rules_cache  # noqa: PLW0603
+    _rules_cache = cache
 
 
 def get_quickbooks_client() -> QuickBooksClient | None:
@@ -67,12 +75,20 @@ def get_business_rules_engine() -> BusinessRuleEngine:
     return _business_rules_engine
 
 
-def get_quickbooks_service() -> QuickBooksService | None:
-    """Get QuickBooks service instance."""
+def get_rules_cache() -> RulesCacheService:
+    """Get the rules cache instance."""
+    if _rules_cache is None:
+        msg = "Rules cache not initialized"
+        raise RuntimeError(msg)
+    return _rules_cache
+
+
+def get_quickbooks_service() -> CachedQuickBooksService | None:
+    """Get QuickBooks service instance with caching."""
     client = get_quickbooks_client()
     if client is None:
         return None
-    return QuickBooksService(client)
+    return CachedQuickBooksService(client)
 
 
 def get_gemini_service(
@@ -121,7 +137,7 @@ async def initialize_quickbooks_client_after_oauth(company_id: str) -> None:
 # Type aliases for dependency injection
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 QuickBooksServiceDep = Annotated[
-    QuickBooksService | None, Depends(get_quickbooks_service)
+    CachedQuickBooksService | None, Depends(get_quickbooks_service)
 ]
 GeminiServiceDep = Annotated[GeminiService, Depends(get_gemini_service)]
 MultiAgentOrchestratorDep = Annotated[
@@ -131,3 +147,4 @@ OAuthManagerDep = Annotated[QuickBooksOAuthManager, Depends(get_oauth_manager)]
 BusinessRulesEngineDep = Annotated[
     BusinessRuleEngine, Depends(get_business_rules_engine)
 ]
+RulesCacheDep = Annotated[RulesCacheService, Depends(get_rules_cache)]
