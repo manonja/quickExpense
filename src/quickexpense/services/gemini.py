@@ -18,6 +18,7 @@ from quickexpense.services.file_processor import (
     FileProcessorService,
     FileType,
 )
+from quickexpense.services.rate_limiter import RateLimiter
 
 if TYPE_CHECKING:
     from quickexpense.core.config import Settings
@@ -33,6 +34,9 @@ class GeminiService:
         self.settings = settings
         self.file_processor = FileProcessorService()
         genai.configure(api_key=settings.gemini_api_key)  # type: ignore[attr-defined]
+
+        # Initialize rate limiter for Gemini API
+        self.rate_limiter = RateLimiter.get_instance("gemini", settings)
 
         # Configure the model with JSON schema response
         self.model = genai.GenerativeModel(  # type: ignore[attr-defined]
@@ -92,6 +96,10 @@ class GeminiService:
 
             # Build the prompt
             prompt = self._build_extraction_prompt(additional_context)
+
+            # Check rate limit before API call (may wait or raise ValueError)
+            self.rate_limiter.check_and_wait()
+            logger.debug("Rate limit check passed for Gemini API")
 
             # Process the image with Gemini
             response = self.model.generate_content([prompt, image])

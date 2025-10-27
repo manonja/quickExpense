@@ -147,8 +147,34 @@ class Settings(BaseSettings):
         description="Enable automatic fallback to secondary provider",
     )
 
+    # Gemini rate limiting
+    gemini_rpm_limit: int = Field(
+        default=15,
+        description="Gemini requests per minute limit (free tier: 15)",
+    )
+    gemini_rpd_limit: int = Field(
+        default=1500,
+        description="Gemini requests per day limit (free tier: 1500)",
+    )
+
+    # TogetherAI rate limiting
+    together_rpm_limit: int = Field(
+        default=60,
+        description="TogetherAI requests per minute limit",
+    )
+    together_rpd_limit: int = Field(
+        default=1500,
+        description="TogetherAI requests per day limit",
+    )
+
+    # Rate limiter configuration
+    rate_limiter_state_dir: str = Field(
+        default="data",
+        description="Directory for rate limiter state files",
+    )
+
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[".env.example", ".env.local"],  # Local overrides example
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

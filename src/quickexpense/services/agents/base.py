@@ -6,9 +6,12 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from quickexpense.services.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,7 @@ class BaseReceiptAgent(ABC):
         self.name = name
         self.timeout_seconds = timeout_seconds
         self.logger = logging.getLogger(f"{__name__}.{name}")
+        self.rate_limiter: RateLimiter | None = None  # Set by subclasses if needed
 
     async def process(
         self,
@@ -192,3 +196,18 @@ class BaseReceiptAgent(ABC):
         # Store the context if needed by subclasses
         self._correlation_id = correlation_id
         self._session_id = session_id
+
+    def check_rate_limit(self) -> None:
+        """Check rate limit before agent operation (if rate limiter is configured).
+
+        This method should be called by subclasses before making API calls.
+        If rate limiting is needed, subclasses should initialize self.rate_limiter.
+
+        Raises:
+            ValueError: If daily quota exceeded
+        """
+        if self.rate_limiter is not None:
+            self.logger.debug(
+                "Checking rate limit for %s agent", self.__class__.__name__
+            )
+            self.rate_limiter.check_and_wait()

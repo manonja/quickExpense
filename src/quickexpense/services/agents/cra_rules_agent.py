@@ -10,6 +10,7 @@ import autogen
 
 from quickexpense.services.cra_business_rules import CRABusinessRulesService
 from quickexpense.services.llm_provider import LLMProviderFactory
+from quickexpense.services.rate_limiter import RateLimiter
 
 from .base import BaseReceiptAgent
 
@@ -47,6 +48,10 @@ class CRArulesAgent(BaseReceiptAgent):
         # Override temperature for consistent categorization
         self.llm_config["config_list"][0]["temperature"] = 0.1
         self.llm_config["config_list"][0]["max_tokens"] = 2048
+
+        # Initialize rate limiter for TogetherAI if that's the provider
+        if self.llm_provider.provider_name == "together":
+            self.rate_limiter = RateLimiter.get_instance("together", settings)
 
         # Create the autogen assistant agent
         self.agent = autogen.AssistantAgent(
@@ -124,6 +129,9 @@ class CRArulesAgent(BaseReceiptAgent):
         )
 
         try:
+            # Check rate limit before agent call
+            self.check_rate_limit()
+
             # Have the agent analyze and potentially refine the categorization
             response = await user_proxy.a_initiate_chat(
                 self.agent,
@@ -180,6 +188,9 @@ class CRArulesAgent(BaseReceiptAgent):
         )
 
         try:
+            # Check rate limit before agent call
+            self.check_rate_limit()
+
             response = await user_proxy.a_initiate_chat(
                 self.agent,
                 message=prompt,

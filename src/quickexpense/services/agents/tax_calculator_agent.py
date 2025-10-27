@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 import autogen
 
 from quickexpense.services.llm_provider import LLMProviderFactory
+from quickexpense.services.rate_limiter import RateLimiter
 
 from .base import BaseReceiptAgent
 
@@ -69,6 +70,10 @@ class TaxCalculatorAgent(BaseReceiptAgent):
         # Override temperature for mathematical accuracy
         self.llm_config["config_list"][0]["temperature"] = 0.05
         self.llm_config["config_list"][0]["max_tokens"] = 2048
+
+        # Initialize rate limiter for TogetherAI if that's the provider
+        if self.llm_provider.provider_name == "together":
+            self.rate_limiter = RateLimiter.get_instance("together", settings)
 
         # Create the autogen assistant agent
         self.agent = autogen.AssistantAgent(
@@ -139,6 +144,9 @@ class TaxCalculatorAgent(BaseReceiptAgent):
         )
 
         try:
+            # Check rate limit before agent call
+            self.check_rate_limit()
+
             response = await user_proxy.a_initiate_chat(
                 self.agent,
                 message=prompt,

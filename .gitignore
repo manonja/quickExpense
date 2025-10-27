@@ -1,5 +1,7 @@
 # Environment variables
 .env
+.env.local
+.env*.local
 
 # Python cache files
 __pycache__/
@@ -40,6 +42,10 @@ htmlcov/
 # Token storage
 data/tokens.json
 data/*.json
+
+# Rate limiter state files
+data/rate_limiter_*.json
+data/rate_limiter_*.lock
 
 # Logs
 *.log
