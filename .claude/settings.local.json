@@ -12,7 +12,9 @@
       "Bash(mkdir:*)",
       "Bash(git checkout:*)",
       "Bash(uv run:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(gh pr view:*)",
+      "mcp__zen__planner"
     ],
     "deny": []
   }
