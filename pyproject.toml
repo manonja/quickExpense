@@ -23,6 +23,7 @@ dependencies = [
     "ag2[together]>=0.9.9",
     "ag2[gemini]>=0.9.9",
     "pandas>=2.0.0",
+    "filelock>=3.13.0",
 ]
 
 [project.scripts]
