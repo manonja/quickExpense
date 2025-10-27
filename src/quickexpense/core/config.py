@@ -186,6 +186,22 @@ class Settings(BaseSettings):
         default="config/cra_rules.csv",
         description="Path to CRA business rules CSV",
     )
+    enable_quickbooks_cache: bool = Field(
+        default=True,
+        description="Enable QuickBooks API response caching",
+    )
+    qb_vendor_cache_ttl: int = Field(
+        default=600,
+        description="QuickBooks vendor cache TTL in seconds (10 minutes)",
+    )
+    qb_account_cache_ttl: int = Field(
+        default=900,
+        description="QuickBooks account cache TTL in seconds (15 minutes)",
+    )
+    qb_cache_max_size: int = Field(
+        default=256,
+        description="Maximum number of entries in QuickBooks caches",
+    )
 
     model_config = SettingsConfigDict(
         env_file=[".env.example", ".env.local"],  # Local overrides example
