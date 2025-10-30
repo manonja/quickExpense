@@ -237,6 +237,69 @@ class CRArulesAgent(BaseReceiptAgent):
             fallback_rule = self.cra_rules_service.get_fallback_rule()
             return self._rule_match_to_dict(fallback_rule)
 
+    def _add_tax_and_tip_items(
+        self, line_items: list[dict[str, Any]], receipt_data: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Add tax/tip as line items if present and not already included.
+
+        This helper normalizes receipt data by ensuring GST/HST and tips from
+        top-level fields are included in the line_items array for processing.
+
+        Args:
+            line_items: Original line items from receipt
+            receipt_data: Full receipt data with tax_amount and tip_amount
+
+        Returns:
+            Enhanced line items list with tax/tip added if applicable
+        """
+        items = line_items.copy()  # Defensive: don't mutate input
+
+        # Add GST/HST if present in top-level field
+        tax_amount = receipt_data.get("tax_amount", 0)
+        if tax_amount and tax_amount > 0:
+            # Check if not already in items (case-insensitive)
+            has_tax = any(
+                "gst" in str(item.get("description", "")).lower()
+                or "hst" in str(item.get("description", "")).lower()
+                or "tax" in str(item.get("description", "")).lower()
+                for item in items
+            )
+            if not has_tax:
+                items.append(
+                    {
+                        "description": "GST/HST",
+                        "total_price": float(tax_amount),
+                        "quantity": 1,
+                        "unit_price": float(tax_amount),
+                    }
+                )
+                logger.debug(
+                    "Added GST/HST line item from top-level tax_amount: $%.2f",
+                    float(tax_amount),
+                )
+
+        # Add tip if present in top-level field
+        tip_amount = receipt_data.get("tip_amount", 0)
+        if tip_amount and tip_amount > 0:
+            has_tip = any(
+                "tip" in str(item.get("description", "")).lower() for item in items
+            )
+            if not has_tip:
+                items.append(
+                    {
+                        "description": "Tip",
+                        "total_price": float(tip_amount),
+                        "quantity": 1,
+                        "unit_price": float(tip_amount),
+                    }
+                )
+                logger.debug(
+                    "Added Tip line item from top-level tip_amount: $%.2f",
+                    float(tip_amount),
+                )
+
+        return items
+
     def _build_refinement_prompt(
         self,
         receipt_data: dict[str, Any],
@@ -246,6 +309,9 @@ class CRArulesAgent(BaseReceiptAgent):
         """Build prompt for refining categorization with line-item processing."""
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
+
+        # Add tax/tip items from top-level fields before processing
+        line_items = self._add_tax_and_tip_items(line_items, receipt_data)
 
         # Build structured JSON input array (NOT concatenated string)
         line_items_json = json.dumps(
@@ -307,6 +373,9 @@ YOUR RESPONSE (valid JSON only):
         """Build prompt for fallback categorization with line-item processing."""
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
+
+        # Add tax/tip items from top-level fields before processing
+        line_items = self._add_tax_and_tip_items(line_items, receipt_data)
 
         # Build structured JSON input array (NOT concatenated string)
         line_items_json = json.dumps(
