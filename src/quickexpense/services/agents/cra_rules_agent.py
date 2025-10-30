@@ -162,9 +162,12 @@ class CRArulesAgent(BaseReceiptAgent):
                 max_turns=1,
             )
 
-            # Extract and parse the JSON response
+            # Extract and parse the JSON response with tax calculations
             last_message = response.chat_history[-1]["content"]
-            refined_data = self._parse_response(last_message)
+            line_items = receipt_data.get("line_items", [])
+            refined_data = self._parse_response(
+                last_message, input_line_items=line_items
+            )
 
             # If parsing failed or no items, fall back to rule-based result
             if not refined_data.get("processed_items"):
@@ -213,7 +216,10 @@ class CRArulesAgent(BaseReceiptAgent):
             )
 
             last_message = response.chat_history[-1]["content"]
-            categorization_data = self._parse_response(last_message)
+            line_items = receipt_data.get("line_items", [])
+            categorization_data = self._parse_response(
+                last_message, input_line_items=line_items
+            )
 
             # If parsing failed or no items, use fallback rule
             if not categorization_data.get("processed_items"):
@@ -359,14 +365,17 @@ INPUT:
 YOUR RESPONSE (valid JSON only):
 """
 
-    def _parse_response(self, llm_response: str) -> dict[str, Any]:
-        """Parse LLM response with validation and error handling.
+    def _parse_response(
+        self, llm_response: str, input_line_items: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        """Parse LLM response with validation, error handling, and tax calculations.
 
         Args:
             llm_response: Raw LLM response string
+            input_line_items: Optional list of original line items for amount lookup
 
         Returns:
-            Parsed and validated response dictionary
+            Parsed and validated response dictionary with calculated amounts
         """
         try:
             # Remove markdown code blocks if present
@@ -399,6 +408,30 @@ YOUR RESPONSE (valid JSON only):
                     item["reasoning"] = (
                         f"Original category '{category}' not recognized. "
                         "Manual review required."
+                    )
+
+            # Add tax calculations if line items provided
+            if input_line_items:
+                # Create amount lookup map (line_number → original amount)
+                amount_map = {}
+                for i, item in enumerate(input_line_items):
+                    line_num = i + 1
+                    # Extract amount, handling dict types
+                    amount = float(item.get("total_price", 0))
+                    amount_map[line_num] = amount
+
+                # Add calculated fields to each processed item
+                for item in parsed["processed_items"]:
+                    line_num = item.get("line_number")
+
+                    # Defensive: Use .get() with defaults to prevent KeyError
+                    original_amount = amount_map.get(line_num, 0.0)
+                    deductibility = item.get("deductibility_percent", 0)
+
+                    # Add calculated fields
+                    item["original_amount"] = round(original_amount, 2)
+                    item["deductible_amount"] = round(
+                        (original_amount * deductibility) / 100.0, 2
                     )
 
             return parsed  # type: ignore[no-any-return]
