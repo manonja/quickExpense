@@ -256,6 +256,12 @@ class CRArulesAgent(BaseReceiptAgent):
 
         # Add GST/HST if present in top-level field
         tax_amount = receipt_data.get("tax_amount", 0)
+        # Convert to float if string (defensive)
+        try:
+            tax_amount = float(tax_amount) if tax_amount else 0.0
+        except (ValueError, TypeError):
+            tax_amount = 0.0
+
         if tax_amount and tax_amount > 0:
             # Check if not already in items (case-insensitive)
             has_tax = any(
@@ -280,6 +286,12 @@ class CRArulesAgent(BaseReceiptAgent):
 
         # Add tip if present in top-level field
         tip_amount = receipt_data.get("tip_amount", 0)
+        # Convert to float if string (defensive)
+        try:
+            tip_amount = float(tip_amount) if tip_amount else 0.0
+        except (ValueError, TypeError):
+            tip_amount = 0.0
+
         if tip_amount and tip_amount > 0:
             has_tip = any(
                 "tip" in str(item.get("description", "")).lower() for item in items
@@ -306,12 +318,26 @@ class CRArulesAgent(BaseReceiptAgent):
         best_match: Any,  # noqa: ANN401
         all_matches: list[Any],  # noqa: ARG002
     ) -> str:
-        """Build prompt for refining categorization with line-item processing."""
+        """Build prompt with RAG context for refining categorization."""
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
 
         # Add tax/tip items from top-level fields before processing
         line_items = self._add_tax_and_tip_items(line_items, receipt_data)
+
+        # GET RAG CONTEXT (NEW)
+        line_items_text = " ".join(
+            [
+                item.get("description", "")
+                for item in line_items
+                if isinstance(item, dict)
+            ]
+        )
+        rag_context = self._get_rag_context(
+            expense_description=line_items_text,
+            expense_category=best_match.rule.category,
+            vendor_name=vendor_name,
+        )
 
         # Build structured JSON input array (NOT concatenated string)
         line_items_json = json.dumps(
@@ -329,13 +355,22 @@ class CRArulesAgent(BaseReceiptAgent):
         return f"""
 You are an expert Canadian tax categorization agent for business expenses.
 
+**AUTHORITATIVE CRA CONTEXT:**
+---
+{rag_context}
+---
+
 **CRITICAL INSTRUCTIONS:**
 1. You MUST process EACH line item separately - do NOT aggregate or summarize
 2. You MUST return valid JSON with a "processed_items" array
 3. You MUST only use categories from the ALLOWED_CATEGORIES list below
-4. If an item's business purpose is ambiguous or possibly personal, use
+4. If the CRA context above contains relevant citations, you MUST:
+   - Reference them in your reasoning
+   - Include the citation IDs in a "citations" field
+   - Base your decision on the official CRA guidance
+5. If an item's business purpose is ambiguous or possibly personal, use
    "Uncategorized-Review-Required"
-5. Apply CRA rules: Meals 50%, Lodging 100%, GST/HST 100%, Office Supplies 100%
+6. Apply CRA rules: Meals 50%, Lodging 100%, GST/HST 100%, Office Supplies 100%
 
 **ALLOWED_CATEGORIES:**
 {json.dumps(ALLOWED_CATEGORIES, indent=2)}
@@ -348,7 +383,8 @@ You are an expert Canadian tax categorization agent for business expenses.
       "original_description": "string",
       "category": "string (from ALLOWED_CATEGORIES)",
       "deductibility_percent": integer (0-100),
-      "reasoning": "Brief explanation with CRA rule reference"
+      "reasoning": "Brief explanation with CRA citation reference if available",
+      "citations": ["T4002-####", ...]
     }}
   ]
 }}
@@ -370,12 +406,26 @@ YOUR RESPONSE (valid JSON only):
 """
 
     def _build_fallback_prompt(self, receipt_data: dict[str, Any]) -> str:
-        """Build prompt for fallback categorization with line-item processing."""
+        """Build prompt with RAG context for fallback categorization."""
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
 
         # Add tax/tip items from top-level fields before processing
         line_items = self._add_tax_and_tip_items(line_items, receipt_data)
+
+        # GET RAG CONTEXT (NEW)
+        line_items_text = " ".join(
+            [
+                item.get("description", "")
+                for item in line_items
+                if isinstance(item, dict)
+            ]
+        )
+        rag_context = self._get_rag_context(
+            expense_description=line_items_text,
+            expense_category=None,  # No category hint in fallback
+            vendor_name=vendor_name,
+        )
 
         # Build structured JSON input array (NOT concatenated string)
         line_items_json = json.dumps(
@@ -393,13 +443,22 @@ YOUR RESPONSE (valid JSON only):
         return f"""
 You are an expert Canadian tax categorization agent for business expenses.
 
+**AUTHORITATIVE CRA CONTEXT:**
+---
+{rag_context}
+---
+
 **CRITICAL INSTRUCTIONS:**
 1. You MUST process EACH line item separately - do NOT aggregate or summarize
 2. You MUST return valid JSON with a "processed_items" array
 3. You MUST only use categories from the ALLOWED_CATEGORIES list below
-4. If an item's business purpose is ambiguous or possibly personal, use
+4. If the CRA context above contains relevant citations, you MUST:
+   - Reference them in your reasoning
+   - Include the citation IDs in a "citations" field
+   - Base your decision on the official CRA guidance
+5. If an item's business purpose is ambiguous or possibly personal, use
    "Uncategorized-Review-Required"
-5. Apply CRA rules: Meals 50%, Lodging 100%, GST/HST 100%, Office Supplies 100%
+6. Apply CRA rules: Meals 50%, Lodging 100%, GST/HST 100%, Office Supplies 100%
 
 **ALLOWED_CATEGORIES:**
 {json.dumps(ALLOWED_CATEGORIES, indent=2)}
@@ -412,7 +471,8 @@ You are an expert Canadian tax categorization agent for business expenses.
       "original_description": "string",
       "category": "string (from ALLOWED_CATEGORIES)",
       "deductibility_percent": integer (0-100),
-      "reasoning": "Brief explanation with CRA rule reference"
+      "reasoning": "Brief explanation with CRA citation reference if available",
+      "citations": ["T4002-####", ...]
     }}
   ]
 }}
@@ -462,7 +522,7 @@ YOUR RESPONSE (valid JSON only):
                 msg = "Invalid response structure"
                 raise ValueError(msg)
 
-            # Validate and sanitize categories
+            # Validate and sanitize categories, initialize citations
             for item in parsed["processed_items"]:
                 category = item.get("category", "")
                 if category not in ALLOWED_CATEGORIES:
@@ -478,6 +538,10 @@ YOUR RESPONSE (valid JSON only):
                         f"Original category '{category}' not recognized. "
                         "Manual review required."
                     )
+
+                # Initialize citations field if missing (NEW)
+                if "citations" not in item:
+                    item["citations"] = []
 
             # Add tax calculations if line items provided
             if input_line_items:
@@ -636,6 +700,60 @@ YOUR RESPONSE (valid JSON only):
             base_confidence += min(len(matched_keywords) * 0.02, 0.1)
 
         return max(0.0, min(base_confidence, 1.0))
+
+    def _get_rag_context(
+        self,
+        expense_description: str,
+        expense_category: str | None = None,
+        vendor_name: str | None = None,
+    ) -> str:
+        """Retrieve and format CRA context from RAG database.
+
+        Args:
+            expense_description: Line items or description
+            expense_category: Category hint (e.g., "meals", "travel")
+            vendor_name: Vendor name for context
+
+        Returns:
+            Formatted context string for LLM prompt
+        """
+        try:
+            import qe_tax_rag as qe
+
+            # Build search query
+            query_parts = [expense_description]
+            if vendor_name:
+                query_parts.append(vendor_name)
+            query_parts.append("tax deduction rules")
+            query = " ".join(filter(None, query_parts))
+
+            # Search RAG database
+            results = qe.search(
+                query=query,
+                expense_types=[expense_category] if expense_category else [],
+                top_k=3,
+            )
+
+            if not results:
+                return "No specific CRA documents found. Rely on general tax knowledge."
+
+            # Format results
+            context_parts = ["Relevant CRA Documents Found:"]
+            for i, result in enumerate(results, 1):
+                # Escape quotes to prevent JSON issues
+                content = result.content[:400].replace('"', '\\"')
+                entry = (
+                    f"\n{i}. Citation ID: {result.citation_id}\n"
+                    f"   Source: {result.source_url}\n"
+                    f'   Content: "{content}..."'
+                )
+                context_parts.append(entry)
+
+            return "\n".join(context_parts)
+
+        except Exception as e:  # noqa: BLE001
+            logger.warning("RAG search failed: %s", e)
+            return "RAG search failed. Rely on general tax knowledge."
 
     def _get_cra_system_message(self) -> str:
         """Get the system message for the CRA rules agent."""

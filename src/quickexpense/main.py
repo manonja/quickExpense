@@ -130,6 +130,20 @@ async def lifespan(app: FastAPIType) -> AsyncGenerator[None, None]:
         set_business_rules_engine(rules_cache.business_rule_engine)
         logger.info("Business rules engine set for backward compatibility")
 
+    # Initialize RAG database
+    try:
+        import qe_tax_rag as qe  # type: ignore
+
+        qe.init()
+        version = qe.get_version()
+        logger.info(
+            "✅ RAG initialized: %s (data: %s)",
+            version["library_version"],
+            version["data_version"],
+        )
+    except Exception as e:
+        logger.warning("⚠️ RAG init failed (will use LLM only): %s", e)
+
     # Initialize QuickBooks client with OAuth manager only if we have tokens
     async with oauth_manager:
         qb_client = None

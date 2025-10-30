@@ -102,8 +102,9 @@ def get_multi_agent_orchestrator(
 ) -> AgentOrchestrator:
     """Get multi-agent orchestrator instance (2-agent system)."""
     # Create the two specialized agents (tax calculations integrated in CRArulesAgent)
-    data_extraction_agent = DataExtractionAgent(settings=settings)
-    cra_rules_agent = CRArulesAgent(settings=settings)
+    # Use longer timeouts for complex processing
+    data_extraction_agent = DataExtractionAgent(settings=settings, timeout_seconds=30.0)
+    cra_rules_agent = CRArulesAgent(settings=settings, timeout_seconds=30.0)
 
     # Create and return orchestrator
     return AgentOrchestrator(
