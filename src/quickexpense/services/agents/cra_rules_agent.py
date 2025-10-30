@@ -19,6 +19,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Allowed expense categories for CRA compliance
+ALLOWED_CATEGORIES = [
+    "Travel-Lodging",
+    "Travel-Meals",
+    "Travel-Taxes",
+    "Office-Supplies",
+    "Fuel-Vehicle",
+    "Capital-Equipment",
+    "Tax-GST/HST",
+    "Professional-Services",
+    "Meals & Entertainment",
+    "Uncategorized-Review-Required",
+]
+
 
 class CRArulesAgent(BaseReceiptAgent):
     """Agent specialized in applying CRA business rules and tax categorization."""
@@ -77,6 +91,15 @@ class CRArulesAgent(BaseReceiptAgent):
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
         total_amount = receipt_data.get("total_amount", 0)
+
+        # Defensive: Handle empty line items
+        if not line_items:
+            logger.warning("No line items to process")
+            return {
+                "processed_items": [],
+                "warning": "No line items found in receipt data",
+                "confidence": 0.0,
+            }
 
         # Extract line item descriptions
         line_item_descriptions = [
@@ -139,26 +162,18 @@ class CRArulesAgent(BaseReceiptAgent):
                 max_turns=1,
             )
 
-            # Extract the JSON response
+            # Extract and parse the JSON response
             last_message = response.chat_history[-1]["content"]
+            refined_data = self._parse_response(last_message)
 
-            try:
-                refined_data = json.loads(last_message)
-            except json.JSONDecodeError:
-                # Try to find JSON in the response
-                import re
+            # If parsing failed or no items, fall back to rule-based result
+            if not refined_data.get("processed_items"):
+                logger.warning(
+                    "No processed items in agent response, using rule-based result"
+                )
+                refined_data = self._rule_match_to_dict(best_match)
 
-                json_match = re.search(r"\{.*\}", last_message, re.DOTALL)
-                if json_match:
-                    refined_data = json.loads(json_match.group())
-                else:
-                    # Fall back to the rule-based result
-                    refined_data = self._rule_match_to_dict(best_match)
-
-            # Ensure we have all required fields
-            self._validate_categorization_result(refined_data)
-
-            return refined_data  # type: ignore[no-any-return]
+            return refined_data
 
         except Exception as e:  # noqa: BLE001
             self.logger.warning(
@@ -198,22 +213,17 @@ class CRArulesAgent(BaseReceiptAgent):
             )
 
             last_message = response.chat_history[-1]["content"]
+            categorization_data = self._parse_response(last_message)
 
-            try:
-                categorization_data = json.loads(last_message)
-            except json.JSONDecodeError:
-                import re
+            # If parsing failed or no items, use fallback rule
+            if not categorization_data.get("processed_items"):
+                logger.warning(
+                    "No processed items in agent response, using fallback rule"
+                )
+                fallback_rule = self.cra_rules_service.get_fallback_rule()
+                return self._rule_match_to_dict(fallback_rule)
 
-                json_match = re.search(r"\{.*\}", last_message, re.DOTALL)
-                if json_match:
-                    categorization_data = json.loads(json_match.group())
-                else:
-                    # Use fallback rule
-                    fallback_rule = self.cra_rules_service.get_fallback_rule()
-                    return self._rule_match_to_dict(fallback_rule)
-
-            self._validate_categorization_result(categorization_data)
-            return categorization_data  # type: ignore[no-any-return]
+            return categorization_data
 
         except Exception as e:  # noqa: BLE001
             # Return fallback categorization on error
@@ -225,116 +235,187 @@ class CRArulesAgent(BaseReceiptAgent):
         self,
         receipt_data: dict[str, Any],
         best_match: Any,  # noqa: ANN401
-        all_matches: list[Any],
+        all_matches: list[Any],  # noqa: ARG002
     ) -> str:
-        """Build prompt for refining rule-based categorization."""
+        """Build prompt for refining categorization with line-item processing."""
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
-        total_amount = receipt_data.get("total_amount", 0)
 
-        line_item_text = "; ".join(
+        # Build structured JSON input array (NOT concatenated string)
+        line_items_json = json.dumps(
             [
-                item.get("description", "")
-                for item in line_items
+                {
+                    "line_number": i + 1,
+                    "description": item.get("description", ""),
+                    "amount": float(item.get("total_price", 0)),
+                }
+                for i, item in enumerate(line_items)
                 if isinstance(item, dict)
             ]
         )
 
         return f"""
-Analyze this business expense and validate the suggested CRA categorization:
+You are an expert Canadian tax categorization agent for business expenses.
 
-EXPENSE DETAILS:
-- Vendor: {vendor_name}
-- Line Items: {line_item_text}
-- Total Amount: ${total_amount}
+**CRITICAL INSTRUCTIONS:**
+1. You MUST process EACH line item separately - do NOT aggregate or summarize
+2. You MUST return valid JSON with a "processed_items" array
+3. You MUST only use categories from the ALLOWED_CATEGORIES list below
+4. If an item's business purpose is ambiguous or possibly personal, use
+   "Uncategorized-Review-Required"
+5. Apply CRA rules: Meals 50%, Lodging 100%, GST/HST 100%, Office Supplies 100%
 
-SUGGESTED CATEGORIZATION:
-- Category: {best_match.rule.category}
-- Deductibility: {best_match.rule.deductibility_rate}%
-- T2125 Line: {best_match.rule.t2125_line}
-- ITA Section: {best_match.rule.ita_section}
-- Audit Risk: {best_match.rule.audit_risk}
-- Confidence: {best_match.confidence_score:.2f}
-- Matching Reason: {best_match.matching_reason}
+**ALLOWED_CATEGORIES:**
+{json.dumps(ALLOWED_CATEGORIES, indent=2)}
 
-ALTERNATIVE MATCHES:
-{self._format_alternative_matches(all_matches[1:5])}  # Show up to 4 alternatives
-
-Based on Canadian tax law (CRA) and the Income Tax Act, validate or refine this
-categorization.
-Consider vendor type, expense nature, and proper T2125 form placement.
-
-Return your analysis as JSON:
+**REQUIRED OUTPUT SCHEMA:**
 {{
-    "category": "string",
-    "deductibility_percentage": "number (0-100)",
-    "qb_account": "string",
-    "tax_treatment": "string",
-    "ita_section": "string",
-    "audit_risk": "LOW|MEDIUM|HIGH",
-    "t2125_line": "string",
-    "rule_applied": "string describing which rule/reasoning was used",
-    "confidence_adjustment": "number (-0.2 to +0.2) to adjust original confidence",
-    "reasoning": "string explaining the categorization decision"
+  "processed_items": [
+    {{
+      "line_number": integer,
+      "original_description": "string",
+      "category": "string (from ALLOWED_CATEGORIES)",
+      "deductibility_percent": integer (0-100),
+      "reasoning": "Brief explanation with CRA rule reference"
+    }}
+  ]
 }}
 
-Return ONLY the JSON object.
+**SUGGESTED CATEGORIZATION (from rules engine):**
+- Category: {best_match.rule.category}
+- Deductibility: {best_match.rule.deductibility_rate}%
+- Confidence: {best_match.confidence_score:.2f}
+- Reasoning: {best_match.matching_reason}
+
+**EXPENSE TO PROCESS:**
+INPUT:
+{{
+  "vendor_name": "{vendor_name}",
+  "line_items": {line_items_json}
+}}
+
+YOUR RESPONSE (valid JSON only):
 """
 
     def _build_fallback_prompt(self, receipt_data: dict[str, Any]) -> str:
-        """Build prompt for fallback categorization when no rules match."""
+        """Build prompt for fallback categorization with line-item processing."""
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
-        total_amount = receipt_data.get("total_amount", 0)
 
-        line_item_text = "; ".join(
+        # Build structured JSON input array (NOT concatenated string)
+        line_items_json = json.dumps(
             [
-                item.get("description", "")
-                for item in line_items
+                {
+                    "line_number": i + 1,
+                    "description": item.get("description", ""),
+                    "amount": float(item.get("total_price", 0)),
+                }
+                for i, item in enumerate(line_items)
                 if isinstance(item, dict)
             ]
         )
 
-        # Get available categories from the rules service
-        available_categories = self.cra_rules_service.get_all_categories()
-
         return f"""
-Categorize this business expense according to Canadian tax law (CRA) and Income Tax Act:
+You are an expert Canadian tax categorization agent for business expenses.
 
-EXPENSE DETAILS:
-- Vendor: {vendor_name}
-- Line Items: {line_item_text}
-- Total Amount: ${total_amount}
+**CRITICAL INSTRUCTIONS:**
+1. You MUST process EACH line item separately - do NOT aggregate or summarize
+2. You MUST return valid JSON with a "processed_items" array
+3. You MUST only use categories from the ALLOWED_CATEGORIES list below
+4. If an item's business purpose is ambiguous or possibly personal, use
+   "Uncategorized-Review-Required"
+5. Apply CRA rules: Meals 50%, Lodging 100%, GST/HST 100%, Office Supplies 100%
 
-AVAILABLE CATEGORIES:
-{', '.join(available_categories)}
+**ALLOWED_CATEGORIES:**
+{json.dumps(ALLOWED_CATEGORIES, indent=2)}
 
-KEY CRA RULES TO CONSIDER:
-1. Meals & Entertainment: 50% deductible (ITA Section 67.1)
-2. Travel expenses: Generally 100% deductible
-3. Office supplies: 100% deductible
-4. Vehicle expenses: 100% deductible for business use
-5. Professional fees: 100% deductible
-6. Telecommunications: Business portion deductible
-
-Analyze the vendor and line items to determine the most appropriate categorization.
-
-Return your categorization as JSON:
+**REQUIRED OUTPUT SCHEMA:**
 {{
-    "category": "string (choose from available categories)",
-    "deductibility_percentage": "number (0-100)",
-    "qb_account": "string (appropriate QuickBooks account)",
-    "tax_treatment": "string (standard|meals_limitation|input_tax_credit|etc)",
-    "ita_section": "string (relevant ITA section)",
-    "audit_risk": "LOW|MEDIUM|HIGH",
-    "t2125_line": "string (T2125 form line number)",
-    "rule_applied": "Agent analysis - no matching automated rule",
-    "confidence_adjustment": "0.0",
-    "reasoning": "string explaining why this categorization was chosen"
+  "processed_items": [
+    {{
+      "line_number": integer,
+      "original_description": "string",
+      "category": "string (from ALLOWED_CATEGORIES)",
+      "deductibility_percent": integer (0-100),
+      "reasoning": "Brief explanation with CRA rule reference"
+    }}
+  ]
 }}
 
-Return ONLY the JSON object.
+**KEY CRA RULES:**
+- Meals & Entertainment: 50% deductible (ITA Section 67.1)
+- Travel Lodging: 100% deductible
+- GST/HST: 100% deductible as Input Tax Credit
+- Office Supplies: 100% deductible
+- Professional Services: 100% deductible
+
+**EXPENSE TO PROCESS:**
+INPUT:
+{{
+  "vendor_name": "{vendor_name}",
+  "line_items": {line_items_json}
+}}
+
+YOUR RESPONSE (valid JSON only):
 """
+
+    def _parse_response(self, llm_response: str) -> dict[str, Any]:
+        """Parse LLM response with validation and error handling.
+
+        Args:
+            llm_response: Raw LLM response string
+
+        Returns:
+            Parsed and validated response dictionary
+        """
+        try:
+            # Remove markdown code blocks if present
+            cleaned = llm_response.strip()
+            cleaned = cleaned.removeprefix("```json")
+            cleaned = cleaned.removeprefix("```")
+            cleaned = cleaned.removesuffix("```")
+            cleaned = cleaned.strip()
+
+            parsed = json.loads(cleaned)
+
+            # Validate structure
+            if "processed_items" not in parsed:
+                logger.error("Missing 'processed_items' key in LLM response")
+                msg = "Invalid response structure"
+                raise ValueError(msg)
+
+            # Validate and sanitize categories
+            for item in parsed["processed_items"]:
+                category = item.get("category", "")
+                if category not in ALLOWED_CATEGORIES:
+                    logger.warning(
+                        "Invalid category '%s' for line %s, replacing with '%s'",
+                        category,
+                        item.get("line_number"),
+                        "Uncategorized-Review-Required",
+                    )
+                    item["category"] = "Uncategorized-Review-Required"
+                    item["deductibility_percent"] = 0
+                    item["reasoning"] = (
+                        f"Original category '{category}' not recognized. "
+                        "Manual review required."
+                    )
+
+            return parsed  # type: ignore[no-any-return]
+
+        except json.JSONDecodeError as e:
+            logger.error("JSON decode error: %s\nResponse: %s", e, llm_response[:200])
+            return {
+                "processed_items": [],
+                "error": "Failed to parse LLM response as JSON",
+                "raw_response": llm_response[:500],
+            }
+        except Exception as e:  # noqa: BLE001
+            logger.error("Unexpected error parsing response: %s", e)
+            return {
+                "processed_items": [],
+                "error": str(e),
+            }
 
     def _format_alternative_matches(self, matches: list[Any]) -> str:
         """Format alternative rule matches for display."""
