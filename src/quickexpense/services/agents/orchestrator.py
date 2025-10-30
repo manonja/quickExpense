@@ -50,20 +50,17 @@ class AgentOrchestrator:
         self,
         data_extraction_agent: BaseReceiptAgent,
         cra_rules_agent: BaseReceiptAgent,
-        tax_calculator_agent: BaseReceiptAgent,
         consensus_threshold: float = 0.75,
     ) -> None:
         """Initialize the orchestrator.
 
         Args:
             data_extraction_agent: Agent for extracting receipt data
-            cra_rules_agent: Agent for applying CRA rules and categorization
-            tax_calculator_agent: Agent for tax calculations and validation
+            cra_rules_agent: Agent for CRA rules (includes tax calculations)
             consensus_threshold: Minimum confidence for auto-processing
         """
         self.data_extraction_agent = data_extraction_agent
         self.cra_rules_agent = cra_rules_agent
-        self.tax_calculator_agent = tax_calculator_agent
         self.consensus_threshold = consensus_threshold
         self.logger = logging.getLogger(__name__)
 
@@ -115,14 +112,7 @@ class AgentOrchestrator:
         if cra_result.success:
             context["cra_categorization"] = cra_result.data
 
-        # Phase 3: Tax Calculator Agent
-        tax_result = await self.tax_calculator_agent.process(
-            receipt_data=extraction_result.data,
-            context=context,
-        )
-        agent_results.append(tax_result)
-
-        # Calculate consensus
+        # Calculate consensus (tax calculations now integrated in CRA agent)
         processing_time = time.time() - start_time
         consensus = self._calculate_consensus(agent_results, context)
         consensus.processing_time = processing_time
@@ -200,39 +190,49 @@ class AgentOrchestrator:
         if extraction_agent:
             final_data.update(extraction_agent.data)
 
-        # Add CRA categorization
+        # Add CRA categorization with integrated tax calculations
         cra_agent = next(
             (r for r in successful_agents if r.agent_name == "CRArulesAgent"),
             None,
         )
         if cra_agent:
-            final_data.update(
-                {
-                    "category": cra_agent.data.get("category"),
-                    "deductibility_percentage": cra_agent.data.get(
-                        "deductibility_percentage"
-                    ),
-                    "qb_account": cra_agent.data.get("qb_account"),
-                    "tax_treatment": cra_agent.data.get("tax_treatment"),
-                    "ita_section": cra_agent.data.get("ita_section"),
-                    "audit_risk": cra_agent.data.get("audit_risk"),
-                    "cra_rule_applied": cra_agent.data.get("rule_applied"),
-                }
-            )
+            # CRArulesAgent now returns processed_items with calculations
+            processed_items = cra_agent.data.get("processed_items", [])
+            if processed_items:
+                # Calculate totals from processed items
+                total_amount = sum(
+                    item.get("original_amount", 0) for item in processed_items
+                )
+                total_deductible = sum(
+                    item.get("deductible_amount", 0) for item in processed_items
+                )
+                deductibility_rate = (
+                    (total_deductible / total_amount * 100) if total_amount > 0 else 0
+                )
 
-        # Add tax calculations
-        tax_agent = next(
-            (r for r in successful_agents if r.agent_name == "TaxCalculatorAgent"),
-            None,
-        )
-        if tax_agent:
-            final_data.update(
-                {
-                    "calculated_gst_hst": tax_agent.data.get("calculated_gst_hst"),
-                    "deductible_amount": tax_agent.data.get("deductible_amount"),
-                    "tax_validation_result": tax_agent.data.get("validation_result"),
-                }
-            )
+                final_data.update(
+                    {
+                        "line_items": processed_items,
+                        "total_amount": round(total_amount, 2),
+                        "total_deductible": round(total_deductible, 2),
+                        "deductibility_rate": round(deductibility_rate, 1),
+                    }
+                )
+            else:
+                # Fallback for old format (backward compatibility)
+                final_data.update(
+                    {
+                        "category": cra_agent.data.get("category"),
+                        "deductibility_percentage": cra_agent.data.get(
+                            "deductibility_percentage"
+                        ),
+                        "qb_account": cra_agent.data.get("qb_account"),
+                        "tax_treatment": cra_agent.data.get("tax_treatment"),
+                        "ita_section": cra_agent.data.get("ita_section"),
+                        "audit_risk": cra_agent.data.get("audit_risk"),
+                        "cra_rule_applied": cra_agent.data.get("rule_applied"),
+                    }
+                )
 
         # Add agent confidence scores
         final_data["agent_confidence_scores"] = {
@@ -357,7 +357,6 @@ class AgentOrchestrator:
             "agents": [
                 self.data_extraction_agent.get_agent_info(),
                 self.cra_rules_agent.get_agent_info(),
-                self.tax_calculator_agent.get_agent_info(),
             ],
-            "orchestrator_version": "1.0.0",
+            "orchestrator_version": "2.0.0",  # Updated: Tax calculations integrated
         }

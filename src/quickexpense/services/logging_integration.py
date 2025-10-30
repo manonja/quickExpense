@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from quickexpense.services.agents import (
         CRArulesAgent,
         DataExtractionAgent,
-        TaxCalculatorAgent,
     )
     from quickexpense.services.agents.base import BaseReceiptAgent
 
@@ -83,9 +82,8 @@ class LoggingIntegration:
         self,
         data_extraction_agent: DataExtractionAgent,
         cra_rules_agent: CRArulesAgent,
-        tax_calculator_agent: TaxCalculatorAgent,
-    ) -> tuple[Any, Any, Any]:
-        """Wrap agents with logging capabilities."""
+    ) -> tuple[Any, Any]:
+        """Wrap agents with logging capabilities (2-agent system)."""
         # Check if logging features are enabled
         if not any(
             [
@@ -95,7 +93,7 @@ class LoggingIntegration:
             ]
         ):
             # Return original agents if no logging is enabled
-            return data_extraction_agent, cra_rules_agent, tax_calculator_agent
+            return data_extraction_agent, cra_rules_agent
 
         # Create wrappers for each agent
         wrapped_data_agent = LoggingAgentWrapper(
@@ -114,28 +112,18 @@ class LoggingIntegration:
             enable_detailed_logging=self.settings.log_agent_reasoning,
         )
 
-        wrapped_tax_agent = LoggingAgentWrapper(
-            agent=tax_calculator_agent,
-            ag2_logger=self.ag2_logger if self.settings.log_agent_reasoning else None,
-            conversation_logger=self.conversation_logger,
-            audit_logger=self.audit_logger,
-            enable_detailed_logging=self.settings.log_agent_reasoning,
-        )
-
         return (
             wrapped_data_agent,
             wrapped_cra_agent,
-            wrapped_tax_agent,
         )
 
     def create_logging_orchestrator(
         self,
         data_extraction_agent: BaseReceiptAgent,
         cra_rules_agent: BaseReceiptAgent,
-        tax_calculator_agent: BaseReceiptAgent,
         consensus_threshold: float = 0.75,
     ) -> LoggingAgentOrchestrator:
-        """Create orchestrator with logging capabilities."""
+        """Create orchestrator with logging capabilities (2-agent system)."""
         if not any(
             [
                 self.settings.enable_ag2_logging,
@@ -151,14 +139,12 @@ class LoggingIntegration:
             return AgentOrchestrator(  # type: ignore[return-value]
                 data_extraction_agent=data_extraction_agent,
                 cra_rules_agent=cra_rules_agent,
-                tax_calculator_agent=tax_calculator_agent,
                 consensus_threshold=consensus_threshold,
             )
 
         return create_logging_orchestrator(
             data_extraction_agent=data_extraction_agent,
             cra_rules_agent=cra_rules_agent,
-            tax_calculator_agent=tax_calculator_agent,
             consensus_threshold=consensus_threshold,
             ag2_logger=(
                 self.ag2_logger if self.settings.log_inter_agent_communication else None
