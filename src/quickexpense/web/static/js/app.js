@@ -579,13 +579,26 @@ class QuickExpenseUI {
     showProcessing(message) {
         const { uploadZone, processingState, processingMessage, resultsSection, errorSection, processingOptions } = this.elements;
 
-        uploadZone.style.display = 'none';
-        processingOptions.style.display = 'none';
-        processingState.style.display = 'block';
-        resultsSection.style.display = 'none';
-        errorSection.style.display = 'none';
+        // Hide upload section entirely (includes upload zone and processing options card)
+        const uploadSection = document.querySelector('.upload-section');
+        if (uploadSection) {
+            uploadSection.style.display = 'none';
+        }
 
-        processingMessage.textContent = message;
+        // Show processing state
+        if (processingState) {
+            processingState.style.display = 'block';
+        }
+        if (resultsSection) {
+            resultsSection.style.display = 'none';
+        }
+        if (errorSection) {
+            errorSection.style.display = 'none';
+        }
+
+        if (processingMessage) {
+            processingMessage.textContent = message;
+        }
     }
 
     showResults(data) {
@@ -630,13 +643,27 @@ class QuickExpenseUI {
     showError(message) {
         const { uploadZone, processingState, resultsSection, errorSection, errorMessage, processingOptions } = this.elements;
 
-        uploadZone.style.display = 'block';
-        processingOptions.style.display = 'block';
-        processingState.style.display = 'none';
-        resultsSection.style.display = 'none';
-        errorSection.style.display = 'block';
+        // Show upload section (so user can try again)
+        const uploadSection = document.querySelector('.upload-section');
+        if (uploadSection) {
+            uploadSection.style.display = 'block';
+        }
 
-        errorMessage.textContent = message;
+        // Hide processing and results sections
+        if (processingState) {
+            processingState.style.display = 'none';
+        }
+        if (resultsSection) {
+            resultsSection.style.display = 'none';
+        }
+
+        // Show error section
+        if (errorSection) {
+            errorSection.style.display = 'block';
+        }
+        if (errorMessage) {
+            errorMessage.textContent = message;
+        }
     }
 
     resetToUpload() {
@@ -648,11 +675,16 @@ class QuickExpenseUI {
             uploadSection.style.display = 'block';
         }
 
-        uploadZone.style.display = 'flex';
-        processingOptions.style.display = 'block';
-        processingState.style.display = 'none';
-        resultsSection.style.display = 'none';
-        errorSection.style.display = 'none';
+        // Hide processing/results/error sections
+        if (processingState) {
+            processingState.style.display = 'none';
+        }
+        if (resultsSection) {
+            resultsSection.style.display = 'none';
+        }
+        if (errorSection) {
+            errorSection.style.display = 'none';
+        }
 
         // Reset file input
         fileInput.value = '';
