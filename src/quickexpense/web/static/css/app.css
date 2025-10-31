@@ -160,6 +160,7 @@ p {
 
 .header-content {
   text-align: center;
+  position: relative;
 }
 
 .logo {
@@ -179,6 +180,36 @@ p {
   color: var(--text-muted);
   font-size: 1.25rem;
   margin: 0;
+}
+
+/* QB Connected Status Pill */
+.qb-status-pill {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: #d1fae5;
+  border: 1px solid #10b981;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #065f46;
+}
+
+.pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.pill-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #065f46;
 }
 
 /* ===== MAIN CONTENT ===== */
@@ -585,6 +616,12 @@ p {
   .btn-settings {
     width: 100%;
     text-align: center;
+  }
+
+  .qb-status-pill {
+    position: static;
+    margin: var(--space-4) auto 0 auto;
+    width: fit-content;
   }
 
   .header-subtitle p {

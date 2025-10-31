@@ -63,7 +63,9 @@ class QuickExpenseUI {
     }
 
     updateAuthUI(authData) {
-        // New auth UI elements
+        // Auth section and pill elements
+        const authSection = document.querySelector('.auth-section');
+        const qbStatusPill = document.getElementById('qbStatusPill');
         const authTitleText = document.getElementById('authTitleText');
         const authSubtitle = document.getElementById('authSubtitle');
         const statusDotInline = document.getElementById('statusDotInline');
@@ -71,7 +73,11 @@ class QuickExpenseUI {
         const connectBtn = document.getElementById('connectBtn');
 
         if (authData.authenticated) {
-            // Connected state
+            // Connected state - hide auth section, show pill
+            if (authSection) authSection.style.display = 'none';
+            if (qbStatusPill) qbStatusPill.style.display = 'flex';
+
+            // Update auth card (in case it's shown later)
             if (authTitleText) authTitleText.textContent = 'QuickBooks Connected';
             if (authSubtitle) authSubtitle.textContent = 'Expenses will sync automatically';
             if (statusDotInline) {
@@ -81,7 +87,11 @@ class QuickExpenseUI {
             if (settingsBtn) settingsBtn.style.display = 'block';
             if (connectBtn) connectBtn.style.display = 'none';
         } else {
-            // Not connected state
+            // Not connected state - show auth section, hide pill
+            if (authSection) authSection.style.display = 'block';
+            if (qbStatusPill) qbStatusPill.style.display = 'none';
+
+            // Update auth card
             if (authTitleText) authTitleText.textContent = 'QuickBooks Not Connected';
             if (authSubtitle) authSubtitle.textContent = authData.message || 'Connect to sync expenses';
             if (statusDotInline) {
