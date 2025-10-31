@@ -837,9 +837,26 @@ class QuickExpenseUI {
     }
 
     populateDetailedInfo(data) {
-        // If agent mode was used, populate agent details
+        // Advanced view is now empty by default
+        // Only populate if there are actual errors or warnings to show
         if (data.agent_mode && data.agent_details) {
-            this.populateAgentDetails(data.agent_details);
+            const hasErrors = data.agent_details.agent_results?.some(agent => !agent.success);
+            const hasReviewFlags = data.agent_details.flags_for_review?.length > 0;
+
+            if (hasErrors || hasReviewFlags) {
+                this.populateAgentDetails(data.agent_details);
+            } else {
+                // No errors or flags - show a simple message
+                const advancedInfo = document.getElementById('advancedInfo');
+                if (advancedInfo) {
+                    advancedInfo.innerHTML = `
+                        <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                            <p style="margin: 0;">✓ All processing completed successfully</p>
+                            <p style="margin: 0.5rem 0 0 0; font-size: 0.875rem;">No issues or warnings to report</p>
+                        </div>
+                    `;
+                }
+            }
         }
     }
 
@@ -855,7 +872,7 @@ class QuickExpenseUI {
             const agentSection = document.createElement('div');
             agentSection.className = 'detail-section';
             agentSection.innerHTML = `
-                <h4>Advanced Technical Details</h4>
+                <h4>Issues & Warnings</h4>
                 <div class="agent-details-simple" id="agentDetailsDetailed">
                     <!-- Dynamic agent details -->
                 </div>
@@ -871,18 +888,18 @@ class QuickExpenseUI {
 
         agentContainer.innerHTML = '';
 
-        // Overall processing info (simplified)
-        const overallDiv = document.createElement('div');
-        overallDiv.className = 'rule-item-simple';
-        overallDiv.innerHTML = `
-            <div class="rule-title-simple">Processing Information</div>
-            <div class="rule-details-simple">
-                <strong>Confidence:</strong> ${(agentDetails.overall_confidence * 100).toFixed(1)}%<br>
-                <strong>Method:</strong> ${agentDetails.consensus_method}<br>
-                <strong>Review Flags:</strong> ${agentDetails.flags_for_review?.length || 'None'}
-            </div>
-        `;
-        agentContainer.appendChild(overallDiv);
+        // Show review flags if any
+        if (agentDetails.flags_for_review && agentDetails.flags_for_review.length > 0) {
+            const flagsDiv = document.createElement('div');
+            flagsDiv.className = 'rule-item-simple';
+            flagsDiv.innerHTML = `
+                <div class="rule-title-simple">⚠ Items Flagged for Review</div>
+                <div class="rule-details-simple">
+                    ${agentDetails.flags_for_review.map(flag => `• ${flag}`).join('<br>')}
+                </div>
+            `;
+            agentContainer.appendChild(flagsDiv);
+        }
 
         // Individual agent results (only if there were errors)
         if (agentDetails.agent_results && agentDetails.agent_results.length > 0) {
@@ -890,19 +907,20 @@ class QuickExpenseUI {
 
             if (hasErrors) {
                 agentDetails.agent_results.forEach(agent => {
-                    const agentDiv = document.createElement('div');
-                    agentDiv.className = 'rule-item-simple';
+                    if (!agent.success) {
+                        const agentDiv = document.createElement('div');
+                        agentDiv.className = 'rule-item-simple';
 
-                    const statusIcon = agent.success ? '✓' : '✗';
-                    const errorInfo = agent.error_message ? `<br><strong>Error:</strong> ${agent.error_message}` : '';
+                        const errorInfo = agent.error_message ? agent.error_message : 'Processing failed';
 
-                    agentDiv.innerHTML = `
-                        <div class="rule-title-simple">${statusIcon} ${agent.agent_name}</div>
-                        <div class="rule-details-simple">
-                            <strong>Status:</strong> ${agent.success ? 'Success' : 'Failed'}${errorInfo}
-                        </div>
-                    `;
-                    agentContainer.appendChild(agentDiv);
+                        agentDiv.innerHTML = `
+                            <div class="rule-title-simple">✗ ${agent.agent_name} Error</div>
+                            <div class="rule-details-simple">
+                                ${errorInfo}
+                            </div>
+                        `;
+                        agentContainer.appendChild(agentDiv);
+                    }
                 });
             }
         }
