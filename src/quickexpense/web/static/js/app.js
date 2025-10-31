@@ -360,17 +360,31 @@ class QuickExpenseUI {
     // ===== FILE PROCESSING =====
 
     async processFile(file) {
-        if (this.isProcessing) return;
+        console.log('processFile called', {
+            file: file.name,
+            isProcessing: this.isProcessing,
+            authStatus: this.authStatus,
+            authenticated: this.authStatus?.authenticated
+        });
+
+        if (this.isProcessing) {
+            console.warn('Already processing a file, skipping');
+            return;
+        }
 
         try {
             // Check authentication first
+            console.log('Checking authentication...', { authStatus: this.authStatus });
             if (!this.authStatus?.authenticated) {
+                console.error('Not authenticated - showing error');
                 this.showError('Please connect to QuickBooks before uploading receipts. Click the "Connect to QuickBooks" button above.');
                 return;
             }
 
+            console.log('Authentication check passed, validating file...');
             // Validate file
             this.validateFile(file);
+            console.log('File validation passed');
 
             // Start processing
             this.isProcessing = true;
@@ -442,6 +456,11 @@ class QuickExpenseUI {
 
             // Choose endpoint based on mode
             const endpoint = agentMode ? '/api/web/upload-receipt-agents' : '/api/web/upload-receipt';
+            console.log('Uploading to endpoint:', endpoint, {
+                agentMode,
+                dryRun,
+                fileSize: file.size
+            });
 
             // Upload and process with timeout
             const controller = new AbortController();
@@ -449,11 +468,13 @@ class QuickExpenseUI {
 
             let response;
             try {
+                console.log('Starting fetch request...');
                 response = await fetch(endpoint, {
                     method: 'POST',
                     body: formData,
                     signal: controller.signal
                 });
+                console.log('Fetch completed:', { status: response.status, ok: response.ok });
                 clearTimeout(timeoutId);
             } catch (fetchError) {
                 clearTimeout(timeoutId);
