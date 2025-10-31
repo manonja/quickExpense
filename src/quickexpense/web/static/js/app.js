@@ -40,10 +40,19 @@ class QuickExpenseUI {
     }
 
     init() {
+        console.log('QuickExpenseUI initializing...');
+        console.log('Upload zone element:', this.elements.uploadZone);
+        console.log('File input element:', this.elements.fileInput);
+        console.log('Agent mode checkbox:', this.elements.agentModeCheckbox);
+        console.log('Preview mode radio:', this.elements.previewModeRadio);
+        console.log('Create mode radio:', this.elements.createModeRadio);
+
         this.checkAuthStatus();
         this.setupEventListeners();
         this.setupDropZone();
         this.setupDetailsToggle();
+
+        console.log('QuickExpenseUI initialized successfully');
     }
 
     // ===== AUTH STATUS MANAGEMENT =====
@@ -171,11 +180,21 @@ class QuickExpenseUI {
     setupEventListeners() {
         const { connectBtn, uploadZone, fileInput, processAnotherBtn, tryAgainBtn, previewModeRadio, createModeRadio } = this.elements;
 
-        connectBtn.addEventListener('click', () => this.handleConnectClick());
-        uploadZone.addEventListener('click', () => this.handleUploadClick());
-        fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        processAnotherBtn.addEventListener('click', () => this.resetToUpload());
-        tryAgainBtn.addEventListener('click', () => this.resetToUpload());
+        if (connectBtn) {
+            connectBtn.addEventListener('click', () => this.handleConnectClick());
+        }
+        if (uploadZone) {
+            uploadZone.addEventListener('click', () => this.handleUploadClick());
+        }
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+        }
+        if (processAnotherBtn) {
+            processAnotherBtn.addEventListener('click', () => this.resetToUpload());
+        }
+        if (tryAgainBtn) {
+            tryAgainBtn.addEventListener('click', () => this.resetToUpload());
+        }
 
         // Mode selection radio buttons
         if (previewModeRadio) {
@@ -213,6 +232,11 @@ class QuickExpenseUI {
     setupDropZone() {
         const { uploadZone } = this.elements;
 
+        if (!uploadZone) {
+            console.warn('Upload zone element not found - drag & drop disabled');
+            return;
+        }
+
         // Prevent default drag behaviors
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             uploadZone.addEventListener(eventName, this.preventDefaults, false);
@@ -246,8 +270,12 @@ class QuickExpenseUI {
     }
 
     handleUploadClick() {
+        console.log('Upload zone clicked', { isProcessing: this.isProcessing });
         if (!this.isProcessing) {
+            console.log('Triggering file input click');
             this.elements.fileInput.click();
+        } else {
+            console.log('Upload blocked - already processing');
         }
     }
 
@@ -261,8 +289,10 @@ class QuickExpenseUI {
     }
 
     handleFileSelect(e) {
+        console.log('File input changed', { filesCount: e.target.files.length });
         const files = e.target.files;
         if (files.length > 0) {
+            console.log('Processing file:', files[0].name);
             this.processFile(files[0]);
         }
     }
