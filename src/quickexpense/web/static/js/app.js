@@ -673,12 +673,15 @@ class QuickExpenseUI {
     }
 
     resetToUpload() {
+        console.log('resetToUpload called');
         const { uploadZone, processingState, resultsSection, errorSection, fileInput, processingOptions } = this.elements;
 
         // Show the upload section container first (in case it was hidden by showResults)
         const uploadSection = document.querySelector('.upload-section');
+        console.log('uploadSection element:', uploadSection);
         if (uploadSection) {
             uploadSection.style.display = 'block';
+            console.log('uploadSection display set to block');
         }
 
         // Show upload zone card, processing options card, and feature cards
@@ -686,9 +689,24 @@ class QuickExpenseUI {
         const processingOptionsCard = document.querySelector('.processing-options-card');
         const featureCards = document.querySelector('.feature-cards');
 
-        if (uploadZoneCard) uploadZoneCard.style.display = 'block';
-        if (processingOptionsCard) processingOptionsCard.style.display = 'block';
-        if (featureCards) featureCards.style.display = 'grid';
+        console.log('Cards found:', {
+            uploadZoneCard,
+            processingOptionsCard,
+            featureCards
+        });
+
+        if (uploadZoneCard) {
+            uploadZoneCard.style.display = 'block';
+            console.log('uploadZoneCard display set to block');
+        }
+        if (processingOptionsCard) {
+            processingOptionsCard.style.display = 'block';
+            console.log('processingOptionsCard display set to block');
+        }
+        if (featureCards) {
+            featureCards.style.display = 'grid';
+            console.log('featureCards display set to grid');
+        }
 
         // Hide processing/results/error sections
         if (processingState) {
