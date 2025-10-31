@@ -680,8 +680,8 @@ class QuickExpenseUI {
         const uploadSection = document.querySelector('.upload-section');
         console.log('uploadSection element:', uploadSection);
         if (uploadSection) {
-            uploadSection.style.display = 'block';
-            console.log('uploadSection display set to block');
+            uploadSection.style.display = 'flex';  // Match CSS default
+            console.log('uploadSection display set to flex');
         }
 
         // Show upload zone card, processing options card, and feature cards
