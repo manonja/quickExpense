@@ -23,7 +23,8 @@ from quickexpense.services.agents import (  # noqa: E402
 )
 
 
-async def test_receipt(receipt_path: str, context: str = "Business expense") -> None: # noqa: PLR0915
+# ruff: noqa: PLR0915
+async def test_receipt(receipt_path: str, context: str = "Business expense") -> None:
     """Test a single receipt with agents + RAG."""
     path = Path(receipt_path)
     if not path.exists():
