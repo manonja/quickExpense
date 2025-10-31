@@ -172,6 +172,8 @@ class CRArulesAgent(BaseReceiptAgent):
             # Extract and parse the JSON response with tax calculations
             last_message = response.chat_history[-1]["content"]
             line_items = receipt_data.get("line_items", [])
+            # Normalize line items to include GST/Tip for amount mapping
+            line_items = self._add_tax_and_tip_items(line_items, receipt_data)
             refined_data = self._parse_response(
                 last_message, input_line_items=line_items
             )
@@ -229,6 +231,8 @@ class CRArulesAgent(BaseReceiptAgent):
 
             last_message = response.chat_history[-1]["content"]
             line_items = receipt_data.get("line_items", [])
+            # Normalize line items to include GST/Tip for amount mapping
+            line_items = self._add_tax_and_tip_items(line_items, receipt_data)
             categorization_data = self._parse_response(
                 last_message, input_line_items=line_items
             )
