@@ -12,7 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/css/app.css?v=4.1">
+    <link rel="stylesheet" href="/static/css/app.css?v=5.0">
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzQwNDA0MCIvPgo8cGF0aCBkPSJNOCAxMmg4djJIOFYxMnptMCA0aDEydjJIOFYxNnptMCA0aDZ2Mkg4VjIweiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+">
@@ -32,6 +32,11 @@
                 <div class="header-subtitle">
                     <p>Upload receipts and create QuickBooks expenses instantly</p>
                 </div>
+                <!-- Connected Status Pill (hidden by default) -->
+                <div class="qb-status-pill" id="qbStatusPill" style="display: none;">
+                    <span class="pill-dot"></span>
+                    <span class="pill-text">QB Connected</span>
+                </div>
             </div>
         </div>
     </header>
@@ -41,14 +46,23 @@
         <div class="container">
             <!-- Auth Status Section -->
             <section class="auth-section">
-                <div class="card auth-card">
-                    <div class="auth-status">
-                        <div class="status-indicator" id="statusIndicator">
-                            <div class="status-dot" id="statusDot"></div>
-                            <span class="status-text" id="statusText">Checking connection...</span>
+                <div class="card auth-card-new">
+                    <div class="auth-left">
+                        <div class="qb-logo-container">
+                            <svg class="qb-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <rect width="32" height="32" rx="8" fill="#10b981"/>
+                                <path d="M8 10h4v12H8V10zm6 0h4v12h-4V10zm6 0h4v12h-4V10z" fill="white"/>
+                            </svg>
                         </div>
-                        <div class="auth-details" id="authDetails"></div>
+                        <div class="auth-info">
+                            <div class="auth-title">
+                                <span id="authTitleText">QuickBooks Connected</span>
+                                <span class="status-dot-inline connected" id="statusDotInline"></span>
+                            </div>
+                            <div class="auth-subtitle" id="authSubtitle">Expenses will sync automatically</div>
+                        </div>
                     </div>
+                    <button class="btn-settings" id="settingsBtn">Settings</button>
                     <button class="btn-primary" id="connectBtn" style="display: none;">
                         Connect to QuickBooks
                     </button>
@@ -57,10 +71,11 @@
 
             <!-- Upload Zone Section -->
             <section class="upload-section">
-                <div class="card upload-card">
+                <!-- Upload Zone Card -->
+                <div class="upload-zone-card">
                     <div class="upload-zone" id="uploadZone">
-                        <div class="upload-icon">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <div class="upload-icon-circle">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                 <polyline points="17,8 12,3 7,8"></polyline>
                                 <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -68,30 +83,75 @@
                         </div>
                         <div class="upload-text">
                             <h3>Drop your receipt here</h3>
-                            <p>Or click to select a file</p>
+                            <p>or click to select a file</p>
                             <span class="supported-formats">Supports JPEG, PNG, PDF, HEIC (max 10MB)</span>
                         </div>
                         <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf,.heic,.heif" style="display: none;">
                     </div>
+                </div>
 
-                    <!-- Processing Options - Below upload zone -->
-                    <div class="processing-options">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="agentModeCheckbox">
-                            <span class="checkbox-text">Use Agent Processing (enhanced accuracy with 3-agent system)</span>
-                        </label>
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="dryRunCheckbox">
-                            <span class="checkbox-text">Dry run (preview only - don't create expenses)</span>
-                        </label>
+                <!-- Processing Options Card -->
+                <div class="processing-options-card">
+                    <h3 class="options-title">Processing Options</h3>
+
+                    <!-- Mode Selection -->
+                    <div class="mode-section">
+                        <label class="mode-label">Mode</label>
+                        <div class="mode-options">
+                            <label class="mode-option selected">
+                                <input type="radio" name="mode" value="preview" id="previewModeRadio" checked>
+                                <div class="mode-content">
+                                    <div class="mode-header">
+                                        <span class="mode-title">Preview Only</span>
+                                        <span class="mode-badge">Default</span>
+                                    </div>
+                                    <span class="mode-description">Review before creating expense</span>
+                                </div>
+                            </label>
+                            <label class="mode-option">
+                                <input type="radio" name="mode" value="create" id="createModeRadio">
+                                <div class="mode-content">
+                                    <div class="mode-header">
+                                        <span class="mode-title">Create Expense</span>
+                                    </div>
+                                    <span class="mode-description">Auto-add to QuickBooks</span>
+                                </div>
+                            </label>
+                        </div>
                     </div>
 
-                    <!-- Processing State -->
-                    <div class="processing-state" id="processingState" style="display: none;">
-                        <div class="loading-spinner"></div>
-                        <h3>Processing Receipt</h3>
-                        <p id="processingMessage">Extracting data from your receipt...</p>
+                    <!-- Enhanced Accuracy Option -->
+                    <label class="checkbox-option">
+                        <input type="checkbox" id="agentModeCheckbox">
+                        <div class="checkbox-content">
+                            <div class="checkbox-header">
+                                <span class="checkbox-title">Enhanced Accuracy</span>
+                                <span class="ai-badge">AI Agents</span>
+                            </div>
+                            <span class="checkbox-description">Use 3-agent system for higher accuracy on complex receipts. Takes 2-3x longer but ensures correct categorization.</span>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Feature Cards -->
+                <div class="feature-cards">
+                    <div class="feature-card">
+                        <div class="feature-icon">🇨🇦</div>
+                        <h4>CRA Compliant</h4>
+                        <p>Applies Canadian tax rules automatically</p>
                     </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">⚡</div>
+                        <h4>Instant Processing</h4>
+                        <p>Results in seconds with AI analysis</p>
+                    </div>
+                </div>
+
+                <!-- Processing State -->
+                <div class="processing-state" id="processingState" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <h3>Processing Receipt</h3>
+                    <p id="processingMessage">Extracting data from your receipt...</p>
                 </div>
             </section>
 
@@ -100,48 +160,62 @@
                 <div class="card results-card">
                     <h2>Receipt Processed Successfully</h2>
 
-                    <!-- Simplified Receipt Output -->
-                    <div class="receipt-summary" id="receiptOutput">
-                        <!-- Essential Information Grid -->
-                        <div class="essential-grid">
-                            <!-- Receipt Overview -->
-                            <div class="receipt-overview">
-                                <h3>Receipt</h3>
-                                <div class="receipt-basic" id="receiptBasic">
-                                    <!-- Dynamic receipt data -->
-                                </div>
-                            </div>
-
-                            <!-- Tax Analysis -->
-                            <div class="tax-overview">
-                                <h3>Tax Deductibility</h3>
-                                <div class="tax-basic" id="taxBasic">
-                                    <!-- Dynamic tax data -->
-                                </div>
-                            </div>
-
-                            <!-- Business Rules Applied -->
-                            <div class="business-rules-overview">
-                                <h3>Business Rules Applied</h3>
-                                <div class="business-rules-basic" id="businessRulesBasic">
-                                    <!-- Dynamic business rules -->
-                                </div>
-                            </div>
+                    <!-- Hero Confidence Section -->
+                    <div class="hero-confidence-section">
+                        <div class="confidence-visual">
+                            <svg class="confidence-ring" id="confidenceRing" viewBox="0 0 160 160">
+                                <circle cx="80" cy="80" r="70" fill="none" stroke="#e5e7eb" stroke-width="10"/>
+                                <circle cx="80" cy="80" r="70" fill="none" stroke="#10b981" stroke-width="10"
+                                        stroke-dasharray="440" stroke-dashoffset="66"
+                                        transform="rotate(-90 80 80)" id="confidenceCircle"/>
+                            </svg>
+                            <div class="confidence-percentage" id="confidencePercentage">85%</div>
                         </div>
-
-                        <!-- Advanced View Toggle -->
-                        <div class="advanced-view-toggle">
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="advancedViewCheckbox">
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Show Advanced View</span>
-                            </label>
+                        <div class="confidence-label" id="confidenceLabel">Confident</div>
+                        <div class="deductible-amount" id="deductibleAmount">$18.87</div>
+                        <div class="deductible-context" id="deductibleContext">of $36.23 total • 52% deduction rate</div>
+                        <div class="action-buttons">
+                            <button class="btn-primary btn-approve" id="approveBtn">Approve & Add</button>
+                            <button class="btn-secondary btn-review" id="reviewBtn">Review</button>
+                            <button class="btn-icon btn-edit" id="editBtn" title="Edit details">✏️</button>
                         </div>
+                    </div>
 
-                        <!-- Advanced Information (Hidden by default) -->
-                        <div class="advanced-info" id="advancedInfo" style="display: none;">
-                            <!-- Advanced technical details will be populated here -->
+                    <!-- Collapsible Receipt Details -->
+                    <details class="receipt-details-collapsible">
+                        <summary>Receipt Details</summary>
+                        <div class="receipt-details-content" id="receiptDetailsContent">
+                            <!-- Dynamic receipt details -->
                         </div>
+                    </details>
+
+                    <!-- Line Items Section -->
+                    <div class="line-items-section">
+                        <h3>Line Items</h3>
+                        <div id="lineItemsContainer">
+                            <!-- Dynamic line item cards will be generated here -->
+                        </div>
+                    </div>
+
+                    <!-- Tax Insights Section -->
+                    <div class="tax-insights-section">
+                        <h3>💡 Tax Insights</h3>
+                        <div class="insight-box" id="taxInsightsBox">
+                            <!-- Dynamic tax insights will be generated here -->
+                        </div>
+                    </div>
+
+                    <!-- AI Analysis Section -->
+                    <div class="ai-analysis-section">
+                        <h3>AI Analysis Breakdown</h3>
+                        <div class="analysis-checklist" id="analysisChecklist">
+                            <!-- Dynamic validation checklist will be generated here -->
+                        </div>
+                        <p style="margin-top: 1rem; text-align: center;">
+                            <a href="#" id="lowConfidenceLink" style="color: var(--text-muted); font-size: 0.875rem;">
+                                Low confidence? Edit details →
+                            </a>
+                        </p>
                     </div>
 
                     <!-- Action Buttons -->
@@ -182,6 +256,6 @@
     </footer>
 
     <!-- JavaScript -->
-    <script src="/static/js/app.js?v=4.1"></script>
+    <script src="/static/js/app.js?v=5.9"></script>
 </body>
 </html>

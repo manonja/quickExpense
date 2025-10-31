@@ -31,6 +31,8 @@ class QuickExpenseUI {
             tryAgainBtn: document.getElementById('tryAgainBtn'),
             agentModeCheckbox: document.getElementById('agentModeCheckbox'),
             dryRunCheckbox: document.getElementById('dryRunCheckbox'),
+            previewModeRadio: document.getElementById('previewModeRadio'),
+            createModeRadio: document.getElementById('createModeRadio'),
             processingOptions: document.querySelector('.processing-options')
         };
 
@@ -38,10 +40,19 @@ class QuickExpenseUI {
     }
 
     init() {
+        console.log('QuickExpenseUI initializing...');
+        console.log('Upload zone element:', this.elements.uploadZone);
+        console.log('File input element:', this.elements.fileInput);
+        console.log('Agent mode checkbox:', this.elements.agentModeCheckbox);
+        console.log('Preview mode radio:', this.elements.previewModeRadio);
+        console.log('Create mode radio:', this.elements.createModeRadio);
+
         this.checkAuthStatus();
         this.setupEventListeners();
         this.setupDropZone();
         this.setupDetailsToggle();
+
+        console.log('QuickExpenseUI initialized successfully');
     }
 
     // ===== AUTH STATUS MANAGEMENT =====
@@ -63,22 +74,50 @@ class QuickExpenseUI {
     }
 
     updateAuthUI(authData) {
-        const { statusDot, statusText, authDetails, connectBtn } = this.elements;
+        // Auth section and pill elements
+        const authSection = document.querySelector('.auth-section');
+        const qbStatusPill = document.getElementById('qbStatusPill');
+        const authTitleText = document.getElementById('authTitleText');
+        const authSubtitle = document.getElementById('authSubtitle');
+        const statusDotInline = document.getElementById('statusDotInline');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const connectBtn = document.getElementById('connectBtn');
 
         if (authData.authenticated) {
-            statusDot.classList.remove('error');
-            statusDot.classList.add('connected');
-            statusText.textContent = 'Connected to QuickBooks';
-            authDetails.textContent = authData.company_name ?
-                `Company: ${authData.company_name}` :
-                `Company ID: ${authData.company_id || 'Unknown'}`;
-            connectBtn.style.display = 'none';
+            // Connected state - hide auth section, show pill
+            if (authSection) authSection.style.display = 'none';
+            if (qbStatusPill) qbStatusPill.style.display = 'flex';
+
+            // Update auth card (in case it's shown later)
+            if (authTitleText) authTitleText.textContent = 'QuickBooks Connected';
+            if (authSubtitle) authSubtitle.textContent = 'Expenses will sync automatically';
+            if (statusDotInline) {
+                statusDotInline.classList.remove('error');
+                statusDotInline.classList.add('connected');
+            }
+            if (settingsBtn) settingsBtn.style.display = 'block';
+            if (connectBtn) connectBtn.style.display = 'none';
         } else {
-            statusDot.classList.remove('connected');
-            statusDot.classList.add('error');
-            statusText.textContent = 'Not connected to QuickBooks';
-            authDetails.textContent = authData.message || 'Authentication required';
-            connectBtn.style.display = 'inline-flex';
+            // Not connected state - show auth section, hide pill
+            if (authSection) authSection.style.display = 'block';
+            if (qbStatusPill) qbStatusPill.style.display = 'none';
+
+            // Update auth card
+            if (authTitleText) authTitleText.textContent = 'QuickBooks Not Connected';
+            if (authSubtitle) authSubtitle.textContent = authData.message || 'Connect to sync expenses';
+            if (statusDotInline) {
+                statusDotInline.classList.remove('connected');
+                statusDotInline.classList.add('error');
+            }
+            if (settingsBtn) settingsBtn.style.display = 'none';
+            if (connectBtn) connectBtn.style.display = 'inline-flex';
+        }
+
+        // Wire up settings button
+        if (settingsBtn) {
+            settingsBtn.onclick = () => {
+                alert('Settings functionality coming soon! This will allow you to manage your QuickBooks connection.');
+            };
         }
     }
 
@@ -139,17 +178,64 @@ class QuickExpenseUI {
     // ===== FILE UPLOAD MANAGEMENT =====
 
     setupEventListeners() {
-        const { connectBtn, uploadZone, fileInput, processAnotherBtn, tryAgainBtn } = this.elements;
+        const { connectBtn, uploadZone, fileInput, processAnotherBtn, tryAgainBtn, previewModeRadio, createModeRadio } = this.elements;
 
-        connectBtn.addEventListener('click', () => this.handleConnectClick());
-        uploadZone.addEventListener('click', () => this.handleUploadClick());
-        fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        processAnotherBtn.addEventListener('click', () => this.resetToUpload());
-        tryAgainBtn.addEventListener('click', () => this.resetToUpload());
+        if (connectBtn) {
+            connectBtn.addEventListener('click', () => this.handleConnectClick());
+        }
+        if (uploadZone) {
+            uploadZone.addEventListener('click', () => this.handleUploadClick());
+        }
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+        }
+        if (processAnotherBtn) {
+            processAnotherBtn.addEventListener('click', () => this.resetToUpload());
+        }
+        if (tryAgainBtn) {
+            tryAgainBtn.addEventListener('click', () => this.resetToUpload());
+        }
+
+        // Mode selection radio buttons
+        if (previewModeRadio) {
+            previewModeRadio.addEventListener('change', () => this.handleModeChange());
+        }
+        if (createModeRadio) {
+            createModeRadio.addEventListener('change', () => this.handleModeChange());
+        }
+
+        // Handle label clicks for visual feedback
+        document.querySelectorAll('.mode-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                // Update selected class
+                document.querySelectorAll('.mode-option').forEach(opt => opt.classList.remove('selected'));
+                e.currentTarget.classList.add('selected');
+            });
+        });
+    }
+
+    handleModeChange() {
+        // Update visual state based on selected mode
+        const { previewModeRadio, createModeRadio } = this.elements;
+        const modeOptions = document.querySelectorAll('.mode-option');
+
+        modeOptions.forEach(option => {
+            const radio = option.querySelector('input[type="radio"]');
+            if (radio && radio.checked) {
+                option.classList.add('selected');
+            } else {
+                option.classList.remove('selected');
+            }
+        });
     }
 
     setupDropZone() {
         const { uploadZone } = this.elements;
+
+        if (!uploadZone) {
+            console.warn('Upload zone element not found - drag & drop disabled');
+            return;
+        }
 
         // Prevent default drag behaviors
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -184,8 +270,12 @@ class QuickExpenseUI {
     }
 
     handleUploadClick() {
+        console.log('Upload zone clicked', { isProcessing: this.isProcessing });
         if (!this.isProcessing) {
+            console.log('Triggering file input click');
             this.elements.fileInput.click();
+        } else {
+            console.log('Upload blocked - already processing');
         }
     }
 
@@ -199,8 +289,10 @@ class QuickExpenseUI {
     }
 
     handleFileSelect(e) {
+        console.log('File input changed', { filesCount: e.target.files.length });
         const files = e.target.files;
         if (files.length > 0) {
+            console.log('Processing file:', files[0].name);
             this.processFile(files[0]);
         }
     }
@@ -268,24 +360,39 @@ class QuickExpenseUI {
     // ===== FILE PROCESSING =====
 
     async processFile(file) {
-        if (this.isProcessing) return;
+        console.log('processFile called', {
+            file: file.name,
+            isProcessing: this.isProcessing,
+            authStatus: this.authStatus,
+            authenticated: this.authStatus?.authenticated
+        });
+
+        if (this.isProcessing) {
+            console.warn('Already processing a file, skipping');
+            return;
+        }
 
         try {
             // Check authentication first
+            console.log('Checking authentication...', { authStatus: this.authStatus });
             if (!this.authStatus?.authenticated) {
+                console.error('Not authenticated - showing error');
                 this.showError('Please connect to QuickBooks before uploading receipts. Click the "Connect to QuickBooks" button above.');
                 return;
             }
 
+            console.log('Authentication check passed, validating file...');
             // Validate file
             this.validateFile(file);
+            console.log('File validation passed');
 
             // Start processing
             this.isProcessing = true;
 
             // Check if agent mode is enabled
             const agentMode = this.elements.agentModeCheckbox?.checked || false;
-            const dryRun = this.elements.dryRunCheckbox?.checked || false;
+            // Dry run is enabled when Preview mode is selected (not Create Expense)
+            const dryRun = this.elements.previewModeRadio?.checked || false;
 
             if (agentMode) {
                 this.showProcessing(`Processing with 3-agent system: ${file.name}...`);
@@ -349,6 +456,11 @@ class QuickExpenseUI {
 
             // Choose endpoint based on mode
             const endpoint = agentMode ? '/api/web/upload-receipt-agents' : '/api/web/upload-receipt';
+            console.log('Uploading to endpoint:', endpoint, {
+                agentMode,
+                dryRun,
+                fileSize: file.size
+            });
 
             // Upload and process with timeout
             const controller = new AbortController();
@@ -356,11 +468,13 @@ class QuickExpenseUI {
 
             let response;
             try {
+                console.log('Starting fetch request...');
                 response = await fetch(endpoint, {
                     method: 'POST',
                     body: formData,
                     signal: controller.signal
                 });
+                console.log('Fetch completed:', { status: response.status, ok: response.ok });
                 clearTimeout(timeoutId);
             } catch (fetchError) {
                 clearTimeout(timeoutId);
@@ -465,13 +579,29 @@ class QuickExpenseUI {
     showProcessing(message) {
         const { uploadZone, processingState, processingMessage, resultsSection, errorSection, processingOptions } = this.elements;
 
-        uploadZone.style.display = 'none';
-        processingOptions.style.display = 'none';
-        processingState.style.display = 'block';
-        resultsSection.style.display = 'none';
-        errorSection.style.display = 'none';
+        // Hide upload zone card, processing options card, and feature cards
+        const uploadZoneCard = document.querySelector('.upload-zone-card');
+        const processingOptionsCard = document.querySelector('.processing-options-card');
+        const featureCards = document.querySelector('.feature-cards');
 
-        processingMessage.textContent = message;
+        if (uploadZoneCard) uploadZoneCard.style.display = 'none';
+        if (processingOptionsCard) processingOptionsCard.style.display = 'none';
+        if (featureCards) featureCards.style.display = 'none';
+
+        // Show processing state (which is inside upload-section)
+        if (processingState) {
+            processingState.style.display = 'block';
+        }
+        if (resultsSection) {
+            resultsSection.style.display = 'none';
+        }
+        if (errorSection) {
+            errorSection.style.display = 'none';
+        }
+
+        if (processingMessage) {
+            processingMessage.textContent = message;
+        }
     }
 
     showResults(data) {
@@ -516,32 +646,96 @@ class QuickExpenseUI {
     showError(message) {
         const { uploadZone, processingState, resultsSection, errorSection, errorMessage, processingOptions } = this.elements;
 
-        uploadZone.style.display = 'block';
-        processingOptions.style.display = 'block';
-        processingState.style.display = 'none';
-        resultsSection.style.display = 'none';
-        errorSection.style.display = 'block';
+        // Show upload zone itself (hidden by showResults)
+        if (uploadZone) uploadZone.style.display = 'block';
 
-        errorMessage.textContent = message;
+        // Show upload zone card, processing options card, and feature cards (so user can try again)
+        const uploadZoneCard = document.querySelector('.upload-zone-card');
+        const processingOptionsCard = document.querySelector('.processing-options-card');
+        const featureCards = document.querySelector('.feature-cards');
+
+        if (uploadZoneCard) uploadZoneCard.style.display = 'block';
+        if (processingOptionsCard) processingOptionsCard.style.display = 'block';
+        if (featureCards) featureCards.style.display = 'grid';
+
+        // Hide processing and results sections
+        if (processingState) {
+            processingState.style.display = 'none';
+        }
+        if (resultsSection) {
+            resultsSection.style.display = 'none';
+        }
+
+        // Show error section
+        if (errorSection) {
+            errorSection.style.display = 'block';
+        }
+        if (errorMessage) {
+            errorMessage.textContent = message;
+        }
     }
 
     resetToUpload() {
+        console.log('resetToUpload called');
         const { uploadZone, processingState, resultsSection, errorSection, fileInput, processingOptions } = this.elements;
 
-        // Show the entire upload section when resetting
+        // Show the upload section container first (in case it was hidden by showResults)
         const uploadSection = document.querySelector('.upload-section');
+        console.log('uploadSection element:', uploadSection);
         if (uploadSection) {
-            uploadSection.style.display = 'block';
+            uploadSection.style.display = 'flex';  // Match CSS default
+            console.log('uploadSection display set to flex');
         }
 
-        uploadZone.style.display = 'flex';
-        processingOptions.style.display = 'block';
-        processingState.style.display = 'none';
-        resultsSection.style.display = 'none';
-        errorSection.style.display = 'none';
+        // Show upload zone itself (hidden by showResults)
+        if (uploadZone) {
+            uploadZone.style.display = 'block';
+            console.log('uploadZone display set to block');
+        }
+
+        // Show upload zone card, processing options card, and feature cards
+        const uploadZoneCard = document.querySelector('.upload-zone-card');
+        const processingOptionsCard = document.querySelector('.processing-options-card');
+        const featureCards = document.querySelector('.feature-cards');
+
+        console.log('Cards found:', {
+            uploadZoneCard,
+            processingOptionsCard,
+            featureCards
+        });
+
+        if (uploadZoneCard) {
+            uploadZoneCard.style.display = 'block';
+            console.log('uploadZoneCard display set to block');
+            console.log('uploadZoneCard computed style:', window.getComputedStyle(uploadZoneCard).display);
+            console.log('uploadZoneCard visibility:', window.getComputedStyle(uploadZoneCard).visibility);
+            console.log('uploadZoneCard height:', window.getComputedStyle(uploadZoneCard).height);
+            console.log('uploadZoneCard position:', uploadZoneCard.getBoundingClientRect());
+        }
+        if (processingOptionsCard) {
+            processingOptionsCard.style.display = 'block';
+            console.log('processingOptionsCard display set to block');
+        }
+        if (featureCards) {
+            featureCards.style.display = 'grid';
+            console.log('featureCards display set to grid');
+        }
+
+        // Hide processing/results/error sections
+        if (processingState) {
+            processingState.style.display = 'none';
+        }
+        if (resultsSection) {
+            resultsSection.style.display = 'none';
+        }
+        if (errorSection) {
+            errorSection.style.display = 'none';
+        }
 
         // Reset file input
-        fileInput.value = '';
+        if (fileInput) {
+            fileInput.value = '';
+        }
         this.isProcessing = false;
     }
 
@@ -574,25 +768,393 @@ class QuickExpenseUI {
         console.log('Populating results with data:', data);
 
         try {
-            console.log('Populating basic receipt info...');
-            this.populateReceiptBasic(data.receipt_info);
+            // New rendering flow for redesigned UI
+            console.log('Rendering hero section...');
+            this.renderHeroSection(data);
 
-            console.log('Populating basic tax summary...');
-            this.populateTaxBasic(data.tax_deductibility);
+            console.log('Rendering receipt details...');
+            this.renderReceiptDetails(data.receipt_info);
 
-            console.log('Populating business rules...');
-            this.populateBusinessRulesBasic(data.business_rules, data.dry_run, data);
+            console.log('Rendering line items with progress bars...');
+            this.renderLineItemsWithProgress(data.business_rules);
 
-            console.log('Populating detailed information...');
-            this.populateDetailedInfo(data);
+            console.log('Rendering tax insights...');
+            this.renderTaxInsights(data.business_rules, data);
 
-            console.log('All populate methods completed successfully');
+            console.log('Rendering AI analysis checklist...');
+            this.renderAIAnalysis(data);
+
+            console.log('All render methods completed successfully');
         } catch (error) {
             console.error('Error in populateResults:', error);
             // Don't re-throw, just log the error and continue
             // This allows partial results to be displayed
         }
     }
+
+    // ===== NEW RENDERING METHODS FOR REDESIGNED UI =====
+
+    renderHeroSection(data) {
+        // Calculate confidence
+        const confidence = this.calculateConfidence(data);
+
+        // Update confidence ring
+        this.renderConfidenceRing(confidence);
+
+        // Update confidence label
+        const confidenceLabel = document.getElementById('confidenceLabel');
+        if (confidenceLabel) {
+            confidenceLabel.textContent = this.getConfidenceLabel(confidence);
+        }
+
+        // Update deductible amount
+        const deductibleAmount = parseFloat(data.tax_deductibility?.deductible_amount || 0);
+        const totalAmount = parseFloat(data.tax_deductibility?.total_amount || 0);
+        const deductionRate = parseFloat(data.tax_deductibility?.deductibility_rate || 0);
+
+        const deductibleAmountEl = document.getElementById('deductibleAmount');
+        if (deductibleAmountEl) {
+            deductibleAmountEl.textContent = `$${deductibleAmount.toFixed(2)}`;
+        }
+
+        const deductibleContextEl = document.getElementById('deductibleContext');
+        if (deductibleContextEl) {
+            deductibleContextEl.textContent =
+                `of $${totalAmount.toFixed(2)} total • ${deductionRate.toFixed(0)}% deduction rate`;
+        }
+
+        // Wire up action buttons
+        this.wireActionButtons(data);
+    }
+
+    calculateConfidence(data) {
+        if (data.agent_mode && data.agent_details?.overall_confidence !== undefined) {
+            return data.agent_details.overall_confidence * 100;
+        }
+
+        // Calculate from business rules
+        if (data.business_rules?.applied_rules?.length > 0) {
+            const rules = data.business_rules.applied_rules;
+            const avgConfidence = rules.reduce((sum, rule) => {
+                return sum + (rule.confidence || 0.85);
+            }, 0) / rules.length;
+            return avgConfidence * 100;
+        }
+
+        return 85; // Default confidence
+    }
+
+    getConfidenceLabel(percentage) {
+        if (percentage >= 90) return 'Very Confident';
+        if (percentage >= 75) return 'Confident';
+        if (percentage >= 60) return 'Moderate';
+        return 'Low Confidence';
+    }
+
+    renderConfidenceRing(percentage) {
+        const circle = document.getElementById('confidenceCircle');
+        const percentageEl = document.getElementById('confidencePercentage');
+
+        if (!circle || !percentageEl) return;
+
+        const circumference = 2 * Math.PI * 70; // 440
+        const offset = circumference * (1 - percentage / 100);
+
+        circle.setAttribute('stroke-dasharray', circumference);
+        circle.setAttribute('stroke-dashoffset', offset);
+
+        // Update color based on confidence level
+        let strokeColor = '#10b981'; // green (default)
+        if (percentage < 60) {
+            strokeColor = '#ef4444'; // red
+        } else if (percentage < 75) {
+            strokeColor = '#f59e0b'; // yellow/orange
+        }
+        circle.setAttribute('stroke', strokeColor);
+
+        percentageEl.textContent = `${Math.round(percentage)}%`;
+        percentageEl.style.color = strokeColor;
+    }
+
+    wireActionButtons(data) {
+        const approveBtn = document.getElementById('approveBtn');
+        const reviewBtn = document.getElementById('reviewBtn');
+        const editBtn = document.getElementById('editBtn');
+
+        if (approveBtn) {
+            approveBtn.onclick = () => {
+                alert('Approve & Add functionality coming soon! This will create the expense in QuickBooks.');
+            };
+        }
+
+        if (reviewBtn) {
+            reviewBtn.onclick = () => {
+                // Scroll to line items section
+                const lineItemsSection = document.querySelector('.line-items-section');
+                if (lineItemsSection) {
+                    lineItemsSection.scrollIntoView({ behavior: 'smooth' });
+                }
+            };
+        }
+
+        if (editBtn) {
+            editBtn.onclick = () => {
+                alert('Edit functionality coming soon! This will allow you to modify receipt details.');
+            };
+        }
+    }
+
+    renderReceiptDetails(receiptInfo) {
+        const container = document.getElementById('receiptDetailsContent');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        if (!receiptInfo) {
+            container.innerHTML = '<p>Receipt information not available</p>';
+            return;
+        }
+
+        const details = [
+            { label: 'Vendor', value: receiptInfo.vendor_name || 'Unknown' },
+            { label: 'Date', value: receiptInfo.date ? new Date(receiptInfo.date).toLocaleDateString('en-CA') : 'Unknown' },
+            { label: 'Total Amount', value: `$${(receiptInfo.total_amount || 0).toFixed(2)}` },
+            { label: 'Currency', value: receiptInfo.currency || 'CAD' },
+            { label: 'Payment Method', value: receiptInfo.payment_method || 'Not specified' }
+        ];
+
+        details.forEach(detail => {
+            const row = document.createElement('div');
+            row.style.cssText = 'margin-bottom: 0.5rem;';
+            row.innerHTML = `
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                    ${detail.label}
+                </div>
+                <div style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">
+                    ${detail.value}
+                </div>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    renderLineItemsWithProgress(businessRules) {
+        const container = document.getElementById('lineItemsContainer');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        if (!businessRules?.applied_rules?.length) {
+            container.innerHTML = '<p style="color: var(--text-muted);">No line items found</p>';
+            return;
+        }
+
+        businessRules.applied_rules.forEach(rule => {
+            const card = this.createLineItemCard(rule);
+            container.appendChild(card);
+        });
+    }
+
+    createLineItemCard(rule) {
+        const card = document.createElement('div');
+        card.className = 'line-item-card';
+
+        const emoji = this.getCategoryEmoji(rule.category);
+        const deductibleAmount = ((rule.amount || 0) * (rule.deductible_percentage || 0) / 100).toFixed(2);
+        const barClass = this.getProgressBarClass(rule.deductible_percentage);
+        const explanation = this.getDeductionExplanation(rule);
+
+        card.innerHTML = `
+            <div class="line-item-header">
+                <span class="item-emoji">${emoji}</span>
+                <span class="item-name">${rule.description || rule.rule_applied || 'Item'}</span>
+                <span class="item-amount">$${(rule.amount || 0).toFixed(2)}</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill ${barClass}" style="width: ${rule.deductible_percentage || 0}%"></div>
+            </div>
+            <div class="item-deduction-text">
+                ${explanation} → $${deductibleAmount}
+            </div>
+            <span class="category-badge ${this.getCategoryClass(rule.category)}">
+                ${rule.category || 'Uncategorized'}
+            </span>
+        `;
+
+        return card;
+    }
+
+    getCategoryEmoji(category) {
+        const emojiMap = {
+            'Meals & Entertainment': '🍽',
+            'Tax-GST/HST': '🧾',
+            'Travel-Lodging': '🏨',
+            'Travel-Meals': '🍴',
+            'Professional-Services': '💼',
+            'Office-Supplies': '📎',
+            'Fuel-Vehicle': '⛽'
+        };
+        return emojiMap[category] || '📄';
+    }
+
+    getProgressBarClass(percentage) {
+        if (percentage === 100) return 'deduction-100';
+        if (percentage >= 40 && percentage <= 60) return 'deduction-50';
+        return 'deduction-0';
+    }
+
+    getDeductionExplanation(rule) {
+        const percentage = rule.deductible_percentage || 0;
+
+        if (percentage === 50) {
+            return 'CRA limits meal deductions to 50%';
+        } else if (percentage === 100) {
+            return 'Fully deductible';
+        } else if (percentage === 0) {
+            return 'Not separately deductible';
+        }
+
+        return `${percentage}% deductible`;
+    }
+
+    renderTaxInsights(businessRules, data) {
+        const insightBox = document.getElementById('taxInsightsBox');
+        if (!insightBox) return;
+
+        insightBox.innerHTML = '';
+
+        // Generate plain-language summary
+        const summary = this.generatePlainLanguageSummary(businessRules);
+
+        const summaryP = document.createElement('p');
+        summaryP.textContent = summary;
+        insightBox.appendChild(summaryP);
+
+        // Get unique citations
+        const citations = this.getUniqueCitations(businessRules);
+
+        if (citations.length > 0) {
+            const rulesTitle = document.createElement('p');
+            rulesTitle.innerHTML = '<strong>Applied CRA Rules:</strong>';
+            insightBox.appendChild(rulesTitle);
+
+            const ul = document.createElement('ul');
+            citations.forEach(citation => {
+                const li = document.createElement('li');
+                const explanation = this.getCRAExplanation(citation);
+                li.textContent = `${citation} • ${explanation}`;
+                ul.appendChild(li);
+            });
+            insightBox.appendChild(ul);
+
+            const link = document.createElement('a');
+            link.href = 'https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4002.html';
+            link.target = '_blank';
+            link.textContent = 'Learn more about CRA business expense deductions →';
+            insightBox.appendChild(link);
+        }
+    }
+
+    generatePlainLanguageSummary(businessRules) {
+        if (!businessRules?.applied_rules?.length) {
+            return 'Business expense rules applied according to CRA guidelines.';
+        }
+
+        const rules = businessRules.applied_rules;
+        const hasMeals = rules.some(r => r.category?.includes('Meals'));
+        const hasTax = rules.some(r => r.category?.includes('GST') || r.category?.includes('HST'));
+        const hasTips = rules.some(r => r.description?.toLowerCase().includes('tip'));
+
+        let summary = '';
+
+        if (hasMeals) {
+            summary += 'CRA allows 50% deduction on meals for business purposes. ';
+        }
+
+        if (hasTax) {
+            summary += "GST/HST is fully deductible if you're registered. ";
+        }
+
+        if (hasTips) {
+            summary += 'Tips are included in the meal deduction limit.';
+        }
+
+        return summary || 'Business expense rules applied according to CRA guidelines.';
+    }
+
+    getUniqueCitations(businessRules) {
+        if (!businessRules?.applied_rules?.length) return [];
+
+        const citations = new Set();
+        businessRules.applied_rules.forEach(rule => {
+            if (rule.citations && Array.isArray(rule.citations)) {
+                rule.citations.forEach(cit => citations.add(cit));
+            }
+        });
+
+        return Array.from(citations);
+    }
+
+    getCRAExplanation(ruleId) {
+        const explanations = {
+            'T4002-P41': 'Meals & Entertainment Expenses',
+            'T4002-P46': 'Meal & Entertainment - 50% Limitation',
+            'T4002-P59': 'Motor Vehicle Expenses',
+            'T4002-P30': 'GST/HST Input Tax Credits',
+            'T4002-P25': 'Home Office Expenses'
+        };
+
+        // Extract base ID (e.g., "T4002-P41" from "T4002-P41-abc123")
+        const baseId = ruleId.split('-').slice(0, 2).join('-');
+        return explanations[baseId] || 'CRA Business and Professional Income Guide';
+    }
+
+    renderAIAnalysis(data) {
+        const checklistContainer = document.getElementById('analysisChecklist');
+        if (!checklistContainer) return;
+
+        checklistContainer.innerHTML = '';
+
+        const checklist = this.buildValidationChecklist(data);
+
+        checklist.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'checklist-item';
+
+            const icon = item.passed ?
+                '<span class="icon-check">✓</span>' :
+                '<span class="icon-warning">⚠</span>';
+
+            div.innerHTML = `${icon}<span>${item.label}</span>`;
+            checklistContainer.appendChild(div);
+        });
+    }
+
+    buildValidationChecklist(data) {
+        const receiptInfo = data.receipt_info || {};
+        const businessRules = data.business_rules || {};
+
+        return [
+            {
+                label: 'Vendor verified',
+                passed: receiptInfo.vendor_name && receiptInfo.vendor_name.length > 2
+            },
+            {
+                label: 'Date parsed',
+                passed: receiptInfo.date && !isNaN(new Date(receiptInfo.date))
+            },
+            {
+                label: 'Items categorized',
+                passed: businessRules.applied_rules && businessRules.applied_rules.length > 0
+            },
+            {
+                label: 'Amounts calculated',
+                passed: data.tax_deductibility?.deductible_amount > 0
+            }
+        ];
+    }
+
+    // ===== OLD METHODS (KEPT FOR BACKUP) =====
 
     populateReceiptBasic(receiptInfo) {
         const container = this.elements.receiptBasic;
