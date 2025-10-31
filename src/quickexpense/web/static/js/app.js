@@ -778,65 +778,10 @@ class QuickExpenseUI {
     }
 
     populateDetailedInfo(data) {
-        // Populate expense summary details
-        this.populateExpenseSummaryDetailed(data.enhanced_expense);
-
         // If agent mode was used, populate agent details
         if (data.agent_mode && data.agent_details) {
             this.populateAgentDetails(data.agent_details);
         }
-    }
-
-
-    populateExpenseSummaryDetailed(expenseData) {
-        const container = this.elements.expenseSummaryDetailed;
-        if (!container) {
-            console.error('Expense summary container not found');
-            return;
-        }
-        container.innerHTML = '';
-
-        // Create a summary based on available data
-        const summaryDiv = document.createElement('div');
-        summaryDiv.className = 'rule-item-simple';
-
-        const details = document.createElement('div');
-        details.className = 'rule-details-simple';
-
-        // Build summary from available data
-        let summaryHtml = '';
-
-        if (expenseData) {
-            // Try to extract meaningful information from the expense data
-            const itemsCount = expenseData.items_count ||
-                               (expenseData.line_items?.length) ||
-                               (Array.isArray(expenseData) ? expenseData.length : 1);
-
-            const categoriesSet = new Set();
-            if (expenseData.line_items) {
-                expenseData.line_items.forEach(item => {
-                    if (item.category) categoriesSet.add(item.category);
-                });
-            } else if (expenseData.category) {
-                categoriesSet.add(expenseData.category);
-            }
-
-            summaryHtml = `
-                <strong>Items Processed:</strong> ${itemsCount}<br>
-                <strong>Categories Found:</strong> ${categoriesSet.size || 1}<br>
-                <strong>Processing Time:</strong> ${new Date().toLocaleTimeString('en-CA')}<br>
-                <strong>Payment Method:</strong> ${expenseData.payment || 'Not specified'}
-            `;
-        } else {
-            summaryHtml = `
-                <strong>Processing Time:</strong> ${new Date().toLocaleTimeString('en-CA')}<br>
-                <strong>Status:</strong> Completed
-            `;
-        }
-
-        details.innerHTML = summaryHtml;
-        summaryDiv.appendChild(details);
-        container.appendChild(summaryDiv);
     }
 
     populateAgentDetails(agentDetails) {
@@ -851,7 +796,7 @@ class QuickExpenseUI {
             const agentSection = document.createElement('div');
             agentSection.className = 'detail-section';
             agentSection.innerHTML = `
-                <h4>Agent Processing Details</h4>
+                <h4>Advanced Technical Details</h4>
                 <div class="agent-details-simple" id="agentDetailsDetailed">
                     <!-- Dynamic agent details -->
                 </div>
@@ -867,58 +812,40 @@ class QuickExpenseUI {
 
         agentContainer.innerHTML = '';
 
-        // Overall confidence and consensus info
+        // Overall processing info (simplified)
         const overallDiv = document.createElement('div');
         overallDiv.className = 'rule-item-simple';
         overallDiv.innerHTML = `
-            <div class="rule-title-simple">Processing Summary</div>
+            <div class="rule-title-simple">Processing Information</div>
             <div class="rule-details-simple">
-                <strong>Overall Confidence:</strong> ${(agentDetails.overall_confidence * 100).toFixed(1)}%<br>
-                <strong>Consensus Method:</strong> ${agentDetails.consensus_method}<br>
-                <strong>Flags for Review:</strong> ${agentDetails.flags_for_review.length || 'None'}
+                <strong>Confidence:</strong> ${(agentDetails.overall_confidence * 100).toFixed(1)}%<br>
+                <strong>Method:</strong> ${agentDetails.consensus_method}<br>
+                <strong>Review Flags:</strong> ${agentDetails.flags_for_review?.length || 'None'}
             </div>
         `;
         agentContainer.appendChild(overallDiv);
 
-        // Individual agent results
+        // Individual agent results (only if there were errors)
         if (agentDetails.agent_results && agentDetails.agent_results.length > 0) {
-            agentDetails.agent_results.forEach(agent => {
-                const agentDiv = document.createElement('div');
-                agentDiv.className = 'rule-item-simple';
+            const hasErrors = agentDetails.agent_results.some(agent => !agent.success);
 
-                const statusIcon = agent.success ? '✅ ' : '❌ ';
-                const errorInfo = agent.error_message ? `<br><strong>Error:</strong> ${agent.error_message}` : '';
+            if (hasErrors) {
+                agentDetails.agent_results.forEach(agent => {
+                    const agentDiv = document.createElement('div');
+                    agentDiv.className = 'rule-item-simple';
 
-                agentDiv.innerHTML = `
-                    <div class="rule-title-simple">${statusIcon} ${agent.agent_name}</div>
-                    <div class="rule-details-simple">
-                        <strong>Status:</strong> ${agent.success ? 'Success' : 'Failed'}<br>
-                        <strong>Confidence:</strong> ${(agent.confidence_score * 100).toFixed(1)}%<br>
-                        <strong>Processing Time:</strong> ${agent.processing_time.toFixed(2)}s${errorInfo}
-                    </div>
-                `;
-                agentContainer.appendChild(agentDiv);
-            });
-        }
+                    const statusIcon = agent.success ? '✓' : '✗';
+                    const errorInfo = agent.error_message ? `<br><strong>Error:</strong> ${agent.error_message}` : '';
 
-        // Agent breakdown with purposes
-        if (agentDetails.agent_breakdown) {
-            const breakdownDiv = document.createElement('div');
-            breakdownDiv.className = 'rule-item-simple';
-            breakdownDiv.innerHTML = `<div class="rule-title-simple">Agent Responsibilities</div>`;
-
-            const breakdownDetails = document.createElement('div');
-            breakdownDetails.className = 'rule-details-simple';
-
-            let breakdownHtml = '';
-            Object.entries(agentDetails.agent_breakdown).forEach(([key, info]) => {
-                const confidence = info.confidence ? ` (${(info.confidence * 100).toFixed(1)}%)` : '';
-                breakdownHtml += `<strong>${info.agent}:</strong> ${info.purpose}${confidence}<br>`;
-            });
-
-            breakdownDetails.innerHTML = breakdownHtml;
-            breakdownDiv.appendChild(breakdownDetails);
-            agentContainer.appendChild(breakdownDiv);
+                    agentDiv.innerHTML = `
+                        <div class="rule-title-simple">${statusIcon} ${agent.agent_name}</div>
+                        <div class="rule-details-simple">
+                            <strong>Status:</strong> ${agent.success ? 'Success' : 'Failed'}${errorInfo}
+                        </div>
+                    `;
+                    agentContainer.appendChild(agentDiv);
+                });
+            }
         }
     }
 
