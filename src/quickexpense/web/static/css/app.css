@@ -61,6 +61,8 @@ body {
   color: var(--text-primary);
   background: linear-gradient(135deg, #fdf2f8 30%, #fff7ed 20%, #fdf2f8 40%);
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ===== TYPOGRAPHY ===== */
@@ -182,6 +184,7 @@ p {
 /* ===== MAIN CONTENT ===== */
 .main {
   padding: 0 0 var(--space-20) 0;
+  flex: 1 0 auto;
 }
 
 .main > .container > section {
@@ -450,6 +453,8 @@ p {
   padding: var(--space-8) 0;
   border-top: 1px solid var(--border-light);
   background: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+  margin-top: auto;
 }
 
 .footer-content {
