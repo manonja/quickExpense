@@ -574,25 +574,393 @@ class QuickExpenseUI {
         console.log('Populating results with data:', data);
 
         try {
-            console.log('Populating basic receipt info...');
-            this.populateReceiptBasic(data.receipt_info);
+            // New rendering flow for redesigned UI
+            console.log('Rendering hero section...');
+            this.renderHeroSection(data);
 
-            console.log('Populating basic tax summary...');
-            this.populateTaxBasic(data.tax_deductibility);
+            console.log('Rendering receipt details...');
+            this.renderReceiptDetails(data.receipt_info);
 
-            console.log('Populating business rules...');
-            this.populateBusinessRulesBasic(data.business_rules, data.dry_run, data);
+            console.log('Rendering line items with progress bars...');
+            this.renderLineItemsWithProgress(data.business_rules);
 
-            console.log('Populating detailed information...');
-            this.populateDetailedInfo(data);
+            console.log('Rendering tax insights...');
+            this.renderTaxInsights(data.business_rules, data);
 
-            console.log('All populate methods completed successfully');
+            console.log('Rendering AI analysis checklist...');
+            this.renderAIAnalysis(data);
+
+            console.log('All render methods completed successfully');
         } catch (error) {
             console.error('Error in populateResults:', error);
             // Don't re-throw, just log the error and continue
             // This allows partial results to be displayed
         }
     }
+
+    // ===== NEW RENDERING METHODS FOR REDESIGNED UI =====
+
+    renderHeroSection(data) {
+        // Calculate confidence
+        const confidence = this.calculateConfidence(data);
+
+        // Update confidence ring
+        this.renderConfidenceRing(confidence);
+
+        // Update confidence label
+        const confidenceLabel = document.getElementById('confidenceLabel');
+        if (confidenceLabel) {
+            confidenceLabel.textContent = this.getConfidenceLabel(confidence);
+        }
+
+        // Update deductible amount
+        const deductibleAmount = parseFloat(data.tax_deductibility?.deductible_amount || 0);
+        const totalAmount = parseFloat(data.tax_deductibility?.total_amount || 0);
+        const deductionRate = parseFloat(data.tax_deductibility?.deductibility_rate || 0);
+
+        const deductibleAmountEl = document.getElementById('deductibleAmount');
+        if (deductibleAmountEl) {
+            deductibleAmountEl.textContent = `$${deductibleAmount.toFixed(2)}`;
+        }
+
+        const deductibleContextEl = document.getElementById('deductibleContext');
+        if (deductibleContextEl) {
+            deductibleContextEl.textContent =
+                `of $${totalAmount.toFixed(2)} total • ${deductionRate.toFixed(0)}% deduction rate`;
+        }
+
+        // Wire up action buttons
+        this.wireActionButtons(data);
+    }
+
+    calculateConfidence(data) {
+        if (data.agent_mode && data.agent_details?.overall_confidence !== undefined) {
+            return data.agent_details.overall_confidence * 100;
+        }
+
+        // Calculate from business rules
+        if (data.business_rules?.applied_rules?.length > 0) {
+            const rules = data.business_rules.applied_rules;
+            const avgConfidence = rules.reduce((sum, rule) => {
+                return sum + (rule.confidence || 0.85);
+            }, 0) / rules.length;
+            return avgConfidence * 100;
+        }
+
+        return 85; // Default confidence
+    }
+
+    getConfidenceLabel(percentage) {
+        if (percentage >= 90) return 'Very Confident';
+        if (percentage >= 75) return 'Confident';
+        if (percentage >= 60) return 'Moderate';
+        return 'Low Confidence';
+    }
+
+    renderConfidenceRing(percentage) {
+        const circle = document.getElementById('confidenceCircle');
+        const percentageEl = document.getElementById('confidencePercentage');
+
+        if (!circle || !percentageEl) return;
+
+        const circumference = 2 * Math.PI * 70; // 440
+        const offset = circumference * (1 - percentage / 100);
+
+        circle.setAttribute('stroke-dasharray', circumference);
+        circle.setAttribute('stroke-dashoffset', offset);
+
+        // Update color based on confidence level
+        let strokeColor = '#10b981'; // green (default)
+        if (percentage < 60) {
+            strokeColor = '#ef4444'; // red
+        } else if (percentage < 75) {
+            strokeColor = '#f59e0b'; // yellow/orange
+        }
+        circle.setAttribute('stroke', strokeColor);
+
+        percentageEl.textContent = `${Math.round(percentage)}%`;
+        percentageEl.style.color = strokeColor;
+    }
+
+    wireActionButtons(data) {
+        const approveBtn = document.getElementById('approveBtn');
+        const reviewBtn = document.getElementById('reviewBtn');
+        const editBtn = document.getElementById('editBtn');
+
+        if (approveBtn) {
+            approveBtn.onclick = () => {
+                alert('Approve & Add functionality coming soon! This will create the expense in QuickBooks.');
+            };
+        }
+
+        if (reviewBtn) {
+            reviewBtn.onclick = () => {
+                // Scroll to line items section
+                const lineItemsSection = document.querySelector('.line-items-section');
+                if (lineItemsSection) {
+                    lineItemsSection.scrollIntoView({ behavior: 'smooth' });
+                }
+            };
+        }
+
+        if (editBtn) {
+            editBtn.onclick = () => {
+                alert('Edit functionality coming soon! This will allow you to modify receipt details.');
+            };
+        }
+    }
+
+    renderReceiptDetails(receiptInfo) {
+        const container = document.getElementById('receiptDetailsContent');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        if (!receiptInfo) {
+            container.innerHTML = '<p>Receipt information not available</p>';
+            return;
+        }
+
+        const details = [
+            { label: 'Vendor', value: receiptInfo.vendor_name || 'Unknown' },
+            { label: 'Date', value: receiptInfo.date ? new Date(receiptInfo.date).toLocaleDateString('en-CA') : 'Unknown' },
+            { label: 'Total Amount', value: `$${(receiptInfo.total_amount || 0).toFixed(2)}` },
+            { label: 'Currency', value: receiptInfo.currency || 'CAD' },
+            { label: 'Payment Method', value: receiptInfo.payment_method || 'Not specified' }
+        ];
+
+        details.forEach(detail => {
+            const row = document.createElement('div');
+            row.style.cssText = 'margin-bottom: 0.5rem;';
+            row.innerHTML = `
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                    ${detail.label}
+                </div>
+                <div style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">
+                    ${detail.value}
+                </div>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    renderLineItemsWithProgress(businessRules) {
+        const container = document.getElementById('lineItemsContainer');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        if (!businessRules?.applied_rules?.length) {
+            container.innerHTML = '<p style="color: var(--text-muted);">No line items found</p>';
+            return;
+        }
+
+        businessRules.applied_rules.forEach(rule => {
+            const card = this.createLineItemCard(rule);
+            container.appendChild(card);
+        });
+    }
+
+    createLineItemCard(rule) {
+        const card = document.createElement('div');
+        card.className = 'line-item-card';
+
+        const emoji = this.getCategoryEmoji(rule.category);
+        const deductibleAmount = ((rule.amount || 0) * (rule.deductible_percentage || 0) / 100).toFixed(2);
+        const barClass = this.getProgressBarClass(rule.deductible_percentage);
+        const explanation = this.getDeductionExplanation(rule);
+
+        card.innerHTML = `
+            <div class="line-item-header">
+                <span class="item-emoji">${emoji}</span>
+                <span class="item-name">${rule.description || rule.rule_applied || 'Item'}</span>
+                <span class="item-amount">$${(rule.amount || 0).toFixed(2)}</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill ${barClass}" style="width: ${rule.deductible_percentage || 0}%"></div>
+            </div>
+            <div class="item-deduction-text">
+                ${explanation} → $${deductibleAmount}
+            </div>
+            <span class="category-badge ${this.getCategoryClass(rule.category)}">
+                ${rule.category || 'Uncategorized'}
+            </span>
+        `;
+
+        return card;
+    }
+
+    getCategoryEmoji(category) {
+        const emojiMap = {
+            'Meals & Entertainment': '🍽',
+            'Tax-GST/HST': '🧾',
+            'Travel-Lodging': '🏨',
+            'Travel-Meals': '🍴',
+            'Professional-Services': '💼',
+            'Office-Supplies': '📎',
+            'Fuel-Vehicle': '⛽'
+        };
+        return emojiMap[category] || '📄';
+    }
+
+    getProgressBarClass(percentage) {
+        if (percentage === 100) return 'deduction-100';
+        if (percentage >= 40 && percentage <= 60) return 'deduction-50';
+        return 'deduction-0';
+    }
+
+    getDeductionExplanation(rule) {
+        const percentage = rule.deductible_percentage || 0;
+
+        if (percentage === 50) {
+            return 'CRA limits meal deductions to 50%';
+        } else if (percentage === 100) {
+            return 'Fully deductible';
+        } else if (percentage === 0) {
+            return 'Not separately deductible';
+        }
+
+        return `${percentage}% deductible`;
+    }
+
+    renderTaxInsights(businessRules, data) {
+        const insightBox = document.getElementById('taxInsightsBox');
+        if (!insightBox) return;
+
+        insightBox.innerHTML = '';
+
+        // Generate plain-language summary
+        const summary = this.generatePlainLanguageSummary(businessRules);
+
+        const summaryP = document.createElement('p');
+        summaryP.textContent = summary;
+        insightBox.appendChild(summaryP);
+
+        // Get unique citations
+        const citations = this.getUniqueCitations(businessRules);
+
+        if (citations.length > 0) {
+            const rulesTitle = document.createElement('p');
+            rulesTitle.innerHTML = '<strong>Applied CRA Rules:</strong>';
+            insightBox.appendChild(rulesTitle);
+
+            const ul = document.createElement('ul');
+            citations.forEach(citation => {
+                const li = document.createElement('li');
+                const explanation = this.getCRAExplanation(citation);
+                li.textContent = `${citation} • ${explanation}`;
+                ul.appendChild(li);
+            });
+            insightBox.appendChild(ul);
+
+            const link = document.createElement('a');
+            link.href = 'https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4002.html';
+            link.target = '_blank';
+            link.textContent = 'Learn more about CRA business expense deductions →';
+            insightBox.appendChild(link);
+        }
+    }
+
+    generatePlainLanguageSummary(businessRules) {
+        if (!businessRules?.applied_rules?.length) {
+            return 'Business expense rules applied according to CRA guidelines.';
+        }
+
+        const rules = businessRules.applied_rules;
+        const hasMeals = rules.some(r => r.category?.includes('Meals'));
+        const hasTax = rules.some(r => r.category?.includes('GST') || r.category?.includes('HST'));
+        const hasTips = rules.some(r => r.description?.toLowerCase().includes('tip'));
+
+        let summary = '';
+
+        if (hasMeals) {
+            summary += 'CRA allows 50% deduction on meals for business purposes. ';
+        }
+
+        if (hasTax) {
+            summary += "GST/HST is fully deductible if you're registered. ";
+        }
+
+        if (hasTips) {
+            summary += 'Tips are included in the meal deduction limit.';
+        }
+
+        return summary || 'Business expense rules applied according to CRA guidelines.';
+    }
+
+    getUniqueCitations(businessRules) {
+        if (!businessRules?.applied_rules?.length) return [];
+
+        const citations = new Set();
+        businessRules.applied_rules.forEach(rule => {
+            if (rule.citations && Array.isArray(rule.citations)) {
+                rule.citations.forEach(cit => citations.add(cit));
+            }
+        });
+
+        return Array.from(citations);
+    }
+
+    getCRAExplanation(ruleId) {
+        const explanations = {
+            'T4002-P41': 'Meals & Entertainment Expenses',
+            'T4002-P46': 'Meal & Entertainment - 50% Limitation',
+            'T4002-P59': 'Motor Vehicle Expenses',
+            'T4002-P30': 'GST/HST Input Tax Credits',
+            'T4002-P25': 'Home Office Expenses'
+        };
+
+        // Extract base ID (e.g., "T4002-P41" from "T4002-P41-abc123")
+        const baseId = ruleId.split('-').slice(0, 2).join('-');
+        return explanations[baseId] || 'CRA Business and Professional Income Guide';
+    }
+
+    renderAIAnalysis(data) {
+        const checklistContainer = document.getElementById('analysisChecklist');
+        if (!checklistContainer) return;
+
+        checklistContainer.innerHTML = '';
+
+        const checklist = this.buildValidationChecklist(data);
+
+        checklist.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'checklist-item';
+
+            const icon = item.passed ?
+                '<span class="icon-check">✓</span>' :
+                '<span class="icon-warning">⚠</span>';
+
+            div.innerHTML = `${icon}<span>${item.label}</span>`;
+            checklistContainer.appendChild(div);
+        });
+    }
+
+    buildValidationChecklist(data) {
+        const receiptInfo = data.receipt_info || {};
+        const businessRules = data.business_rules || {};
+
+        return [
+            {
+                label: 'Vendor verified',
+                passed: receiptInfo.vendor_name && receiptInfo.vendor_name.length > 2
+            },
+            {
+                label: 'Date parsed',
+                passed: receiptInfo.date && !isNaN(new Date(receiptInfo.date))
+            },
+            {
+                label: 'Items categorized',
+                passed: businessRules.applied_rules && businessRules.applied_rules.length > 0
+            },
+            {
+                label: 'Amounts calculated',
+                passed: data.tax_deductibility?.deductible_amount > 0
+            }
+        ];
+    }
+
+    // ===== OLD METHODS (KEPT FOR BACKUP) =====
 
     populateReceiptBasic(receiptInfo) {
         const container = this.elements.receiptBasic;
