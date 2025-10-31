@@ -1,0 +1,95 @@
+{
+  "file": "/Users/manonjacquin/Documents/receipts/IMG_7597.HEIC",
+  "receipt": "vendor_name='PHO GEORGIA EXPRESS' vendor_address='575 W GEORGIA ST\\nVANCOUVER, BC V6B 2A\u0417' vendor_phone='6045648828' transaction_date=datetime.date(2025, 9, 25) receipt_number='121694' payment_method=<PaymentMethod.DEBIT_CARD: 'debit_card'> line_items=[LineItem(description='3. Shrimp Salad Rolls', quantity=Decimal('1'), unit_price=Decimal('11.0'), total_price=Decimal('11.0')), LineItem(description='52. Lemongrass Pork Sandwich', quantity=Decimal('1'), unit_price=Decimal('19.0'), total_price=Decimal('19.0'))] subtotal=Decimal('30.0') tax_amount=Decimal('1.5') tip_amount=Decimal('4.73') total_amount=Decimal('36.23') currency='CAD' notes=None confidence_score=0.95",
+  "business_rules": {
+    "rule_applications": [
+      {
+        "id": "local_restaurant_meal",
+        "name": "Local Restaurant Meal",
+        "line_item": "Restaurant meal consolidation",
+        "rule_applied": "Local Restaurant Detection",
+        "confidence": 0.95,
+        "confidence_score": 0.95,
+        "items_affected": 2,
+        "category": "Meals & Entertainment",
+        "qb_account": "Travel - Meals & Entertainment",
+        "t2125_line_item": null,
+        "deductibility_percentage": 50,
+        "tax_treatment": "meals_limitation",
+        "ita_reference": "CRA ITA Section 67.1",
+        "is_fallback": false
+      },
+      {
+        "id": "gst_hst_charges",
+        "name": "GST/HST Tax Charges",
+        "line_item": "GST - Input Tax Credit",
+        "rule_applied": "GST/HST Tax Charges",
+        "confidence": 1.0,
+        "confidence_score": 1.0,
+        "items_affected": 1,
+        "category": "Tax-GST/HST",
+        "qb_account": "GST/HST Paid on Purchases",
+        "t2125_line_item": null,
+        "deductibility_percentage": 100,
+        "tax_treatment": "input_tax_credit",
+        "ita_reference": null,
+        "is_fallback": false
+      }
+    ],
+    "categorization": {
+      "total_items": 2,
+      "categories": [
+        "Tax-GST/HST",
+        "Meals & Entertainment"
+      ],
+      "business_rules_applied": 2,
+      "confidence_scores": [
+        0.95,
+        1.0
+      ],
+      "tax_deductibility": {
+        "total_amount": "36.23",
+        "deductible_amount": "18.86",
+        "deductibility_rate": "52.1%"
+      }
+    }
+  },
+  "enhanced_expense": {
+    "vendor_name": "PHO GEORGIA EXPRESS",
+    "date": "2025-09-25",
+    "total_amount": "36.23",
+    "currency": "CAD",
+    "categorized_line_items": [
+      {
+        "description": "Business meal - 3. Shrimp Salad Rolls, 52. Lemongrass Pork Sandwich",
+        "amount": "34.73",
+        "quantity": 1,
+        "category": "Meals & Entertainment",
+        "deductibility_percentage": 50,
+        "account_mapping": "Travel - Meals & Entertainment",
+        "tax_treatment": "meals_limitation",
+        "confidence_score": 0.95,
+        "business_rule_id": "local_restaurant_meal"
+      },
+      {
+        "description": "GST - Input Tax Credit",
+        "amount": "1.5",
+        "quantity": 1,
+        "category": "Tax-GST/HST",
+        "deductibility_percentage": 100,
+        "account_mapping": "GST/HST Paid on Purchases",
+        "tax_treatment": "input_tax_credit",
+        "confidence_score": 1.0,
+        "business_rule_id": "gst_hst_charges"
+      }
+    ],
+    "business_rules_applied": [],
+    "total_deductible_amount": "18.865",
+    "foreign_exchange_rate": null,
+    "payment_method": "debit_card",
+    "payment_account": null,
+    "processing_metadata": {}
+  },
+  "dry_run": true,
+  "message": "DRY RUN - No expense created in QuickBooks"
+}

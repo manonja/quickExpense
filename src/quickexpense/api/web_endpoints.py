@@ -595,6 +595,42 @@ async def upload_receipt(  # noqa: C901, PLR0912, PLR0915
         ) from e
 
 
+def _format_line_items_as_rules(
+    line_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert orchestrator line_items to business rules format for UI display.
+
+    Args:
+        line_items: Processed line items from orchestrator with citations
+
+    Returns:
+        List of rule dictionaries compatible with UI expectations
+    """
+    if not line_items:
+        return []
+
+    rules = []
+    for item in line_items:
+        rule = {
+            "description": item.get(
+                "original_description", f"Line {item.get('line_number', '?')}"
+            ),
+            "rule_name": "CRArulesAgent Line-Item Processing",
+            "rule_applied": "agent_line_item_categorization",
+            "category": item.get("category", "Uncategorized"),
+            "qb_account": item.get("qb_account", "Unknown"),
+            "amount": float(item.get("original_amount", 0)),
+            "deductible_percentage": item.get("deductibility_percent", 0),
+            "tax_treatment": "CRA rules applied",
+            "confidence": 0.7,  # Placeholder - not in current line_item structure
+            # Include citations for future UI rendering
+            "citations": item.get("citations", []),
+        }
+        rules.append(rule)
+
+    return rules
+
+
 @router.post("/upload-receipt-agents")
 async def upload_receipt_with_agents(  # noqa: C901, PLR0915
     orchestrator: MultiAgentOrchestratorDep,
@@ -692,13 +728,13 @@ async def upload_receipt_with_agents(  # noqa: C901, PLR0915
             tax_amount=final_data.get("tax_amount"),
             # CRA categorization
             category=final_data.get("category"),
-            deductibility_percentage=final_data.get("deductibility_percentage"),
+            deductibility_percentage=final_data.get("deductibility_rate"),
             qb_account=final_data.get("qb_account"),
             ita_section=final_data.get("ita_section"),
             audit_risk=final_data.get("audit_risk"),
             # Tax calculations
             calculated_gst_hst=final_data.get("calculated_gst_hst"),
-            deductible_amount=final_data.get("deductible_amount"),
+            deductible_amount=final_data.get("total_deductible"),
             tax_validation_result=final_data.get("tax_validation_result"),
             # Processing metadata
             processing_time=consensus_result.processing_time,
@@ -766,28 +802,10 @@ async def upload_receipt_with_agents(  # noqa: C901, PLR0915
                 "currency": final_data.get("currency", "CAD"),
             },
             "business_rules": {
-                "applied_rules": (
-                    [
-                        {
-                            "description": (
-                                f"Agent consensus: {agent_response.category}"
-                            ),
-                            "rule_name": "Multi-Agent Analysis",
-                            "rule_applied": "agent_consensus",
-                            "category": agent_response.category,
-                            "qb_account": agent_response.qb_account,
-                            "amount": float(agent_response.total_amount or 0),
-                            "deductible_percentage": (
-                                agent_response.deductibility_percentage
-                            ),
-                            "tax_treatment": agent_response.tax_validation_result,
-                            "confidence": agent_response.overall_confidence,
-                        }
-                    ]
-                    if agent_response.category
-                    else []
+                "applied_rules": _format_line_items_as_rules(
+                    final_data.get("line_items", [])
                 ),
-                "total_categories": 1 if agent_response.category else 0,
+                "total_categories": len(final_data.get("line_items", [])),
             },
             "tax_deductibility": {
                 "total_amount": f"{float(agent_response.total_amount or 0):.2f}",
@@ -864,7 +882,11 @@ async def upload_receipt_with_agents(  # noqa: C901, PLR0915
                         ),
                     },
                 },
-                "full_agent_data": agent_response.full_data,
+                "full_agent_data": {
+                    **agent_response.full_data,
+                    # Explicitly include line items with citations for UI access
+                    "line_items": final_data.get("line_items", []),
+                },
             },
         }
 

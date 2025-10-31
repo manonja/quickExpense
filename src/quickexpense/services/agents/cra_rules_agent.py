@@ -19,6 +19,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Allowed expense categories for CRA compliance
+ALLOWED_CATEGORIES = [
+    "Travel-Lodging",
+    "Travel-Meals",
+    "Travel-Taxes",
+    "Office-Supplies",
+    "Fuel-Vehicle",
+    "Capital-Equipment",
+    "Tax-GST/HST",
+    "Professional-Services",
+    "Meals & Entertainment",
+    "Uncategorized-Review-Required",
+]
+
 
 class CRArulesAgent(BaseReceiptAgent):
     """Agent specialized in applying CRA business rules and tax categorization."""
@@ -42,8 +56,15 @@ class CRArulesAgent(BaseReceiptAgent):
         self.settings = settings
         self.cra_rules_service = CRABusinessRulesService(rules_csv_path)
 
-        # Configure LLM provider
-        self.llm_provider = LLMProviderFactory.create(settings)
+        # Phase 2: Store RAG results for programmatic citation injection
+        self._last_rag_results: list[Any] = []
+
+        # Configure LLM provider - FORCE GEMINI for better citation extraction
+        # Phase 1 of RAG Citation Fix: Switch to Gemini for improved
+        # instruction-following
+        self.llm_provider = LLMProviderFactory.create(
+            settings, provider_override="gemini"
+        )
         self.llm_config = self.llm_provider.get_autogen_config()
         # Override temperature for consistent categorization
         self.llm_config["config_list"][0]["temperature"] = 0.1
@@ -77,6 +98,15 @@ class CRArulesAgent(BaseReceiptAgent):
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
         total_amount = receipt_data.get("total_amount", 0)
+
+        # Defensive: Handle empty line items
+        if not line_items:
+            logger.warning("No line items to process")
+            return {
+                "processed_items": [],
+                "warning": "No line items found in receipt data",
+                "confidence": 0.0,
+            }
 
         # Extract line item descriptions
         line_item_descriptions = [
@@ -139,26 +169,28 @@ class CRArulesAgent(BaseReceiptAgent):
                 max_turns=1,
             )
 
-            # Extract the JSON response
+            # Extract and parse the JSON response with tax calculations
             last_message = response.chat_history[-1]["content"]
+            line_items = receipt_data.get("line_items", [])
+            # Normalize line items to include GST/Tip for amount mapping
+            line_items = self._add_tax_and_tip_items(line_items, receipt_data)
+            refined_data = self._parse_response(
+                last_message, input_line_items=line_items
+            )
 
-            try:
-                refined_data = json.loads(last_message)
-            except json.JSONDecodeError:
-                # Try to find JSON in the response
-                import re
+            # Phase 2: Programmatically inject citations (guaranteed 100%)
+            self._inject_citations_programmatically(
+                refined_data.get("processed_items", [])
+            )
 
-                json_match = re.search(r"\{.*\}", last_message, re.DOTALL)
-                if json_match:
-                    refined_data = json.loads(json_match.group())
-                else:
-                    # Fall back to the rule-based result
-                    refined_data = self._rule_match_to_dict(best_match)
+            # If parsing failed or no items, fall back to rule-based result
+            if not refined_data.get("processed_items"):
+                logger.warning(
+                    "No processed items in agent response, using rule-based result"
+                )
+                refined_data = self._rule_match_to_dict(best_match)
 
-            # Ensure we have all required fields
-            self._validate_categorization_result(refined_data)
-
-            return refined_data  # type: ignore[no-any-return]
+            return refined_data
 
         except Exception as e:  # noqa: BLE001
             self.logger.warning(
@@ -198,22 +230,27 @@ class CRArulesAgent(BaseReceiptAgent):
             )
 
             last_message = response.chat_history[-1]["content"]
+            line_items = receipt_data.get("line_items", [])
+            # Normalize line items to include GST/Tip for amount mapping
+            line_items = self._add_tax_and_tip_items(line_items, receipt_data)
+            categorization_data = self._parse_response(
+                last_message, input_line_items=line_items
+            )
 
-            try:
-                categorization_data = json.loads(last_message)
-            except json.JSONDecodeError:
-                import re
+            # Phase 2: Programmatically inject citations (guaranteed 100%)
+            self._inject_citations_programmatically(
+                categorization_data.get("processed_items", [])
+            )
 
-                json_match = re.search(r"\{.*\}", last_message, re.DOTALL)
-                if json_match:
-                    categorization_data = json.loads(json_match.group())
-                else:
-                    # Use fallback rule
-                    fallback_rule = self.cra_rules_service.get_fallback_rule()
-                    return self._rule_match_to_dict(fallback_rule)
+            # If parsing failed or no items, use fallback rule
+            if not categorization_data.get("processed_items"):
+                logger.warning(
+                    "No processed items in agent response, using fallback rule"
+                )
+                fallback_rule = self.cra_rules_service.get_fallback_rule()
+                return self._rule_match_to_dict(fallback_rule)
 
-            self._validate_categorization_result(categorization_data)
-            return categorization_data  # type: ignore[no-any-return]
+            return categorization_data
 
         except Exception as e:  # noqa: BLE001
             # Return fallback categorization on error
@@ -221,120 +258,344 @@ class CRArulesAgent(BaseReceiptAgent):
             fallback_rule = self.cra_rules_service.get_fallback_rule()
             return self._rule_match_to_dict(fallback_rule)
 
+    def _add_tax_and_tip_items(
+        self, line_items: list[dict[str, Any]], receipt_data: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Add tax/tip as line items if present and not already included.
+
+        This helper normalizes receipt data by ensuring GST/HST and tips from
+        top-level fields are included in the line_items array for processing.
+
+        Args:
+            line_items: Original line items from receipt
+            receipt_data: Full receipt data with tax_amount and tip_amount
+
+        Returns:
+            Enhanced line items list with tax/tip added if applicable
+        """
+        items = line_items.copy()  # Defensive: don't mutate input
+
+        # Add GST/HST if present in top-level field
+        tax_amount = receipt_data.get("tax_amount", 0)
+        # Convert to float if string (defensive)
+        try:
+            tax_amount = float(tax_amount) if tax_amount else 0.0
+        except (ValueError, TypeError):
+            tax_amount = 0.0
+
+        if tax_amount and tax_amount > 0:
+            # Check if not already in items (case-insensitive)
+            has_tax = any(
+                "gst" in str(item.get("description", "")).lower()
+                or "hst" in str(item.get("description", "")).lower()
+                or "tax" in str(item.get("description", "")).lower()
+                for item in items
+            )
+            if not has_tax:
+                items.append(
+                    {
+                        "description": "GST/HST",
+                        "total_price": float(tax_amount),
+                        "quantity": 1,
+                        "unit_price": float(tax_amount),
+                    }
+                )
+                logger.debug(
+                    "Added GST/HST line item from top-level tax_amount: $%.2f",
+                    float(tax_amount),
+                )
+
+        # Add tip if present in top-level field
+        tip_amount = receipt_data.get("tip_amount", 0)
+        # Convert to float if string (defensive)
+        try:
+            tip_amount = float(tip_amount) if tip_amount else 0.0
+        except (ValueError, TypeError):
+            tip_amount = 0.0
+
+        if tip_amount and tip_amount > 0:
+            has_tip = any(
+                "tip" in str(item.get("description", "")).lower() for item in items
+            )
+            if not has_tip:
+                items.append(
+                    {
+                        "description": "Tip",
+                        "total_price": float(tip_amount),
+                        "quantity": 1,
+                        "unit_price": float(tip_amount),
+                    }
+                )
+                logger.debug(
+                    "Added Tip line item from top-level tip_amount: $%.2f",
+                    float(tip_amount),
+                )
+
+        return items
+
     def _build_refinement_prompt(
         self,
         receipt_data: dict[str, Any],
         best_match: Any,  # noqa: ANN401
-        all_matches: list[Any],
+        all_matches: list[Any],  # noqa: ARG002
     ) -> str:
-        """Build prompt for refining rule-based categorization."""
+        """Build prompt with RAG context for refining categorization."""
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
-        total_amount = receipt_data.get("total_amount", 0)
 
-        line_item_text = "; ".join(
+        # Add tax/tip items from top-level fields before processing
+        line_items = self._add_tax_and_tip_items(line_items, receipt_data)
+
+        # GET RAG CONTEXT (NEW)
+        line_items_text = " ".join(
             [
                 item.get("description", "")
                 for item in line_items
                 if isinstance(item, dict)
             ]
         )
+        rag_context = self._get_rag_context(
+            expense_description=line_items_text,
+            expense_category=best_match.rule.category,
+            vendor_name=vendor_name,
+        )
+
+        # Build structured JSON input array (NOT concatenated string)
+        line_items_json = json.dumps(
+            [
+                {
+                    "line_number": i + 1,
+                    "description": item.get("description", ""),
+                    "amount": float(item.get("total_price", 0)),
+                }
+                for i, item in enumerate(line_items)
+                if isinstance(item, dict)
+            ]
+        )
 
         return f"""
-Analyze this business expense and validate the suggested CRA categorization:
+You are an expert Canadian tax categorization agent for business expenses.
 
-EXPENSE DETAILS:
-- Vendor: {vendor_name}
-- Line Items: {line_item_text}
-- Total Amount: ${total_amount}
+**AUTHORITATIVE CRA CONTEXT:**
+---
+{rag_context}
+---
 
-SUGGESTED CATEGORIZATION:
-- Category: {best_match.rule.category}
-- Deductibility: {best_match.rule.deductibility_rate}%
-- T2125 Line: {best_match.rule.t2125_line}
-- ITA Section: {best_match.rule.ita_section}
-- Audit Risk: {best_match.rule.audit_risk}
-- Confidence: {best_match.confidence_score:.2f}
-- Matching Reason: {best_match.matching_reason}
+**CRITICAL INSTRUCTIONS:**
+1. You MUST process EACH line item separately - do NOT aggregate or summarize
+2. You MUST return valid JSON with a "processed_items" array
+3. You MUST only use categories from the ALLOWED_CATEGORIES list below
+4. If an item's business purpose is ambiguous or possibly personal, use
+   "Uncategorized-Review-Required"
+5. Apply CRA rules: Meals 50%, Lodging 100%, GST/HST 100%, Office Supplies 100%
 
-ALTERNATIVE MATCHES:
-{self._format_alternative_matches(all_matches[1:5])}  # Show up to 4 alternatives
+**ALLOWED_CATEGORIES:**
+{json.dumps(ALLOWED_CATEGORIES, indent=2)}
 
-Based on Canadian tax law (CRA) and the Income Tax Act, validate or refine this
-categorization.
-Consider vendor type, expense nature, and proper T2125 form placement.
-
-Return your analysis as JSON:
+**REQUIRED OUTPUT SCHEMA:**
 {{
-    "category": "string",
-    "deductibility_percentage": "number (0-100)",
-    "qb_account": "string",
-    "tax_treatment": "string",
-    "ita_section": "string",
-    "audit_risk": "LOW|MEDIUM|HIGH",
-    "t2125_line": "string",
-    "rule_applied": "string describing which rule/reasoning was used",
-    "confidence_adjustment": "number (-0.2 to +0.2) to adjust original confidence",
-    "reasoning": "string explaining the categorization decision"
+  "processed_items": [
+    {{
+      "line_number": integer,
+      "original_description": "string",
+      "category": "string (from ALLOWED_CATEGORIES)",
+      "deductibility_percent": integer (0-100),
+      "reasoning": "Brief explanation referencing CRA rules if applicable",
+      "citations": []
+    }}
+  ]
 }}
 
-Return ONLY the JSON object.
+**SUGGESTED CATEGORIZATION (from rules engine):**
+- Category: {best_match.rule.category}
+- Deductibility: {best_match.rule.deductibility_rate}%
+- Confidence: {best_match.confidence_score:.2f}
+- Reasoning: {best_match.matching_reason}
+
+**EXPENSE TO PROCESS:**
+INPUT:
+{{
+  "vendor_name": "{vendor_name}",
+  "line_items": {line_items_json}
+}}
+
+YOUR RESPONSE (valid JSON only):
 """
 
     def _build_fallback_prompt(self, receipt_data: dict[str, Any]) -> str:
-        """Build prompt for fallback categorization when no rules match."""
+        """Build prompt with RAG context for fallback categorization."""
+        logger.info("🔍 Using FALLBACK prompt path (no business rules match)")
         vendor_name = receipt_data.get("vendor_name", "")
         line_items = receipt_data.get("line_items", [])
-        total_amount = receipt_data.get("total_amount", 0)
 
-        line_item_text = "; ".join(
+        # Add tax/tip items from top-level fields before processing
+        line_items = self._add_tax_and_tip_items(line_items, receipt_data)
+
+        # GET RAG CONTEXT (NEW)
+        line_items_text = " ".join(
             [
                 item.get("description", "")
                 for item in line_items
                 if isinstance(item, dict)
             ]
         )
+        rag_context = self._get_rag_context(
+            expense_description=line_items_text,
+            expense_category=None,  # No category hint in fallback
+            vendor_name=vendor_name,
+        )
 
-        # Get available categories from the rules service
-        available_categories = self.cra_rules_service.get_all_categories()
+        # Build structured JSON input array (NOT concatenated string)
+        line_items_json = json.dumps(
+            [
+                {
+                    "line_number": i + 1,
+                    "description": item.get("description", ""),
+                    "amount": float(item.get("total_price", 0)),
+                }
+                for i, item in enumerate(line_items)
+                if isinstance(item, dict)
+            ]
+        )
 
         return f"""
-Categorize this business expense according to Canadian tax law (CRA) and Income Tax Act:
+You are an expert Canadian tax categorization agent for business expenses.
 
-EXPENSE DETAILS:
-- Vendor: {vendor_name}
-- Line Items: {line_item_text}
-- Total Amount: ${total_amount}
+**AUTHORITATIVE CRA CONTEXT:**
+---
+{rag_context}
+---
 
-AVAILABLE CATEGORIES:
-{', '.join(available_categories)}
+**CRITICAL INSTRUCTIONS:**
+1. You MUST process EACH line item separately - do NOT aggregate or summarize
+2. You MUST return valid JSON with a "processed_items" array
+3. You MUST only use categories from the ALLOWED_CATEGORIES list below
+4. If an item's business purpose is ambiguous or possibly personal, use
+   "Uncategorized-Review-Required"
+5. Apply CRA rules: Meals 50%, Lodging 100%, GST/HST 100%, Office Supplies 100%
 
-KEY CRA RULES TO CONSIDER:
-1. Meals & Entertainment: 50% deductible (ITA Section 67.1)
-2. Travel expenses: Generally 100% deductible
-3. Office supplies: 100% deductible
-4. Vehicle expenses: 100% deductible for business use
-5. Professional fees: 100% deductible
-6. Telecommunications: Business portion deductible
+**ALLOWED_CATEGORIES:**
+{json.dumps(ALLOWED_CATEGORIES, indent=2)}
 
-Analyze the vendor and line items to determine the most appropriate categorization.
-
-Return your categorization as JSON:
+**REQUIRED OUTPUT SCHEMA:**
 {{
-    "category": "string (choose from available categories)",
-    "deductibility_percentage": "number (0-100)",
-    "qb_account": "string (appropriate QuickBooks account)",
-    "tax_treatment": "string (standard|meals_limitation|input_tax_credit|etc)",
-    "ita_section": "string (relevant ITA section)",
-    "audit_risk": "LOW|MEDIUM|HIGH",
-    "t2125_line": "string (T2125 form line number)",
-    "rule_applied": "Agent analysis - no matching automated rule",
-    "confidence_adjustment": "0.0",
-    "reasoning": "string explaining why this categorization was chosen"
+  "processed_items": [
+    {{
+      "line_number": integer,
+      "original_description": "string",
+      "category": "string (from ALLOWED_CATEGORIES)",
+      "deductibility_percent": integer (0-100),
+      "reasoning": "Brief explanation referencing CRA rules if applicable",
+      "citations": []
+    }}
+  ]
 }}
 
-Return ONLY the JSON object.
+**KEY CRA RULES:**
+- Meals & Entertainment: 50% deductible (ITA Section 67.1)
+- Travel Lodging: 100% deductible
+- GST/HST: 100% deductible as Input Tax Credit
+- Office Supplies: 100% deductible
+- Professional Services: 100% deductible
+
+**EXPENSE TO PROCESS:**
+INPUT:
+{{
+  "vendor_name": "{vendor_name}",
+  "line_items": {line_items_json}
+}}
+
+YOUR RESPONSE (valid JSON only):
 """
+
+    def _parse_response(
+        self, llm_response: str, input_line_items: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        """Parse LLM response with validation, error handling, and tax calculations.
+
+        Args:
+            llm_response: Raw LLM response string
+            input_line_items: Optional list of original line items for amount lookup
+
+        Returns:
+            Parsed and validated response dictionary with calculated amounts
+        """
+        try:
+            # Remove markdown code blocks if present
+            cleaned = llm_response.strip()
+            cleaned = cleaned.removeprefix("```json")
+            cleaned = cleaned.removeprefix("```")
+            cleaned = cleaned.removesuffix("```")
+            cleaned = cleaned.strip()
+
+            parsed = json.loads(cleaned)
+
+            # Validate structure
+            if "processed_items" not in parsed:
+                logger.error("Missing 'processed_items' key in LLM response")
+                msg = "Invalid response structure"
+                raise ValueError(msg)
+
+            # Validate and sanitize categories, initialize citations
+            for item in parsed["processed_items"]:
+                category = item.get("category", "")
+                if category not in ALLOWED_CATEGORIES:
+                    logger.warning(
+                        "Invalid category '%s' for line %s, replacing with '%s'",
+                        category,
+                        item.get("line_number"),
+                        "Uncategorized-Review-Required",
+                    )
+                    item["category"] = "Uncategorized-Review-Required"
+                    item["deductibility_percent"] = 0
+                    item["reasoning"] = (
+                        f"Original category '{category}' not recognized. "
+                        "Manual review required."
+                    )
+
+                # Initialize citations field if missing (NEW)
+                if "citations" not in item:
+                    item["citations"] = []
+
+            # Add tax calculations if line items provided
+            if input_line_items:
+                # Create amount lookup map (line_number → original amount)
+                amount_map = {}
+                for i, item in enumerate(input_line_items):
+                    line_num = i + 1
+                    # Extract amount, handling dict types
+                    amount = float(item.get("total_price", 0))
+                    amount_map[line_num] = amount
+
+                # Add calculated fields to each processed item
+                for item in parsed["processed_items"]:
+                    line_num = item.get("line_number")
+
+                    # Defensive: Use .get() with defaults to prevent KeyError
+                    original_amount = amount_map.get(line_num, 0.0)
+                    deductibility = item.get("deductibility_percent", 0)
+
+                    # Add calculated fields
+                    item["original_amount"] = round(original_amount, 2)
+                    item["deductible_amount"] = round(
+                        (original_amount * deductibility) / 100.0, 2
+                    )
+
+            return parsed  # type: ignore[no-any-return]
+
+        except json.JSONDecodeError as e:
+            logger.error("JSON decode error: %s\nResponse: %s", e, llm_response[:200])
+            return {
+                "processed_items": [],
+                "error": "Failed to parse LLM response as JSON",
+                "raw_response": llm_response[:500],
+            }
+        except Exception as e:  # noqa: BLE001
+            logger.error("Unexpected error parsing response: %s", e)
+            return {
+                "processed_items": [],
+                "error": str(e),
+            }
 
     def _format_alternative_matches(self, matches: list[Any]) -> str:
         """Format alternative rule matches for display."""
@@ -453,6 +714,174 @@ Return ONLY the JSON object.
             base_confidence += min(len(matched_keywords) * 0.02, 0.1)
 
         return max(0.0, min(base_confidence, 1.0))
+
+    def _get_rag_context(
+        self,
+        expense_description: str,
+        expense_category: str | None = None,
+        vendor_name: str | None = None,
+    ) -> str:
+        """Retrieve and format CRA context from RAG database.
+
+        Args:
+            expense_description: Line items or description
+            expense_category: Category hint (e.g., "meals", "travel")
+            vendor_name: Vendor name for context
+
+        Returns:
+            Formatted context string for LLM prompt
+        """
+        # Mapping from application categories to simpler RAG-friendly terms
+        # Note: RAG database has limited expense_types indexed (mainly "meals")
+        # For other categories, we rely on keyword search in query without filter
+        rag_category_map = {
+            "Travel-Lodging": "hotel travel accommodation",
+            "Travel-Meals": "meals",
+            "Meals & Entertainment": "meals",
+            "Fuel-Vehicle": "vehicle fuel",
+            "Office-Supplies": "office supplies",
+            "Capital-Equipment": "capital equipment",
+            "Professional-Services": "professional services",
+            "Travel-Taxes": "travel taxes",
+        }
+
+        # Only use expense_types filter for categories known to be indexed in RAG
+        indexed_expense_types = {"meals"}
+
+        try:
+            import qe_tax_rag as qe
+
+            # Normalize the expense category for RAG search
+            rag_category = (
+                rag_category_map.get(expense_category) if expense_category else None
+            )
+
+            # Build a more focused search query
+            query_parts = [expense_description]
+            if vendor_name:
+                query_parts.append(vendor_name)
+            if rag_category:
+                query_parts.append(rag_category)
+            query_parts.append("business expense tax deduction rules")
+            query = " ".join(filter(None, query_parts))
+
+            # Only use expense_types filter if the category is indexed
+            # Otherwise empty filter lets RAG search across all content
+            expense_types_filter = (
+                [rag_category]
+                if rag_category and rag_category in indexed_expense_types
+                else []
+            )
+
+            logger.info(
+                "RAG search query: %s, expense_types: %s",
+                query,
+                expense_types_filter,
+            )
+
+            # Search RAG database
+            results = qe.search(
+                query=query,
+                expense_types=expense_types_filter,
+                top_k=3,
+            )
+
+            # Phase 2: Store RAG results for programmatic citation injection
+            self._last_rag_results = results if results else []
+
+            logger.info(
+                "RAG search returned %d results", len(results) if results else 0
+            )
+            if results:
+                logger.info(
+                    "RAG search raw results: %s",
+                    [
+                        {"id": r.citation_id, "content": r.content[:100]}
+                        for r in results
+                    ],
+                )
+
+            if not results:
+                logger.warning("RAG search returned no results for query: %s", query)
+                return "No specific CRA documents found. Rely on general tax knowledge."
+
+            # Format results
+            context_parts = ["Relevant CRA Documents Found:"]
+            for i, result in enumerate(results, 1):
+                # Escape quotes to prevent JSON issues
+                content = result.content[:400].replace('"', '\\"')
+                entry = (
+                    f"\n{i}. Citation ID: {result.citation_id}\n"
+                    f"   Source: {result.source_url}\n"
+                    f'   Content: "{content}..."'
+                )
+                context_parts.append(entry)
+
+            formatted_context = "\n".join(context_parts)
+            logger.info(
+                "Formatted RAG context being injected into prompt:\n%s",
+                formatted_context,
+            )
+
+            return formatted_context
+
+        except ImportError:
+            logger.error("`qe_tax_rag` package not found. RAG search is disabled.")
+            return "RAG system not available. Rely on general tax knowledge."
+        except Exception as e:  # noqa: BLE001
+            logger.warning("RAG search failed with %s: %s", type(e).__name__, e)
+            return "RAG search encountered an error. Rely on general tax knowledge."
+
+    def _inject_citations_programmatically(
+        self,
+        processed_items: list[dict[str, Any]],
+    ) -> None:
+        """Programmatically inject RAG citations into tax-relevant items.
+
+        Phase 2 approach: Remove LLM citation extraction burden and inject
+        programmatically. For demo, inject ALL retrieved citations into
+        tax-relevant items.
+
+        Args:
+            processed_items: List of processed line items from LLM
+        """
+        if not self._last_rag_results:
+            logger.debug("No RAG results available for citation injection")
+            return
+
+        # Extract all citation IDs from RAG results
+        all_citations = [r.citation_id for r in self._last_rag_results]
+
+        # Tax-relevant categories that should have CRA citations
+        tax_relevant_categories = {
+            "Meals & Entertainment",
+            "Travel-Lodging",
+            "Travel-Meals",
+            "Travel-Taxes",
+            "Office-Supplies",
+            "Professional-Services",
+            "Fuel-Vehicle",
+            "Uncategorized-Review-Required",  # Include for demo/audit purposes
+        }
+
+        # Inject citations into relevant items
+        for item in processed_items:
+            category = item.get("category", "")
+            if category in tax_relevant_categories:
+                item["citations"] = all_citations
+                logger.info(
+                    "✅ Injected %d citation(s) into '%s' (category: %s)",
+                    len(all_citations),
+                    item.get("original_description", "")[:30],
+                    category,
+                )
+            else:
+                desc = item.get("original_description", "")[:30]
+                logger.debug(
+                    "Skipped citation for '%s' (category: %s not tax-relevant)",
+                    desc,
+                    category,
+                )
 
     def _get_cra_system_message(self) -> str:
         """Get the system message for the CRA rules agent."""

@@ -327,10 +327,9 @@ For public HuggingFace Space deployments, enable password protection:
 - `GET /api/v1/test-connection` - Test QuickBooks connection
 
 ### Multi-Agent Processing
-- `POST /api/v1/receipts/extract-with-agents` - Process receipt with 3-agent system
+- `POST /api/v1/receipts/extract-with-agents` - Process receipt with 2-agent system
   - DataExtractionAgent: Uses Gemini for image extraction
-  - CRArulesAgent: Applies Canadian tax rules with TogetherAI
-  - TaxCalculatorAgent: Validates GST/HST calculations with TogetherAI
+  - CRArulesAgent: Applies Canadian tax rules with integrated tax calculations (TogetherAI)
 
 ### Web UI Endpoints
 - `GET /` - Web UI home page
@@ -504,12 +503,15 @@ For simplicity in prototyping, tokens are stored in a local JSON file:
    - Real-time processing with visual feedback
    - Drag-and-drop file upload with validation
    - Seamless QuickBooks OAuth integration with popup flow
-10. ✅ **Multi-Agent System**: Transparent receipt processing with CRA compliance
-   - Three specialized agents working in consensus
+10. ✅ **Multi-Agent System**: Transparent receipt processing with CRA compliance (2-agent system)
+   - Two specialized agents working in consensus (DataExtractionAgent, CRArulesAgent)
+   - CRArulesAgent now integrates tax calculations (formerly separate TaxCalculatorAgent)
+   - Structured line-item processing with JSON arrays for accuracy
    - Confidence scoring and audit risk assessment
    - CSV-based business rules for easy updates
    - Hybrid LLM: Gemini handles images (HEIC, PDF), TogetherAI handles reasoning
-   - 47% cost reduction vs pure Gemini approach
+   - 47% cost reduction vs pure Gemini approach + faster processing (removed LLM call)
+   - ALLOWED_CATEGORIES constraint prevents LLM hallucinations
    - Full backward compatibility maintained
 11. ✅ **Password Protection**: HTTP Basic Auth for HuggingFace Space deployments
    - Environment-driven activation (disabled by default)

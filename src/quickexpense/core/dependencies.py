@@ -11,7 +11,6 @@ from quickexpense.services.agents import (
     AgentOrchestrator,
     CRArulesAgent,
     DataExtractionAgent,
-    TaxCalculatorAgent,
 )
 from quickexpense.services.business_rules import BusinessRuleEngine
 from quickexpense.services.gemini import GeminiService
@@ -101,17 +100,16 @@ def get_gemini_service(
 def get_multi_agent_orchestrator(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AgentOrchestrator:
-    """Get multi-agent orchestrator instance."""
-    # Create the three specialized agents
-    data_extraction_agent = DataExtractionAgent(settings=settings)
-    cra_rules_agent = CRArulesAgent(settings=settings)
-    tax_calculator_agent = TaxCalculatorAgent(settings=settings)
+    """Get multi-agent orchestrator instance (2-agent system)."""
+    # Create the two specialized agents (tax calculations integrated in CRArulesAgent)
+    # Use longer timeouts for complex processing
+    data_extraction_agent = DataExtractionAgent(settings=settings, timeout_seconds=30.0)
+    cra_rules_agent = CRArulesAgent(settings=settings, timeout_seconds=30.0)
 
     # Create and return orchestrator
     return AgentOrchestrator(
         data_extraction_agent=data_extraction_agent,
         cra_rules_agent=cra_rules_agent,
-        tax_calculator_agent=tax_calculator_agent,
         consensus_threshold=0.75,
     )
 

@@ -1,0 +1,94 @@
+{
+  "file": "/Users/manonjacquin/Documents/receipts/Harrods.jpg",
+  "receipt": "vendor_name='Harrods' vendor_address='87-135 Brompton Road\\nLONDON SW1X 7XL' vendor_phone='020 7730 1234' transaction_date=datetime.date(2019, 12, 20) receipt_number='NT0021-001072' payment_method=<PaymentMethod.DEBIT_CARD: 'debit_card'> line_items=[LineItem(description='Cookshop', quantity=Decimal('1'), unit_price=Decimal('149.0'), total_price=Decimal('149.0')), LineItem(description='Cookshop', quantity=Decimal('1'), unit_price=Decimal('4.95'), total_price=Decimal('4.95'))] subtotal=Decimal('153.95') tax_amount=Decimal('0.0') tip_amount=Decimal('0.0') total_amount=Decimal('153.95') currency='GBP' notes=None confidence_score=0.95",
+  "business_rules": {
+    "rule_applications": [
+      {
+        "id": "unknown",
+        "name": "Unknown Rule",
+        "line_item": "Cookshop",
+        "rule_applied": "Unknown",
+        "confidence": 0.3,
+        "confidence_score": 0.3,
+        "items_affected": 1,
+        "category": "General Business Expense",
+        "qb_account": "Other Business Expenses",
+        "t2125_line_item": null,
+        "deductibility_percentage": 100,
+        "tax_treatment": "standard",
+        "ita_reference": null,
+        "is_fallback": true
+      },
+      {
+        "id": "unknown",
+        "name": "Unknown Rule",
+        "line_item": "Cookshop",
+        "rule_applied": "Unknown",
+        "confidence": 0.3,
+        "confidence_score": 0.3,
+        "items_affected": 1,
+        "category": "General Business Expense",
+        "qb_account": "Other Business Expenses",
+        "t2125_line_item": null,
+        "deductibility_percentage": 100,
+        "tax_treatment": "standard",
+        "ita_reference": null,
+        "is_fallback": true
+      }
+    ],
+    "categorization": {
+      "total_items": 2,
+      "categories": [
+        "General Business Expense"
+      ],
+      "business_rules_applied": 2,
+      "confidence_scores": [
+        0.3,
+        0.3
+      ],
+      "tax_deductibility": {
+        "total_amount": "153.95",
+        "deductible_amount": "153.95",
+        "deductibility_rate": "100.0%"
+      }
+    }
+  },
+  "enhanced_expense": {
+    "vendor_name": "Harrods",
+    "date": "2019-12-20",
+    "total_amount": "153.95",
+    "currency": "GBP",
+    "categorized_line_items": [
+      {
+        "description": "Cookshop",
+        "amount": "149.0",
+        "quantity": 1,
+        "category": "General Business Expense",
+        "deductibility_percentage": 100,
+        "account_mapping": null,
+        "tax_treatment": "standard",
+        "confidence_score": 0.3,
+        "business_rule_id": null
+      },
+      {
+        "description": "Cookshop",
+        "amount": "4.95",
+        "quantity": 1,
+        "category": "General Business Expense",
+        "deductibility_percentage": 100,
+        "account_mapping": null,
+        "tax_treatment": "standard",
+        "confidence_score": 0.3,
+        "business_rule_id": null
+      }
+    ],
+    "business_rules_applied": [],
+    "total_deductible_amount": "153.95",
+    "foreign_exchange_rate": null,
+    "payment_method": "debit_card",
+    "payment_account": null,
+    "processing_metadata": {}
+  },
+  "dry_run": true,
+  "message": "DRY RUN - No expense created in QuickBooks"
+}

@@ -305,46 +305,46 @@ class QuickExpenseUI {
                 // Agent mode processing messages
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Agent 1/3: DataExtractionAgent extracting receipt data...';
+                        this.elements.processingMessage.textContent = 'Extracting receipt data from image...';
                     }
                 }, 3000);
 
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Agent 2/3: CRArulesAgent applying Canadian tax rules...';
+                        this.elements.processingMessage.textContent = 'Searching CRA tax regulations database...';
+                    }
+                }, 20000); // After ~20 seconds
+
+                setTimeout(() => {
+                    if (this.isProcessing) {
+                        this.elements.processingMessage.textContent = 'Applying Canadian business expense rules...';
                     }
                 }, 60000); // After ~1 minute
 
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Agent 3/3: TaxCalculatorAgent validating calculations...';
+                        this.elements.processingMessage.textContent = 'Calculating deductions and finalizing...';
                     }
                 }, 90000); // After ~1.5 minutes
-
-                setTimeout(() => {
-                    if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Agents reaching consensus and finalizing results...';
-                    }
-                }, 120000); // After ~2 minutes
             } else {
                 // Standard processing messages
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Analyzing receipt with AI... (this may take 2-3 minutes)';
+                        this.elements.processingMessage.textContent = 'Extracting receipt data from image...';
                     }
-                }, 5000);
+                }, 3000);
 
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'AI processing complete. Applying business rules...';
+                        this.elements.processingMessage.textContent = 'Applying business rules and categorization...';
                     }
-                }, 90000); // After ~1.5 minutes
+                }, 60000); // After ~1 minute
 
                 setTimeout(() => {
                     if (this.isProcessing) {
                         this.elements.processingMessage.textContent = 'Creating expense in QuickBooks...';
                     }
-                }, 120000); // After ~2 minutes
+                }, 90000); // After ~1.5 minutes
             }
 
             // Choose endpoint based on mode
@@ -657,7 +657,16 @@ class QuickExpenseUI {
         }
         container.innerHTML = '';
 
-        // Add mode indicators at the top if applicable
+        // Add confidence badge at the top if agent mode is used
+        if (data?.agent_mode && data?.agent_details?.overall_confidence !== undefined) {
+            const confidenceBadge = document.createElement('div');
+            confidenceBadge.className = 'confidence-badge';
+            const confidencePercent = (data.agent_details.overall_confidence * 100).toFixed(0);
+            confidenceBadge.textContent = `${confidencePercent}% Confidence`;
+            container.appendChild(confidenceBadge);
+        }
+
+        // Add mode indicators if applicable
         if (isDryRun || (data && data.agent_mode)) {
             const modeIndicator = document.createElement('div');
             modeIndicator.className = 'mode-indicator';
@@ -668,17 +677,17 @@ class QuickExpenseUI {
             } else if (isDryRun) {
                 modeText = '<strong>Mode:</strong> Dry Run (Preview Only)';
             } else if (data?.agent_mode) {
-                modeText = '<strong>Mode:</strong> Agent Processing (3-Agent System)';
+                modeText = '<strong>Mode:</strong> Agent Processing (CRA Compliance)';
             }
 
             modeIndicator.innerHTML = modeText;
             modeIndicator.style.marginBottom = '1rem';
+            modeIndicator.style.marginTop = '1rem';
             modeIndicator.style.padding = '0.5rem';
             modeIndicator.style.backgroundColor = data?.agent_mode ? 'var(--pink-accent)' : 'var(--peach-light)';
             modeIndicator.style.borderRadius = 'var(--radius-sm)';
             modeIndicator.style.fontSize = '0.875rem';
 
-            // Add agent mode attribute for CSS styling
             if (data?.agent_mode) {
                 modeIndicator.setAttribute('data-agent-mode', 'true');
             }
@@ -694,102 +703,161 @@ class QuickExpenseUI {
             return;
         }
 
-        // Display each applied rule
-        businessRules.applied_rules.forEach((rule, index) => {
-            const ruleDiv = document.createElement('div');
-            ruleDiv.className = 'rule-item-compact';
-            if (index > 0) {
-                ruleDiv.style.marginTop = '1rem';
-                ruleDiv.style.paddingTop = '1rem';
-                ruleDiv.style.borderTop = '1px solid var(--border-light)';
+        // Collect unique citations from all rules
+        const allCitations = new Set();
+        businessRules.applied_rules.forEach(rule => {
+            if (rule.citations && Array.isArray(rule.citations)) {
+                rule.citations.forEach(cit => allCitations.add(cit));
             }
+        });
 
-            // Rule name
-            const ruleName = document.createElement('div');
-            ruleName.className = 'rule-name-compact';
-            ruleName.textContent = rule.description || rule.rule_applied;
-            ruleName.style.fontWeight = '500';
-            ruleName.style.marginBottom = '0.5rem';
-            ruleDiv.appendChild(ruleName);
+        // Display citation summary if we have citations
+        if (allCitations.size > 0) {
+            const citationSummary = document.createElement('div');
+            citationSummary.className = 'citation-summary';
+            citationSummary.style.marginBottom = '1.5rem';
 
-            // Rule details in compact format
-            const details = [
-                { label: 'Category', value: rule.category },
-                { label: 'Account', value: rule.qb_account },
-                { label: 'Deductible', value: `${rule.deductible_percentage}%`, className: 'highlight' },
-                { label: 'Amount', value: `$${(rule.amount || 0).toFixed(2)}`, className: 'amount' }
-            ];
+            const citationTitle = document.createElement('h4');
+            citationTitle.textContent = 'CRA Tax Rules Applied';
+            citationTitle.style.marginBottom = '0.75rem';
+            citationTitle.style.fontSize = '0.95rem';
+            citationSummary.appendChild(citationTitle);
 
-            details.forEach(detail => {
-                const row = this.createDataRow(detail.label, detail.value, detail.className);
-                row.style.fontSize = '0.875rem';
-                ruleDiv.appendChild(row);
+            // Create expandable citation items
+            allCitations.forEach(citationId => {
+                const citationItem = document.createElement('div');
+                citationItem.className = 'citation-item';
+                citationItem.onclick = () => this.toggleCitationDetails(citationItem);
+
+                const citationHeader = document.createElement('div');
+                citationHeader.style.display = 'flex';
+                citationHeader.style.justifyContent = 'space-between';
+                citationHeader.style.alignItems = 'center';
+
+                const citationIdSpan = document.createElement('span');
+                citationIdSpan.className = 'citation-id';
+                citationIdSpan.textContent = this.formatCitationId(citationId);
+
+                const citationToggle = document.createElement('span');
+                citationToggle.className = 'citation-toggle';
+                citationToggle.textContent = '▼';
+
+                citationHeader.appendChild(citationIdSpan);
+                citationHeader.appendChild(citationToggle);
+                citationItem.appendChild(citationHeader);
+
+                // Add expandable details (rule explanation)
+                const citationDetails = document.createElement('div');
+                citationDetails.className = 'citation-details';
+                citationDetails.style.display = 'none';
+                citationDetails.textContent = this.getCitationExplanation(citationId);
+                citationItem.appendChild(citationDetails);
+
+                citationSummary.appendChild(citationItem);
             });
 
-            container.appendChild(ruleDiv);
+            container.appendChild(citationSummary);
+        }
+
+        // Display line items breakdown
+        const lineItemsTitle = document.createElement('h4');
+        lineItemsTitle.textContent = 'Line Items Breakdown';
+        lineItemsTitle.style.marginBottom = '0.75rem';
+        lineItemsTitle.style.fontSize = '0.95rem';
+        container.appendChild(lineItemsTitle);
+
+        // Display each applied rule as enhanced line item
+        businessRules.applied_rules.forEach((rule) => {
+            const lineItem = document.createElement('div');
+            lineItem.className = 'line-item-enhanced';
+
+            // Item header (description + amount)
+            const itemHeader = document.createElement('div');
+            itemHeader.className = 'item-header';
+            itemHeader.style.display = 'flex';
+            itemHeader.style.justifyContent = 'space-between';
+            itemHeader.style.marginBottom = '0.5rem';
+
+            const description = document.createElement('strong');
+            description.textContent = rule.description || rule.rule_applied;
+
+            const amount = document.createElement('span');
+            amount.className = 'item-amount';
+            amount.textContent = `$${(rule.amount || 0).toFixed(2)}`;
+
+            itemHeader.appendChild(description);
+            itemHeader.appendChild(amount);
+            lineItem.appendChild(itemHeader);
+
+            // Item meta (category badge + deductibility)
+            const itemMeta = document.createElement('div');
+            itemMeta.className = 'item-meta';
+            itemMeta.style.display = 'flex';
+            itemMeta.style.gap = '0.75rem';
+            itemMeta.style.alignItems = 'center';
+            itemMeta.style.marginBottom = '0.5rem';
+
+            const categoryBadge = document.createElement('span');
+            categoryBadge.className = `category-badge ${this.getCategoryClass(rule.category)}`;
+            categoryBadge.textContent = rule.category;
+
+            const deductibleInfo = document.createElement('span');
+            deductibleInfo.className = 'deductible-info';
+            const deductibleAmount = ((rule.amount || 0) * (rule.deductible_percentage || 0) / 100).toFixed(2);
+            deductibleInfo.textContent = `${rule.deductible_percentage}% deductible → $${deductibleAmount}`;
+
+            itemMeta.appendChild(categoryBadge);
+            itemMeta.appendChild(deductibleInfo);
+            lineItem.appendChild(itemMeta);
+
+            // Item reasoning
+            if (rule.reasoning) {
+                const itemReasoning = document.createElement('div');
+                itemReasoning.className = 'item-reasoning';
+                itemReasoning.innerHTML = `<span style="margin-right: 0.25rem;">💡</span>${rule.reasoning}`;
+                lineItem.appendChild(itemReasoning);
+            }
+
+            container.appendChild(lineItem);
         });
     }
 
-    populateDetailedInfo(data) {
-        // Populate expense summary details
-        this.populateExpenseSummaryDetailed(data.enhanced_expense);
+    getCitationExplanation(citationId) {
+        // Map citation IDs to their explanations
+        // This is a simplified version - in production, you might fetch this from the backend
+        const explanations = {
+            'T4002-P41': 'Meals & Entertainment: Maximum 50% deductible per ITA Section 67.1',
+            'T4002-P46': 'Meal expense limits and deductibility rules for business purposes',
+            'T4002-P59': 'Motor vehicle expense records and meal deduction requirements',
+            'default': 'CRA Business and Professional Income Guide - Tax deduction rules'
+        };
 
-        // If agent mode was used, populate agent details
-        if (data.agent_mode && data.agent_details) {
-            this.populateAgentDetails(data.agent_details);
-        }
+        const baseId = this.formatCitationId(citationId);
+        return explanations[baseId] || explanations['default'];
     }
 
+    populateDetailedInfo(data) {
+        // Advanced view is now empty by default
+        // Only populate if there are actual errors or warnings to show
+        if (data.agent_mode && data.agent_details) {
+            const hasErrors = data.agent_details.agent_results?.some(agent => !agent.success);
+            const hasReviewFlags = data.agent_details.flags_for_review?.length > 0;
 
-    populateExpenseSummaryDetailed(expenseData) {
-        const container = this.elements.expenseSummaryDetailed;
-        if (!container) {
-            console.error('Expense summary container not found');
-            return;
-        }
-        container.innerHTML = '';
-
-        // Create a summary based on available data
-        const summaryDiv = document.createElement('div');
-        summaryDiv.className = 'rule-item-simple';
-
-        const details = document.createElement('div');
-        details.className = 'rule-details-simple';
-
-        // Build summary from available data
-        let summaryHtml = '';
-
-        if (expenseData) {
-            // Try to extract meaningful information from the expense data
-            const itemsCount = expenseData.items_count ||
-                               (expenseData.line_items?.length) ||
-                               (Array.isArray(expenseData) ? expenseData.length : 1);
-
-            const categoriesSet = new Set();
-            if (expenseData.line_items) {
-                expenseData.line_items.forEach(item => {
-                    if (item.category) categoriesSet.add(item.category);
-                });
-            } else if (expenseData.category) {
-                categoriesSet.add(expenseData.category);
+            if (hasErrors || hasReviewFlags) {
+                this.populateAgentDetails(data.agent_details);
+            } else {
+                // No errors or flags - show a simple message
+                const advancedInfo = document.getElementById('advancedInfo');
+                if (advancedInfo) {
+                    advancedInfo.innerHTML = `
+                        <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                            <p style="margin: 0;">✓ All processing completed successfully</p>
+                            <p style="margin: 0.5rem 0 0 0; font-size: 0.875rem;">No issues or warnings to report</p>
+                        </div>
+                    `;
+                }
             }
-
-            summaryHtml = `
-                <strong>Items Processed:</strong> ${itemsCount}<br>
-                <strong>Categories Found:</strong> ${categoriesSet.size || 1}<br>
-                <strong>Processing Time:</strong> ${new Date().toLocaleTimeString('en-CA')}<br>
-                <strong>Payment Method:</strong> ${expenseData.payment || 'Not specified'}
-            `;
-        } else {
-            summaryHtml = `
-                <strong>Processing Time:</strong> ${new Date().toLocaleTimeString('en-CA')}<br>
-                <strong>Status:</strong> Completed
-            `;
         }
-
-        details.innerHTML = summaryHtml;
-        summaryDiv.appendChild(details);
-        container.appendChild(summaryDiv);
     }
 
     populateAgentDetails(agentDetails) {
@@ -798,18 +866,18 @@ class QuickExpenseUI {
 
         if (!agentContainer) {
             // Create agent details section if it doesn't exist
-            const detailedInfo = this.elements.detailedInfo;
-            if (!detailedInfo) return;
+            const advancedInfo = document.getElementById('advancedInfo');
+            if (!advancedInfo) return;
 
             const agentSection = document.createElement('div');
             agentSection.className = 'detail-section';
             agentSection.innerHTML = `
-                <h4>Agent Processing Details</h4>
+                <h4>Issues & Warnings</h4>
                 <div class="agent-details-simple" id="agentDetailsDetailed">
                     <!-- Dynamic agent details -->
                 </div>
             `;
-            detailedInfo.appendChild(agentSection);
+            advancedInfo.appendChild(agentSection);
             agentContainer = document.getElementById('agentDetailsDetailed');
         }
 
@@ -820,80 +888,55 @@ class QuickExpenseUI {
 
         agentContainer.innerHTML = '';
 
-        // Overall confidence and consensus info
-        const overallDiv = document.createElement('div');
-        overallDiv.className = 'rule-item-simple';
-        overallDiv.innerHTML = `
-            <div class="rule-title-simple">Processing Summary</div>
-            <div class="rule-details-simple">
-                <strong>Overall Confidence:</strong> ${(agentDetails.overall_confidence * 100).toFixed(1)}%<br>
-                <strong>Consensus Method:</strong> ${agentDetails.consensus_method}<br>
-                <strong>Flags for Review:</strong> ${agentDetails.flags_for_review.length || 'None'}
-            </div>
-        `;
-        agentContainer.appendChild(overallDiv);
-
-        // Individual agent results
-        if (agentDetails.agent_results && agentDetails.agent_results.length > 0) {
-            agentDetails.agent_results.forEach(agent => {
-                const agentDiv = document.createElement('div');
-                agentDiv.className = 'rule-item-simple';
-
-                const statusIcon = agent.success ? '✅ ' : '❌ ';
-                const errorInfo = agent.error_message ? `<br><strong>Error:</strong> ${agent.error_message}` : '';
-
-                agentDiv.innerHTML = `
-                    <div class="rule-title-simple">${statusIcon} ${agent.agent_name}</div>
-                    <div class="rule-details-simple">
-                        <strong>Status:</strong> ${agent.success ? 'Success' : 'Failed'}<br>
-                        <strong>Confidence:</strong> ${(agent.confidence_score * 100).toFixed(1)}%<br>
-                        <strong>Processing Time:</strong> ${agent.processing_time.toFixed(2)}s${errorInfo}
-                    </div>
-                `;
-                agentContainer.appendChild(agentDiv);
-            });
+        // Show review flags if any
+        if (agentDetails.flags_for_review && agentDetails.flags_for_review.length > 0) {
+            const flagsDiv = document.createElement('div');
+            flagsDiv.className = 'rule-item-simple';
+            flagsDiv.innerHTML = `
+                <div class="rule-title-simple">⚠ Items Flagged for Review</div>
+                <div class="rule-details-simple">
+                    ${agentDetails.flags_for_review.map(flag => `• ${flag}`).join('<br>')}
+                </div>
+            `;
+            agentContainer.appendChild(flagsDiv);
         }
 
-        // Agent breakdown with purposes
-        if (agentDetails.agent_breakdown) {
-            const breakdownDiv = document.createElement('div');
-            breakdownDiv.className = 'rule-item-simple';
-            breakdownDiv.innerHTML = `<div class="rule-title-simple">Agent Responsibilities</div>`;
+        // Individual agent results (only if there were errors)
+        if (agentDetails.agent_results && agentDetails.agent_results.length > 0) {
+            const hasErrors = agentDetails.agent_results.some(agent => !agent.success);
 
-            const breakdownDetails = document.createElement('div');
-            breakdownDetails.className = 'rule-details-simple';
+            if (hasErrors) {
+                agentDetails.agent_results.forEach(agent => {
+                    if (!agent.success) {
+                        const agentDiv = document.createElement('div');
+                        agentDiv.className = 'rule-item-simple';
 
-            let breakdownHtml = '';
-            Object.entries(agentDetails.agent_breakdown).forEach(([key, info]) => {
-                const confidence = info.confidence ? ` (${(info.confidence * 100).toFixed(1)}%)` : '';
-                breakdownHtml += `<strong>${info.agent}:</strong> ${info.purpose}${confidence}<br>`;
-            });
+                        const errorInfo = agent.error_message ? agent.error_message : 'Processing failed';
 
-            breakdownDetails.innerHTML = breakdownHtml;
-            breakdownDiv.appendChild(breakdownDetails);
-            agentContainer.appendChild(breakdownDiv);
+                        agentDiv.innerHTML = `
+                            <div class="rule-title-simple">✗ ${agent.agent_name} Error</div>
+                            <div class="rule-details-simple">
+                                ${errorInfo}
+                            </div>
+                        `;
+                        agentContainer.appendChild(agentDiv);
+                    }
+                });
+            }
         }
     }
 
     setupDetailsToggle() {
-        const toggleBtn = this.elements.toggleDetails;
-        const detailedInfo = this.elements.detailedInfo;
-        const toggleText = document.getElementById('toggleText');
-        const toggleIcon = document.getElementById('toggleIcon');
+        const advancedViewCheckbox = document.getElementById('advancedViewCheckbox');
+        const advancedInfo = document.getElementById('advancedInfo');
 
-        if (!toggleBtn) return;
+        if (!advancedViewCheckbox || !advancedInfo) return;
 
-        toggleBtn.addEventListener('click', () => {
-            const isHidden = detailedInfo.style.display === 'none';
-
-            if (isHidden) {
-                detailedInfo.style.display = 'block';
-                toggleText.textContent = 'Hide Details';
-                toggleIcon.textContent = '▲';
+        advancedViewCheckbox.addEventListener('change', () => {
+            if (advancedViewCheckbox.checked) {
+                advancedInfo.style.display = 'block';
             } else {
-                detailedInfo.style.display = 'none';
-                toggleText.textContent = 'Show Details';
-                toggleIcon.textContent = '▼';
+                advancedInfo.style.display = 'none';
             }
         });
     }
@@ -916,8 +959,45 @@ class QuickExpenseUI {
         return row;
     }
 
+    // ===== HELPER FUNCTIONS FOR CITATIONS AND CATEGORIES =====
 
+    toggleCitationDetails(element) {
+        const details = element.querySelector('.citation-details');
+        const toggle = element.querySelector('.citation-toggle');
 
+        if (details && toggle) {
+            if (details.style.display === 'none') {
+                details.style.display = 'block';
+                toggle.textContent = '▲';
+            } else {
+                details.style.display = 'none';
+                toggle.textContent = '▼';
+            }
+        }
+    }
+
+    getCategoryClass(category) {
+        const mapping = {
+            'Meals & Entertainment': 'meals',
+            'Travel-Lodging': 'travel',
+            'Travel-Meals': 'travel',
+            'Tax-GST/HST': 'tax',
+            'Professional-Services': 'professional',
+            'Office-Supplies': 'office',
+            'Fuel-Vehicle': 'vehicle'
+        };
+        return mapping[category] || 'default';
+    }
+
+    formatCitationId(citationId) {
+        if (!citationId) return '';
+        // Extract base ID (e.g., "T4002-P41" from "T4002-P41-264561ee")
+        const parts = citationId.split('-');
+        if (parts.length >= 2) {
+            return parts.slice(0, 2).join('-'); // "T4002-P41"
+        }
+        return citationId;
+    }
 
     formatCurrency(amount) {
         if (amount === null || amount === undefined) return '$0.00';

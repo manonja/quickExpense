@@ -2,7 +2,9 @@
 
 ## 🤖 Overview
 
-QuickExpense uses a sophisticated 3-agent system powered by AG2 (AutoGen) to process receipts with Canadian tax compliance. This document explains how the multi-agent system works within the Docker container, including agent coordination, LLM integration, and consensus mechanisms.
+QuickExpense uses a sophisticated 2-agent system powered by AG2 (AutoGen) to process receipts with Canadian tax compliance. This document explains how the multi-agent system works within the Docker container, including agent coordination, LLM integration, and consensus mechanisms.
+
+**Latest Update (2025-10-30):** Consolidated from 3-agent to 2-agent system by integrating tax calculations into CRArulesAgent. Added GST/tip line item normalization for improved accuracy.
 
 ## 📋 Table of Contents
 
@@ -25,14 +27,20 @@ Receipt Input (Image/PDF)
          ↓
     [DataExtractionAgent] ──── Gemini AI (Image Processing)
          ↓
-    [CRArulesAgent] ──────── TogetherAI (Tax Rules)
+         │ (Tax/Tip Normalization)
          ↓
-    [TaxCalculatorAgent] ─── TogetherAI (Calculations)
+    [CRArulesAgent] ──────── TogetherAI (Tax Rules + Calculations)
          ↓
-    Consensus Engine
+    Orchestrator Formatting
          ↓
     Final Expense Data → QuickBooks
 ```
+
+**Key Features:**
+- **Line-Item Processing:** Each receipt line processed separately (no aggregation)
+- **Tax Normalization:** Automatic GST/HST and tip line item creation
+- **Integrated Calculations:** Tax calculations performed within CRArulesAgent
+- **Category Constraints:** ALLOWED_CATEGORIES prevents LLM hallucinations
 
 ### Agent Orchestrator
 The `MultiAgentOrchestrator` coordinates all agents and manages the processing pipeline:

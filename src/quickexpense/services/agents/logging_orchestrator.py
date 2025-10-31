@@ -29,7 +29,6 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         self,
         data_extraction_agent: BaseReceiptAgent,
         cra_rules_agent: BaseReceiptAgent,
-        tax_calculator_agent: BaseReceiptAgent,
         consensus_threshold: float = 0.75,
         ag2_logger: AG2StructuredLogger | None = None,
         conversation_logger: ConversationLogger | None = None,
@@ -39,8 +38,7 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
 
         Args:
             data_extraction_agent: Agent for extracting receipt data
-            cra_rules_agent: Agent for applying CRA rules and categorization
-            tax_calculator_agent: Agent for tax calculations and validation
+            cra_rules_agent: Agent for applying CRA rules (includes tax calculations)
             consensus_threshold: Minimum confidence for auto-processing
             ag2_logger: AG2 structured logger
             conversation_logger: Conversation history logger
@@ -49,7 +47,6 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         super().__init__(
             data_extraction_agent=data_extraction_agent,
             cra_rules_agent=cra_rules_agent,
-            tax_calculator_agent=tax_calculator_agent,
             consensus_threshold=consensus_threshold,
         )
 
@@ -187,32 +184,9 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
             processing_time=cra_result.processing_time,
         )
 
-        # Log inter-agent communication
+        # Update context with CRA results (continue even if this agent fails)
         if cra_result.success:
             context["cra_categorization"] = cra_result.data
-            self._log_inter_agent_handoff(
-                self.cra_rules_agent.name,
-                self.tax_calculator_agent.name,
-                cra_result.data,
-                cra_result.confidence_score,
-            )
-
-        # Phase 3: Tax Calculator
-        self._log_phase_start("TaxCalculation", self.tax_calculator_agent.name)
-
-        tax_result = await self.tax_calculator_agent.process(
-            receipt_data=extraction_result.data,
-            context=context,
-        )
-        agent_results.append(tax_result)
-
-        self._log_phase_complete(
-            "TaxCalculation",
-            self.tax_calculator_agent.name,
-            success=tax_result.success,
-            confidence=tax_result.confidence_score,
-            processing_time=tax_result.processing_time,
-        )
 
         # Calculate consensus
         processing_time = time.time() - start_time
@@ -270,7 +244,6 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
         for agent in [
             self.data_extraction_agent,
             self.cra_rules_agent,
-            self.tax_calculator_agent,
         ]:
             if (
                 hasattr(agent, "set_correlation_context")
@@ -513,18 +486,16 @@ class LoggingAgentOrchestrator(AgentOrchestrator):
 def create_logging_orchestrator(
     data_extraction_agent: BaseReceiptAgent,
     cra_rules_agent: BaseReceiptAgent,
-    tax_calculator_agent: BaseReceiptAgent,
     consensus_threshold: float = 0.75,
     ag2_logger: AG2StructuredLogger | None = None,
     conversation_logger: ConversationLogger | None = None,
     audit_logger: AuditLogger | None = None,
 ) -> LoggingAgentOrchestrator:
-    """Factory function to create orchestrator with logging.
+    """Factory function to create orchestrator with logging (2-agent system).
 
     Args:
         data_extraction_agent: Agent for extracting receipt data
-        cra_rules_agent: Agent for applying CRA rules
-        tax_calculator_agent: Agent for tax calculations
+        cra_rules_agent: Agent for applying CRA rules (includes tax calculations)
         consensus_threshold: Minimum confidence threshold
         ag2_logger: AG2 structured logger
         conversation_logger: Conversation logger
@@ -536,7 +507,6 @@ def create_logging_orchestrator(
     return LoggingAgentOrchestrator(
         data_extraction_agent=data_extraction_agent,
         cra_rules_agent=cra_rules_agent,
-        tax_calculator_agent=tax_calculator_agent,
         consensus_threshold=consensus_threshold,
         ag2_logger=ag2_logger,
         conversation_logger=conversation_logger,
