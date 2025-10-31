@@ -71,10 +71,11 @@
 
             <!-- Upload Zone Section -->
             <section class="upload-section">
-                <div class="card upload-card">
+                <!-- Upload Zone Card -->
+                <div class="upload-zone-card">
                     <div class="upload-zone" id="uploadZone">
-                        <div class="upload-icon">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <div class="upload-icon-circle">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                 <polyline points="17,8 12,3 7,8"></polyline>
                                 <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -82,30 +83,75 @@
                         </div>
                         <div class="upload-text">
                             <h3>Drop your receipt here</h3>
-                            <p>Or click to select a file</p>
+                            <p>or click to select a file</p>
                             <span class="supported-formats">Supports JPEG, PNG, PDF, HEIC (max 10MB)</span>
                         </div>
                         <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf,.heic,.heif" style="display: none;">
                     </div>
+                </div>
 
-                    <!-- Processing Options - Below upload zone -->
-                    <div class="processing-options">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="agentModeCheckbox">
-                            <span class="checkbox-text">Use Agent Processing (enhanced accuracy with 3-agent system)</span>
-                        </label>
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="dryRunCheckbox">
-                            <span class="checkbox-text">Dry run (preview only - don't create expenses)</span>
-                        </label>
+                <!-- Processing Options Card -->
+                <div class="processing-options-card">
+                    <h3 class="options-title">Processing Options</h3>
+
+                    <!-- Mode Selection -->
+                    <div class="mode-section">
+                        <label class="mode-label">Mode</label>
+                        <div class="mode-options">
+                            <label class="mode-option selected">
+                                <input type="radio" name="mode" value="preview" id="previewModeRadio" checked>
+                                <div class="mode-content">
+                                    <div class="mode-header">
+                                        <span class="mode-title">Preview Only</span>
+                                        <span class="mode-badge">Default</span>
+                                    </div>
+                                    <span class="mode-description">Review before creating expense</span>
+                                </div>
+                            </label>
+                            <label class="mode-option">
+                                <input type="radio" name="mode" value="create" id="createModeRadio">
+                                <div class="mode-content">
+                                    <div class="mode-header">
+                                        <span class="mode-title">Create Expense</span>
+                                    </div>
+                                    <span class="mode-description">Auto-add to QuickBooks</span>
+                                </div>
+                            </label>
+                        </div>
                     </div>
 
-                    <!-- Processing State -->
-                    <div class="processing-state" id="processingState" style="display: none;">
-                        <div class="loading-spinner"></div>
-                        <h3>Processing Receipt</h3>
-                        <p id="processingMessage">Extracting data from your receipt...</p>
+                    <!-- Enhanced Accuracy Option -->
+                    <label class="checkbox-option">
+                        <input type="checkbox" id="agentModeCheckbox">
+                        <div class="checkbox-content">
+                            <div class="checkbox-header">
+                                <span class="checkbox-title">Enhanced Accuracy</span>
+                                <span class="ai-badge">AI Agents</span>
+                            </div>
+                            <span class="checkbox-description">Use 3-agent system for higher accuracy on complex receipts. Takes 2-3x longer but ensures correct categorization.</span>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Feature Cards -->
+                <div class="feature-cards">
+                    <div class="feature-card">
+                        <div class="feature-icon">🇨🇦</div>
+                        <h4>CRA Compliant</h4>
+                        <p>Applies Canadian tax rules automatically</p>
                     </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">⚡</div>
+                        <h4>Instant Processing</h4>
+                        <p>Results in seconds with AI analysis</p>
+                    </div>
+                </div>
+
+                <!-- Processing State -->
+                <div class="processing-state" id="processingState" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <h3>Processing Receipt</h3>
+                    <p id="processingMessage">Extracting data from your receipt...</p>
                 </div>
             </section>
 

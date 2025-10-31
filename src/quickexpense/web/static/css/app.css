@@ -363,17 +363,23 @@ p {
 }
 
 /* ===== UPLOAD SECTION ===== */
-.upload-card {
-  min-height: 300px;
+.upload-section {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
+  gap: var(--space-6);
+}
+
+/* Upload Zone Card */
+.upload-zone-card {
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8);
 }
 
 .upload-zone {
   width: 100%;
-  min-height: 200px;
+  min-height: 180px;
   border: 2px dashed var(--border-light);
   border-radius: var(--radius-lg);
   display: flex;
@@ -388,34 +394,232 @@ p {
 }
 
 .upload-zone:hover {
-  border-color: var(--pink-accent);
-  background: linear-gradient(135deg, #fce7f3 10%, #fed7aa 5%, #fce7f3 15%);
+  border-color: #3b82f6;
+  background: #eff6ff;
 }
 
 .upload-zone.drag-over {
-  border-color: var(--primary-dark);
-  background: linear-gradient(135deg, #fce7f3 30%, #fed7aa 20%, #fce7f3 40%);
+  border-color: #2563eb;
+  background: #dbeafe;
   transform: scale(1.01);
 }
 
-.upload-icon {
-  color: var(--text-muted);
+.upload-icon-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #eff6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3b82f6;
 }
 
 .upload-text h3 {
   color: var(--text-primary);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
+  font-size: 1.25rem;
+  font-weight: 600;
 }
 
 .upload-text p {
   color: var(--text-muted);
   margin-bottom: var(--space-2);
+  font-size: 1rem;
 }
 
 .supported-formats {
   font-size: 0.875rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
+}
+
+/* Processing Options Card */
+.processing-options-card {
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8);
+}
+
+.options-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-6);
+}
+
+/* Mode Selection */
+.mode-section {
+  margin-bottom: var(--space-6);
+}
+
+.mode-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+}
+
+.mode-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.mode-option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  padding: var(--space-4);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-option:hover {
+  border-color: #3b82f6;
+  background: #f8fafc;
+}
+
+.mode-option.selected,
+.mode-option:has(input:checked) {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.mode-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.mode-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.mode-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.mode-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mode-badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #3b82f6;
+  background: white;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.mode-description {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Checkbox Option */
+.checkbox-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checkbox-option:hover {
+  border-color: #3b82f6;
+  background: #f8fafc;
+}
+
+.checkbox-option input[type="checkbox"] {
+  margin-top: 0.125rem;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.checkbox-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.checkbox-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.checkbox-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ai-badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #7c3aed;
+  background: #f3e8ff;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.checkbox-description {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Feature Cards */
+.feature-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.feature-card {
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.feature-icon {
+  font-size: 2rem;
+  margin-bottom: var(--space-3);
+}
+
+.feature-card h4 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.feature-card p {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0;
 }
 
 /* Processing Options */
@@ -1552,6 +1756,62 @@ p {
 }
 
 /* Responsive Design for New Components */
+/* ===== RESPONSIVE DESIGN - UPLOAD ZONE ===== */
+@media (max-width: 768px) {
+  .mode-options {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-zone-card {
+    padding: var(--space-6);
+  }
+
+  .processing-options-card {
+    padding: var(--space-5);
+  }
+}
+
+@media (max-width: 480px) {
+  .upload-icon-circle {
+    width: 48px;
+    height: 48px;
+  }
+
+  .upload-icon-circle svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .upload-text h3 {
+    font-size: 1rem;
+  }
+
+  .upload-text p {
+    font-size: 0.875rem;
+  }
+
+  .supported-formats {
+    font-size: 0.75rem;
+  }
+
+  .mode-option {
+    padding: var(--space-3);
+  }
+
+  .checkbox-option {
+    padding: var(--space-3);
+  }
+
+  .processing-options-card {
+    padding: var(--space-4);
+  }
+}
+
+/* ===== RESPONSIVE DESIGN - RESULTS SECTION ===== */
 @media (max-width: 768px) {
   .hero-confidence-section {
     padding: 1.5rem;

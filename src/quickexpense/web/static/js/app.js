@@ -31,6 +31,8 @@ class QuickExpenseUI {
             tryAgainBtn: document.getElementById('tryAgainBtn'),
             agentModeCheckbox: document.getElementById('agentModeCheckbox'),
             dryRunCheckbox: document.getElementById('dryRunCheckbox'),
+            previewModeRadio: document.getElementById('previewModeRadio'),
+            createModeRadio: document.getElementById('createModeRadio'),
             processingOptions: document.querySelector('.processing-options')
         };
 
@@ -167,13 +169,45 @@ class QuickExpenseUI {
     // ===== FILE UPLOAD MANAGEMENT =====
 
     setupEventListeners() {
-        const { connectBtn, uploadZone, fileInput, processAnotherBtn, tryAgainBtn } = this.elements;
+        const { connectBtn, uploadZone, fileInput, processAnotherBtn, tryAgainBtn, previewModeRadio, createModeRadio } = this.elements;
 
         connectBtn.addEventListener('click', () => this.handleConnectClick());
         uploadZone.addEventListener('click', () => this.handleUploadClick());
         fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         processAnotherBtn.addEventListener('click', () => this.resetToUpload());
         tryAgainBtn.addEventListener('click', () => this.resetToUpload());
+
+        // Mode selection radio buttons
+        if (previewModeRadio) {
+            previewModeRadio.addEventListener('change', () => this.handleModeChange());
+        }
+        if (createModeRadio) {
+            createModeRadio.addEventListener('change', () => this.handleModeChange());
+        }
+
+        // Handle label clicks for visual feedback
+        document.querySelectorAll('.mode-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                // Update selected class
+                document.querySelectorAll('.mode-option').forEach(opt => opt.classList.remove('selected'));
+                e.currentTarget.classList.add('selected');
+            });
+        });
+    }
+
+    handleModeChange() {
+        // Update visual state based on selected mode
+        const { previewModeRadio, createModeRadio } = this.elements;
+        const modeOptions = document.querySelectorAll('.mode-option');
+
+        modeOptions.forEach(option => {
+            const radio = option.querySelector('input[type="radio"]');
+            if (radio && radio.checked) {
+                option.classList.add('selected');
+            } else {
+                option.classList.remove('selected');
+            }
+        });
     }
 
     setupDropZone() {
@@ -313,7 +347,8 @@ class QuickExpenseUI {
 
             // Check if agent mode is enabled
             const agentMode = this.elements.agentModeCheckbox?.checked || false;
-            const dryRun = this.elements.dryRunCheckbox?.checked || false;
+            // Dry run is enabled when Preview mode is selected (not Create Expense)
+            const dryRun = this.elements.previewModeRadio?.checked || false;
 
             if (agentMode) {
                 this.showProcessing(`Processing with 3-agent system: ${file.name}...`);
