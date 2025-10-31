@@ -215,7 +215,7 @@ class AgentOrchestrator:
                         "line_items": processed_items,
                         "total_amount": round(total_amount, 2),
                         "total_deductible": round(total_deductible, 2),
-                        "deductibility_rate": round(deductibility_rate, 1),
+                        "deductibility_rate": round(deductibility_rate),  # Integer for Pydantic validation
                     }
                 )
             else:
