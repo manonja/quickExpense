@@ -657,7 +657,16 @@ class QuickExpenseUI {
         }
         container.innerHTML = '';
 
-        // Add mode indicators at the top if applicable
+        // Add confidence badge at the top if agent mode is used
+        if (data?.agent_mode && data?.agent_details?.overall_confidence !== undefined) {
+            const confidenceBadge = document.createElement('div');
+            confidenceBadge.className = 'confidence-badge';
+            const confidencePercent = (data.agent_details.overall_confidence * 100).toFixed(0);
+            confidenceBadge.textContent = `${confidencePercent}% Confidence`;
+            container.appendChild(confidenceBadge);
+        }
+
+        // Add mode indicators if applicable
         if (isDryRun || (data && data.agent_mode)) {
             const modeIndicator = document.createElement('div');
             modeIndicator.className = 'mode-indicator';
@@ -668,17 +677,17 @@ class QuickExpenseUI {
             } else if (isDryRun) {
                 modeText = '<strong>Mode:</strong> Dry Run (Preview Only)';
             } else if (data?.agent_mode) {
-                modeText = '<strong>Mode:</strong> Agent Processing (3-Agent System)';
+                modeText = '<strong>Mode:</strong> Agent Processing (CRA Compliance)';
             }
 
             modeIndicator.innerHTML = modeText;
             modeIndicator.style.marginBottom = '1rem';
+            modeIndicator.style.marginTop = '1rem';
             modeIndicator.style.padding = '0.5rem';
             modeIndicator.style.backgroundColor = data?.agent_mode ? 'var(--pink-accent)' : 'var(--peach-light)';
             modeIndicator.style.borderRadius = 'var(--radius-sm)';
             modeIndicator.style.fontSize = '0.875rem';
 
-            // Add agent mode attribute for CSS styling
             if (data?.agent_mode) {
                 modeIndicator.setAttribute('data-agent-mode', 'true');
             }
@@ -694,87 +703,137 @@ class QuickExpenseUI {
             return;
         }
 
-        // Display each applied rule
-        businessRules.applied_rules.forEach((rule, index) => {
-            const ruleDiv = document.createElement('div');
-            ruleDiv.className = 'rule-item-compact';
-            if (index > 0) {
-                ruleDiv.style.marginTop = '1rem';
-                ruleDiv.style.paddingTop = '1rem';
-                ruleDiv.style.borderTop = '1px solid var(--border-light)';
+        // Collect unique citations from all rules
+        const allCitations = new Set();
+        businessRules.applied_rules.forEach(rule => {
+            if (rule.citations && Array.isArray(rule.citations)) {
+                rule.citations.forEach(cit => allCitations.add(cit));
             }
+        });
 
-            // Rule name
-            const ruleName = document.createElement('div');
-            ruleName.className = 'rule-name-compact';
-            ruleName.textContent = rule.description || rule.rule_applied;
-            ruleName.style.fontWeight = '500';
-            ruleName.style.marginBottom = '0.5rem';
-            ruleDiv.appendChild(ruleName);
+        // Display citation summary if we have citations
+        if (allCitations.size > 0) {
+            const citationSummary = document.createElement('div');
+            citationSummary.className = 'citation-summary';
+            citationSummary.style.marginBottom = '1.5rem';
 
-            // Rule details in compact format
-            const details = [
-                { label: 'Category', value: rule.category },
-                { label: 'Account', value: rule.qb_account },
-                { label: 'Deductible', value: `${rule.deductible_percentage}%`, className: 'highlight' },
-                { label: 'Amount', value: `$${(rule.amount || 0).toFixed(2)}`, className: 'amount' }
-            ];
+            const citationTitle = document.createElement('h4');
+            citationTitle.textContent = 'CRA Tax Rules Applied';
+            citationTitle.style.marginBottom = '0.75rem';
+            citationTitle.style.fontSize = '0.95rem';
+            citationSummary.appendChild(citationTitle);
 
-            details.forEach(detail => {
-                const row = this.createDataRow(detail.label, detail.value, detail.className);
-                row.style.fontSize = '0.875rem';
-                ruleDiv.appendChild(row);
+            // Create expandable citation items
+            allCitations.forEach(citationId => {
+                const citationItem = document.createElement('div');
+                citationItem.className = 'citation-item';
+                citationItem.onclick = () => this.toggleCitationDetails(citationItem);
+
+                const citationHeader = document.createElement('div');
+                citationHeader.style.display = 'flex';
+                citationHeader.style.justifyContent = 'space-between';
+                citationHeader.style.alignItems = 'center';
+
+                const citationIdSpan = document.createElement('span');
+                citationIdSpan.className = 'citation-id';
+                citationIdSpan.textContent = this.formatCitationId(citationId);
+
+                const citationToggle = document.createElement('span');
+                citationToggle.className = 'citation-toggle';
+                citationToggle.textContent = '▼';
+
+                citationHeader.appendChild(citationIdSpan);
+                citationHeader.appendChild(citationToggle);
+                citationItem.appendChild(citationHeader);
+
+                // Add expandable details (rule explanation)
+                const citationDetails = document.createElement('div');
+                citationDetails.className = 'citation-details';
+                citationDetails.style.display = 'none';
+                citationDetails.textContent = this.getCitationExplanation(citationId);
+                citationItem.appendChild(citationDetails);
+
+                citationSummary.appendChild(citationItem);
             });
 
-            // Add reasoning text if available
+            container.appendChild(citationSummary);
+        }
+
+        // Display line items breakdown
+        const lineItemsTitle = document.createElement('h4');
+        lineItemsTitle.textContent = 'Line Items Breakdown';
+        lineItemsTitle.style.marginBottom = '0.75rem';
+        lineItemsTitle.style.fontSize = '0.95rem';
+        container.appendChild(lineItemsTitle);
+
+        // Display each applied rule as enhanced line item
+        businessRules.applied_rules.forEach((rule) => {
+            const lineItem = document.createElement('div');
+            lineItem.className = 'line-item-enhanced';
+
+            // Item header (description + amount)
+            const itemHeader = document.createElement('div');
+            itemHeader.className = 'item-header';
+            itemHeader.style.display = 'flex';
+            itemHeader.style.justifyContent = 'space-between';
+            itemHeader.style.marginBottom = '0.5rem';
+
+            const description = document.createElement('strong');
+            description.textContent = rule.description || rule.rule_applied;
+
+            const amount = document.createElement('span');
+            amount.className = 'item-amount';
+            amount.textContent = `$${(rule.amount || 0).toFixed(2)}`;
+
+            itemHeader.appendChild(description);
+            itemHeader.appendChild(amount);
+            lineItem.appendChild(itemHeader);
+
+            // Item meta (category badge + deductibility)
+            const itemMeta = document.createElement('div');
+            itemMeta.className = 'item-meta';
+            itemMeta.style.display = 'flex';
+            itemMeta.style.gap = '0.75rem';
+            itemMeta.style.alignItems = 'center';
+            itemMeta.style.marginBottom = '0.5rem';
+
+            const categoryBadge = document.createElement('span');
+            categoryBadge.className = `category-badge ${this.getCategoryClass(rule.category)}`;
+            categoryBadge.textContent = rule.category;
+
+            const deductibleInfo = document.createElement('span');
+            deductibleInfo.className = 'deductible-info';
+            const deductibleAmount = ((rule.amount || 0) * (rule.deductible_percentage || 0) / 100).toFixed(2);
+            deductibleInfo.textContent = `${rule.deductible_percentage}% deductible → $${deductibleAmount}`;
+
+            itemMeta.appendChild(categoryBadge);
+            itemMeta.appendChild(deductibleInfo);
+            lineItem.appendChild(itemMeta);
+
+            // Item reasoning
             if (rule.reasoning) {
-                const reasoningRow = document.createElement('div');
-                reasoningRow.className = 'reasoning-row';
-                reasoningRow.style.marginTop = '0.5rem';
-                reasoningRow.style.fontSize = '0.75rem';
-                reasoningRow.style.fontStyle = 'italic';
-                reasoningRow.style.color = 'var(--text-muted)';
-                reasoningRow.style.lineHeight = '1.4';
-
-                const reasoningIcon = document.createElement('span');
-                reasoningIcon.textContent = '💡 ';
-                reasoningIcon.style.fontSize = '0.875rem';
-
-                const reasoningText = document.createElement('span');
-                reasoningText.textContent = rule.reasoning;
-
-                reasoningRow.appendChild(reasoningIcon);
-                reasoningRow.appendChild(reasoningText);
-                ruleDiv.appendChild(reasoningRow);
+                const itemReasoning = document.createElement('div');
+                itemReasoning.className = 'item-reasoning';
+                itemReasoning.innerHTML = `<span style="margin-right: 0.25rem;">💡</span>${rule.reasoning}`;
+                lineItem.appendChild(itemReasoning);
             }
 
-            // Add citation display if citations exist
-            if (rule.citations && rule.citations.length > 0) {
-                const citationRow = document.createElement('div');
-                citationRow.className = 'citation-row';
-                citationRow.style.marginTop = '0.375rem';
-                citationRow.style.fontSize = '0.75rem';
-                citationRow.style.color = 'var(--text-muted)';
-                citationRow.style.fontFamily = 'monospace';
-                citationRow.style.lineHeight = '1.4';
-
-                const citationIcon = document.createElement('span');
-                citationIcon.textContent = '📋 ';
-                citationIcon.title = 'CRA Tax Guide Citation';
-                citationIcon.style.fontSize = '0.875rem';
-                citationIcon.style.fontFamily = 'system-ui';
-
-                const citationText = document.createElement('span');
-                citationText.textContent = `CRA: ${rule.citations.join(', ')}`;
-                citationText.title = 'Source: Canada Revenue Agency T4002 Business and Professional Income Guide';
-
-                citationRow.appendChild(citationIcon);
-                citationRow.appendChild(citationText);
-                ruleDiv.appendChild(citationRow);
-            }
-
-            container.appendChild(ruleDiv);
+            container.appendChild(lineItem);
         });
+    }
+
+    getCitationExplanation(citationId) {
+        // Map citation IDs to their explanations
+        // This is a simplified version - in production, you might fetch this from the backend
+        const explanations = {
+            'T4002-P41': 'Meals & Entertainment: Maximum 50% deductible per ITA Section 67.1',
+            'T4002-P46': 'Meal expense limits and deductibility rules for business purposes',
+            'T4002-P59': 'Motor vehicle expense records and meal deduction requirements',
+            'default': 'CRA Business and Professional Income Guide - Tax deduction rules'
+        };
+
+        const baseId = this.formatCitationId(citationId);
+        return explanations[baseId] || explanations['default'];
     }
 
     populateDetailedInfo(data) {
