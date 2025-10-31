@@ -857,3 +857,172 @@ p {
 .mode-indicator[data-agent-mode="true"] {
   animation: agentPulse 3s ease-in-out infinite;
 }
+
+/* ===== NEW UI COMPONENTS (Phase 5) ===== */
+
+/* Confidence Badge */
+.confidence-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border-radius: 2rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+}
+
+/* Citation Items */
+.citation-item {
+  padding: 0.75rem;
+  background: var(--peach-light);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.citation-item:hover {
+  background: var(--pink-accent);
+  border-color: var(--border-light);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.citation-id {
+  font-weight: 500;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.citation-toggle {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  transition: transform 0.2s ease;
+}
+
+.citation-details {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-light);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Category Badges */
+.category-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.category-badge.meals {
+  background: #fce7f3;
+  color: #be185d;
+}
+
+.category-badge.travel {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.category-badge.tax {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.category-badge.professional {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.category-badge.office {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.category-badge.vehicle {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.category-badge.default {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Enhanced Line Items */
+.line-item-enhanced {
+  padding: 1rem;
+  border-left: 3px solid var(--pink-accent);
+  margin-bottom: 1rem;
+  background: #fafafa;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.line-item-enhanced:hover {
+  background: #f5f5f5;
+  border-left-color: #be185d;
+  transform: translateX(2px);
+}
+
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.item-amount {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.item-meta {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.deductible-info {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.item-reasoning {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: white;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-style: italic;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Citation Summary Section */
+.citation-summary {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: white;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+}
+
+.citation-summary h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
