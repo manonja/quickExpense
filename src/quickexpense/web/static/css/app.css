@@ -1092,3 +1092,393 @@ p {
 .advanced-info {
   margin-top: 1rem;
 }
+
+/* ===== REDESIGNED RESULTS PAGE COMPONENTS ===== */
+
+/* Hero Confidence Section */
+.hero-confidence-section {
+  text-align: center;
+  padding: 2rem;
+  background: white;
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.5rem;
+}
+
+.confidence-visual {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 1rem;
+}
+
+.confidence-ring {
+  width: 160px;
+  height: 160px;
+  display: block;
+}
+
+.confidence-percentage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--status-success);
+  font-family: var(--font-sans);
+}
+
+.confidence-label {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+
+.deductible-amount {
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  font-family: var(--font-sans);
+}
+
+.deductible-context {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-icon {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 1.25rem;
+}
+
+.btn-icon:hover {
+  transform: translateY(-1px);
+  background: var(--peach-light);
+  border-color: var(--pink-accent);
+}
+
+/* Collapsible Receipt Details */
+.receipt-details-collapsible {
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.receipt-details-collapsible summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-primary);
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.receipt-details-collapsible summary::-webkit-details-marker {
+  display: none;
+}
+
+.receipt-details-collapsible summary::before {
+  content: '▶';
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: 0.75rem;
+}
+
+.receipt-details-collapsible[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.receipt-details-content {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-light);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+/* Line Items Section */
+.line-items-section {
+  margin-bottom: 1.5rem;
+}
+
+.line-items-section h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.line-item-card {
+  background: white;
+  border: 1px solid var(--border-light);
+  border-left: 3px solid #3b82f6;
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: all 0.2s ease;
+}
+
+.line-item-card:hover {
+  border-left-color: #be185d;
+  transform: translateX(2px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.line-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.item-emoji {
+  font-size: 1.5rem;
+  min-width: 1.5rem;
+}
+
+.item-name {
+  flex: 1;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.item-amount {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.progress-bar-container {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  transition: width 0.5s ease;
+  border-radius: 4px;
+}
+
+.progress-bar-fill.deduction-50 {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.progress-bar-fill.deduction-100 {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.progress-bar-fill.deduction-0 {
+  background: #9ca3af;
+}
+
+.item-deduction-text {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+/* Tax Insights Section */
+.tax-insights-section {
+  margin-bottom: 1.5rem;
+}
+
+.tax-insights-section h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.insight-box {
+  background: #dbeafe;
+  border-left: 4px solid #3b82f6;
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+}
+
+.insight-box p {
+  margin-bottom: 1rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.insight-box p:last-child {
+  margin-bottom: 0;
+}
+
+.insight-box strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.insight-box ul {
+  margin-left: 1.5rem;
+  margin-bottom: 1rem;
+  list-style: disc;
+}
+
+.insight-box li {
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.insight-box a {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.insight-box a:hover {
+  text-decoration: underline;
+}
+
+/* AI Analysis Section */
+.ai-analysis-section {
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.ai-analysis-section h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.analysis-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-sm);
+}
+
+.checklist-item .icon-check {
+  color: var(--status-success);
+  font-size: 1.25rem;
+  font-weight: bold;
+  min-width: 1.25rem;
+}
+
+.checklist-item .icon-warning {
+  color: var(--status-warning);
+  font-size: 1.25rem;
+  font-weight: bold;
+  min-width: 1.25rem;
+}
+
+.checklist-item span:not(.icon-check):not(.icon-warning) {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+/* Responsive Design for New Components */
+@media (max-width: 768px) {
+  .hero-confidence-section {
+    padding: 1.5rem;
+  }
+
+  .deductible-amount {
+    font-size: 2.5rem;
+  }
+
+  .confidence-ring {
+    width: 140px;
+    height: 140px;
+  }
+
+  .confidence-percentage {
+    font-size: 2rem;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .action-buttons button {
+    width: 100%;
+  }
+
+  .receipt-details-content {
+    grid-template-columns: 1fr;
+  }
+
+  .line-items-section h3,
+  .tax-insights-section h3,
+  .ai-analysis-section h3 {
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-confidence-section {
+    padding: 1rem;
+  }
+
+  .deductible-amount {
+    font-size: 2rem;
+  }
+
+  .confidence-ring {
+    width: 120px;
+    height: 120px;
+  }
+
+  .confidence-percentage {
+    font-size: 1.75rem;
+  }
+
+  .line-item-card {
+    padding: 0.75rem;
+  }
+
+  .insight-box {
+    padding: 1rem;
+  }
+
+  .ai-analysis-section {
+    padding: 1rem;
+  }
+}
