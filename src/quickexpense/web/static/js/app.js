@@ -305,46 +305,46 @@ class QuickExpenseUI {
                 // Agent mode processing messages
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Agent 1/3: DataExtractionAgent extracting receipt data...';
+                        this.elements.processingMessage.textContent = 'Extracting receipt data from image...';
                     }
                 }, 3000);
 
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Agent 2/3: CRArulesAgent applying Canadian tax rules...';
+                        this.elements.processingMessage.textContent = 'Searching CRA tax regulations database...';
+                    }
+                }, 20000); // After ~20 seconds
+
+                setTimeout(() => {
+                    if (this.isProcessing) {
+                        this.elements.processingMessage.textContent = 'Applying Canadian business expense rules...';
                     }
                 }, 60000); // After ~1 minute
 
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Agent 3/3: TaxCalculatorAgent validating calculations...';
+                        this.elements.processingMessage.textContent = 'Calculating deductions and finalizing...';
                     }
                 }, 90000); // After ~1.5 minutes
-
-                setTimeout(() => {
-                    if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Agents reaching consensus and finalizing results...';
-                    }
-                }, 120000); // After ~2 minutes
             } else {
                 // Standard processing messages
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'Analyzing receipt with AI... (this may take 2-3 minutes)';
+                        this.elements.processingMessage.textContent = 'Extracting receipt data from image...';
                     }
-                }, 5000);
+                }, 3000);
 
                 setTimeout(() => {
                     if (this.isProcessing) {
-                        this.elements.processingMessage.textContent = 'AI processing complete. Applying business rules...';
+                        this.elements.processingMessage.textContent = 'Applying business rules and categorization...';
                     }
-                }, 90000); // After ~1.5 minutes
+                }, 60000); // After ~1 minute
 
                 setTimeout(() => {
                     if (this.isProcessing) {
                         this.elements.processingMessage.textContent = 'Creating expense in QuickBooks...';
                     }
-                }, 120000); // After ~2 minutes
+                }, 90000); // After ~1.5 minutes
             }
 
             // Choose endpoint based on mode
