@@ -698,6 +698,10 @@ class QuickExpenseUI {
         if (uploadZoneCard) {
             uploadZoneCard.style.display = 'block';
             console.log('uploadZoneCard display set to block');
+            console.log('uploadZoneCard computed style:', window.getComputedStyle(uploadZoneCard).display);
+            console.log('uploadZoneCard visibility:', window.getComputedStyle(uploadZoneCard).visibility);
+            console.log('uploadZoneCard height:', window.getComputedStyle(uploadZoneCard).height);
+            console.log('uploadZoneCard position:', uploadZoneCard.getBoundingClientRect());
         }
         if (processingOptionsCard) {
             processingOptionsCard.style.display = 'block';
