@@ -675,6 +675,12 @@ class QuickExpenseUI {
     resetToUpload() {
         const { uploadZone, processingState, resultsSection, errorSection, fileInput, processingOptions } = this.elements;
 
+        // Show the upload section container first (in case it was hidden by showResults)
+        const uploadSection = document.querySelector('.upload-section');
+        if (uploadSection) {
+            uploadSection.style.display = 'block';
+        }
+
         // Show upload zone card, processing options card, and feature cards
         const uploadZoneCard = document.querySelector('.upload-zone-card');
         const processingOptionsCard = document.querySelector('.processing-options-card');
@@ -696,7 +702,9 @@ class QuickExpenseUI {
         }
 
         // Reset file input
-        fileInput.value = '';
+        if (fileInput) {
+            fileInput.value = '';
+        }
         this.isProcessing = false;
     }
 
