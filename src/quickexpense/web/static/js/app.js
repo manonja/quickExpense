@@ -849,8 +849,8 @@ class QuickExpenseUI {
 
         if (!agentContainer) {
             // Create agent details section if it doesn't exist
-            const detailedInfo = this.elements.detailedInfo;
-            if (!detailedInfo) return;
+            const advancedInfo = document.getElementById('advancedInfo');
+            if (!advancedInfo) return;
 
             const agentSection = document.createElement('div');
             agentSection.className = 'detail-section';
@@ -860,7 +860,7 @@ class QuickExpenseUI {
                     <!-- Dynamic agent details -->
                 </div>
             `;
-            detailedInfo.appendChild(agentSection);
+            advancedInfo.appendChild(agentSection);
             agentContainer = document.getElementById('agentDetailsDetailed');
         }
 
@@ -909,24 +909,16 @@ class QuickExpenseUI {
     }
 
     setupDetailsToggle() {
-        const toggleBtn = this.elements.toggleDetails;
-        const detailedInfo = this.elements.detailedInfo;
-        const toggleText = document.getElementById('toggleText');
-        const toggleIcon = document.getElementById('toggleIcon');
+        const advancedViewCheckbox = document.getElementById('advancedViewCheckbox');
+        const advancedInfo = document.getElementById('advancedInfo');
 
-        if (!toggleBtn) return;
+        if (!advancedViewCheckbox || !advancedInfo) return;
 
-        toggleBtn.addEventListener('click', () => {
-            const isHidden = detailedInfo.style.display === 'none';
-
-            if (isHidden) {
-                detailedInfo.style.display = 'block';
-                toggleText.textContent = 'Hide Details';
-                toggleIcon.textContent = '▲';
+        advancedViewCheckbox.addEventListener('change', () => {
+            if (advancedViewCheckbox.checked) {
+                advancedInfo.style.display = 'block';
             } else {
-                detailedInfo.style.display = 'none';
-                toggleText.textContent = 'Show Details';
-                toggleIcon.textContent = '▼';
+                advancedInfo.style.display = 'none';
             }
         });
     }
