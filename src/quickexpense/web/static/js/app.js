@@ -63,22 +63,40 @@ class QuickExpenseUI {
     }
 
     updateAuthUI(authData) {
-        const { statusDot, statusText, authDetails, connectBtn } = this.elements;
+        // New auth UI elements
+        const authTitleText = document.getElementById('authTitleText');
+        const authSubtitle = document.getElementById('authSubtitle');
+        const statusDotInline = document.getElementById('statusDotInline');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const connectBtn = document.getElementById('connectBtn');
 
         if (authData.authenticated) {
-            statusDot.classList.remove('error');
-            statusDot.classList.add('connected');
-            statusText.textContent = 'Connected to QuickBooks';
-            authDetails.textContent = authData.company_name ?
-                `Company: ${authData.company_name}` :
-                `Company ID: ${authData.company_id || 'Unknown'}`;
-            connectBtn.style.display = 'none';
+            // Connected state
+            if (authTitleText) authTitleText.textContent = 'QuickBooks Connected';
+            if (authSubtitle) authSubtitle.textContent = 'Expenses will sync automatically';
+            if (statusDotInline) {
+                statusDotInline.classList.remove('error');
+                statusDotInline.classList.add('connected');
+            }
+            if (settingsBtn) settingsBtn.style.display = 'block';
+            if (connectBtn) connectBtn.style.display = 'none';
         } else {
-            statusDot.classList.remove('connected');
-            statusDot.classList.add('error');
-            statusText.textContent = 'Not connected to QuickBooks';
-            authDetails.textContent = authData.message || 'Authentication required';
-            connectBtn.style.display = 'inline-flex';
+            // Not connected state
+            if (authTitleText) authTitleText.textContent = 'QuickBooks Not Connected';
+            if (authSubtitle) authSubtitle.textContent = authData.message || 'Connect to sync expenses';
+            if (statusDotInline) {
+                statusDotInline.classList.remove('connected');
+                statusDotInline.classList.add('error');
+            }
+            if (settingsBtn) settingsBtn.style.display = 'none';
+            if (connectBtn) connectBtn.style.display = 'inline-flex';
+        }
+
+        // Wire up settings button
+        if (settingsBtn) {
+            settingsBtn.onclick = () => {
+                alert('Settings functionality coming soon! This will allow you to manage your QuickBooks connection.');
+            };
         }
     }
 
