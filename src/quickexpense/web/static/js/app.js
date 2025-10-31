@@ -646,6 +646,9 @@ class QuickExpenseUI {
     showError(message) {
         const { uploadZone, processingState, resultsSection, errorSection, errorMessage, processingOptions } = this.elements;
 
+        // Show upload zone itself (hidden by showResults)
+        if (uploadZone) uploadZone.style.display = 'block';
+
         // Show upload zone card, processing options card, and feature cards (so user can try again)
         const uploadZoneCard = document.querySelector('.upload-zone-card');
         const processingOptionsCard = document.querySelector('.processing-options-card');
@@ -682,6 +685,12 @@ class QuickExpenseUI {
         if (uploadSection) {
             uploadSection.style.display = 'flex';  // Match CSS default
             console.log('uploadSection display set to flex');
+        }
+
+        // Show upload zone itself (hidden by showResults)
+        if (uploadZone) {
+            uploadZone.style.display = 'block';
+            console.log('uploadZone display set to block');
         }
 
         // Show upload zone card, processing options card, and feature cards
