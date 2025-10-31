@@ -100,48 +100,62 @@
                 <div class="card results-card">
                     <h2>Receipt Processed Successfully</h2>
 
-                    <!-- Simplified Receipt Output -->
-                    <div class="receipt-summary" id="receiptOutput">
-                        <!-- Essential Information Grid -->
-                        <div class="essential-grid">
-                            <!-- Receipt Overview -->
-                            <div class="receipt-overview">
-                                <h3>Receipt</h3>
-                                <div class="receipt-basic" id="receiptBasic">
-                                    <!-- Dynamic receipt data -->
-                                </div>
-                            </div>
-
-                            <!-- Tax Analysis -->
-                            <div class="tax-overview">
-                                <h3>Tax Deductibility</h3>
-                                <div class="tax-basic" id="taxBasic">
-                                    <!-- Dynamic tax data -->
-                                </div>
-                            </div>
-
-                            <!-- Business Rules Applied -->
-                            <div class="business-rules-overview">
-                                <h3>Business Rules Applied</h3>
-                                <div class="business-rules-basic" id="businessRulesBasic">
-                                    <!-- Dynamic business rules -->
-                                </div>
-                            </div>
+                    <!-- Hero Confidence Section -->
+                    <div class="hero-confidence-section">
+                        <div class="confidence-visual">
+                            <svg class="confidence-ring" id="confidenceRing" viewBox="0 0 160 160">
+                                <circle cx="80" cy="80" r="70" fill="none" stroke="#e5e7eb" stroke-width="10"/>
+                                <circle cx="80" cy="80" r="70" fill="none" stroke="#10b981" stroke-width="10"
+                                        stroke-dasharray="440" stroke-dashoffset="66"
+                                        transform="rotate(-90 80 80)" id="confidenceCircle"/>
+                            </svg>
+                            <div class="confidence-percentage" id="confidencePercentage">85%</div>
                         </div>
-
-                        <!-- Advanced View Toggle -->
-                        <div class="advanced-view-toggle">
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="advancedViewCheckbox">
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Show Advanced View</span>
-                            </label>
+                        <div class="confidence-label" id="confidenceLabel">Confident</div>
+                        <div class="deductible-amount" id="deductibleAmount">$18.87</div>
+                        <div class="deductible-context" id="deductibleContext">of $36.23 total • 52% deduction rate</div>
+                        <div class="action-buttons">
+                            <button class="btn-primary btn-approve" id="approveBtn">Approve & Add</button>
+                            <button class="btn-secondary btn-review" id="reviewBtn">Review</button>
+                            <button class="btn-icon btn-edit" id="editBtn" title="Edit details">✏️</button>
                         </div>
+                    </div>
 
-                        <!-- Advanced Information (Hidden by default) -->
-                        <div class="advanced-info" id="advancedInfo" style="display: none;">
-                            <!-- Advanced technical details will be populated here -->
+                    <!-- Collapsible Receipt Details -->
+                    <details class="receipt-details-collapsible">
+                        <summary>Receipt Details</summary>
+                        <div class="receipt-details-content" id="receiptDetailsContent">
+                            <!-- Dynamic receipt details -->
                         </div>
+                    </details>
+
+                    <!-- Line Items Section -->
+                    <div class="line-items-section">
+                        <h3>Line Items</h3>
+                        <div id="lineItemsContainer">
+                            <!-- Dynamic line item cards will be generated here -->
+                        </div>
+                    </div>
+
+                    <!-- Tax Insights Section -->
+                    <div class="tax-insights-section">
+                        <h3>💡 Tax Insights</h3>
+                        <div class="insight-box" id="taxInsightsBox">
+                            <!-- Dynamic tax insights will be generated here -->
+                        </div>
+                    </div>
+
+                    <!-- AI Analysis Section -->
+                    <div class="ai-analysis-section">
+                        <h3>AI Analysis Breakdown</h3>
+                        <div class="analysis-checklist" id="analysisChecklist">
+                            <!-- Dynamic validation checklist will be generated here -->
+                        </div>
+                        <p style="margin-top: 1rem; text-align: center;">
+                            <a href="#" id="lowConfidenceLink" style="color: var(--text-muted); font-size: 0.875rem;">
+                                Low confidence? Edit details →
+                            </a>
+                        </p>
                     </div>
 
                     <!-- Action Buttons -->
