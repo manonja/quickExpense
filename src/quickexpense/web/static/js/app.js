@@ -726,6 +726,53 @@ class QuickExpenseUI {
                 ruleDiv.appendChild(row);
             });
 
+            // Add reasoning text if available
+            if (rule.reasoning) {
+                const reasoningRow = document.createElement('div');
+                reasoningRow.className = 'reasoning-row';
+                reasoningRow.style.marginTop = '0.5rem';
+                reasoningRow.style.fontSize = '0.75rem';
+                reasoningRow.style.fontStyle = 'italic';
+                reasoningRow.style.color = 'var(--text-muted)';
+                reasoningRow.style.lineHeight = '1.4';
+
+                const reasoningIcon = document.createElement('span');
+                reasoningIcon.textContent = '💡 ';
+                reasoningIcon.style.fontSize = '0.875rem';
+
+                const reasoningText = document.createElement('span');
+                reasoningText.textContent = rule.reasoning;
+
+                reasoningRow.appendChild(reasoningIcon);
+                reasoningRow.appendChild(reasoningText);
+                ruleDiv.appendChild(reasoningRow);
+            }
+
+            // Add citation display if citations exist
+            if (rule.citations && rule.citations.length > 0) {
+                const citationRow = document.createElement('div');
+                citationRow.className = 'citation-row';
+                citationRow.style.marginTop = '0.375rem';
+                citationRow.style.fontSize = '0.75rem';
+                citationRow.style.color = 'var(--text-muted)';
+                citationRow.style.fontFamily = 'monospace';
+                citationRow.style.lineHeight = '1.4';
+
+                const citationIcon = document.createElement('span');
+                citationIcon.textContent = '📋 ';
+                citationIcon.title = 'CRA Tax Guide Citation';
+                citationIcon.style.fontSize = '0.875rem';
+                citationIcon.style.fontFamily = 'system-ui';
+
+                const citationText = document.createElement('span');
+                citationText.textContent = `CRA: ${rule.citations.join(', ')}`;
+                citationText.title = 'Source: Canada Revenue Agency T4002 Business and Professional Income Guide';
+
+                citationRow.appendChild(citationIcon);
+                citationRow.appendChild(citationText);
+                ruleDiv.appendChild(citationRow);
+            }
+
             container.appendChild(ruleDiv);
         });
     }

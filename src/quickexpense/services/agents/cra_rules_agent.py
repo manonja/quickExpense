@@ -560,7 +560,8 @@ YOUR RESPONSE (valid JSON only):
                 for i, item in enumerate(input_line_items):
                     line_num = i + 1
                     # Extract amount, handling dict types
-                    amount = float(item.get("total_price", 0))
+                    # NOTE: DataExtractionAgent uses "amount" field (not "total_price")
+                    amount = float(item.get("amount", 0))
                     amount_map[line_num] = amount
 
                 # Add calculated fields to each processed item
