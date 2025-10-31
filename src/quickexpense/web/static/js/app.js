@@ -890,8 +890,45 @@ class QuickExpenseUI {
         return row;
     }
 
+    // ===== HELPER FUNCTIONS FOR CITATIONS AND CATEGORIES =====
 
+    toggleCitationDetails(element) {
+        const details = element.querySelector('.citation-details');
+        const toggle = element.querySelector('.citation-toggle');
 
+        if (details && toggle) {
+            if (details.style.display === 'none') {
+                details.style.display = 'block';
+                toggle.textContent = '▲';
+            } else {
+                details.style.display = 'none';
+                toggle.textContent = '▼';
+            }
+        }
+    }
+
+    getCategoryClass(category) {
+        const mapping = {
+            'Meals & Entertainment': 'meals',
+            'Travel-Lodging': 'travel',
+            'Travel-Meals': 'travel',
+            'Tax-GST/HST': 'tax',
+            'Professional-Services': 'professional',
+            'Office-Supplies': 'office',
+            'Fuel-Vehicle': 'vehicle'
+        };
+        return mapping[category] || 'default';
+    }
+
+    formatCitationId(citationId) {
+        if (!citationId) return '';
+        // Extract base ID (e.g., "T4002-P41" from "T4002-P41-264561ee")
+        const parts = citationId.split('-');
+        if (parts.length >= 2) {
+            return parts.slice(0, 2).join('-'); // "T4002-P41"
+        }
+        return citationId;
+    }
 
     formatCurrency(amount) {
         if (amount === null || amount === undefined) return '$0.00';
